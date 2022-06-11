@@ -38,13 +38,7 @@ class ImportUasset(Operator, ImportHelper):
         type=bpy.types.OperatorFileListElement,
     )
 
-    unit_scale: EnumProperty(
-        name="Unit Scale",
-        items=(("CENTIMETERS", "Centimeters", "UE standard"),
-               ("METERS", "Meters", "Blender standard")),
-        description="Change unit scale to",
-        default="METERS"
-    )
+    
 
     rename_armature: BoolProperty(
         name='Rename Armature',
@@ -61,7 +55,8 @@ class ImportUasset(Operator, ImportHelper):
         items=(("SMOOTH", "Smooth", ""),
             ("FLAT", "Flat", "")),
         description="Apply smooth shading",
-        default="SMOOTH")
+        default="SMOOTH"
+    )
 
     keep_sections: BoolProperty(
         name='Keep Sections',
@@ -70,12 +65,6 @@ class ImportUasset(Operator, ImportHelper):
             'When off, join them into a mesh'
         ),
         default=False,
-    )
-
-    rescale : FloatProperty(
-        name = 'Rescale',
-        description = 'Rescale mesh and skeleton',
-        default = 1, min = 0.01, max = 100, step = 0.01, precision = 3,
     )
 
     minimal_bone_length : FloatProperty(
@@ -99,6 +88,48 @@ class ImportUasset(Operator, ImportHelper):
             'When on, it looks better in Blender, but will not work with UE4'
         ),
         default=False,
+    )
+
+    only_skeleton: BoolProperty(
+        name='Only Skeleton',
+        description=(
+            "Import skeleton data. but won't import mesh."
+        ),
+        default=False,
+    )
+
+    show_axes: BoolProperty(
+        name='Show Bone Axes',
+        description=(
+            "Display bone axes."
+        ),
+        default=False,
+    )
+
+    bone_display_type: EnumProperty(
+        name="Bone Display Type",
+        items=(("OCTAHEDRAL", "Octahedral", " Display bones as octahedral shape"),
+            ("STICK", "Stick", "Display bones as simple 2D lines with dots"),
+            ("BBONE", "B-Bone", "Display bones as boxes, showing subdivision and B-Splines"),
+            ("ENVELOPE", "Envelope", "Display bones as extruded spheres, showing deformation influence volume"),
+            ("WIRE", "Wire", "Display bones as thin wires, showing subdivision and B-Splines")
+            ),
+        description="Appearance of bones",
+        default="STICK"
+    )
+
+    unit_scale: EnumProperty(
+        name="Unit Scale",
+        items=(("CENTIMETERS", "Centimeters", "UE standard"),
+               ("METERS", "Meters", "Blender standard")),
+        description="Change unit scale to",
+        default="CENTIMETERS"
+    )
+
+    rescale : FloatProperty(
+        name = 'Rescale',
+        description = 'Rescale mesh and skeleton',
+        default = 1, min = 0.01, max = 100, step = 0.01, precision = 3,
     )
 
     def draw(self, context):
@@ -126,6 +157,9 @@ class ImportUasset(Operator, ImportHelper):
             layout.prop(self, 'minimal_bone_length')
             layout.prop(self, 'normalize_bones')
             layout.prop(self, 'rename_armature')
+            layout.prop(self, 'only_skeleton')
+            layout.prop(self, 'show_axes')
+            layout.prop(self, 'bone_display_type')
             layout.separator()
         row = layout.row(align = True)
         row.alignment = "LEFT"
@@ -172,7 +206,10 @@ class ImportUasset(Operator, ImportHelper):
                 rotate_bones=import_settings['rotate_bones'], \
                 minimal_bone_length = import_settings['minimal_bone_length'], \
                 rescale = import_settings['rescale'], \
-                shading = import_settings['shading']
+                shading = import_settings['shading'], \
+                only_skeleton = import_settings['only_skeleton'], \
+                show_axes=import_settings['show_axes'], \
+                bone_display_type=import_settings['bone_display_type']
             )
 
             elapsed_s = "{:.2f}s".format(time.time() - start_time)

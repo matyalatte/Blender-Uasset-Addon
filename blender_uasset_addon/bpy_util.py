@@ -27,15 +27,17 @@ def add_armature(name='Armature', location = (0,0,0)):
     amt = bpy.context.object
     amt.rotation_mode = 'QUATERNION'
     amt.name = name
-    amt.data.name = name
+    amt.show_in_front = True
     return amt
 
-def add_bone(amt, name, head, tail, roll, parent = None):
+def add_bone(amt, name, head, tail, z_axis_tail, parent = None):
     b = amt.data.edit_bones.new(name)
     b.use_deform = True
     b.head = head
     b.tail = tail
-    b.roll=roll
+    
+    z_axis = z_axis_tail - head
+    b.align_roll(z_axis)
     if parent is not None:
         b.parent = parent
     return b
@@ -126,8 +128,10 @@ def generate_armature(name, bones, normalize_bones=True, rotate_bones=False, min
 
     if rotate_bones: #looks fine in blender, but bad in UE4
         local_bone_vec = Vector((1, 0, 0))
+        z_axis = Vector((0, 1, 0))
     else: #looks fine in UE4, but bad in blender
         local_bone_vec = Vector((0, 1, 0))
+        z_axis = Vector((0, 0, 1))
 
     def mult_vec(vec1, vec2):
         return Vector((x1*x2 for x1, x2 in zip(vec1, vec2)))   
@@ -138,12 +142,14 @@ def generate_armature(name, bones, normalize_bones=True, rotate_bones=False, min
         root.global_matrix = global_matrix @ root.trs
         root.head = global_matrix @ root.trans
         root.tail = root.global_matrix @ (local_bone_vec * root.length)
+        root.z_axis_tail = root.global_matrix @ (z_axis * root.length)
 
         if normalize_bones or (root.tail - root.head).length < minimal_bone_length:
             trans, rot, scale = root.global_matrix.decompose()
             trans = mult_vec(trans, scale)
             trs = Matrix.LocRotScale(trans, rot, Vector((1,1,1)))
             root.tail = trs @ (local_bone_vec * minimal_bone_length)
+            root.z_axis_tail = trs @ (z_axis * minimal_bone_length)
 
         for c in root.children:
             child = bones[c]
@@ -152,7 +158,7 @@ def generate_armature(name, bones, normalize_bones=True, rotate_bones=False, min
     cal_global_matrix(bones[0], Matrix.Identity(4), bones)
 
     def generate_bones(amt, root, bones, parent = None):
-        b = add_bone(amt, root.name, root.head, root.tail, root.roll, parent = parent)
+        b = add_bone(amt, root.name, root.head, root.tail, root.z_axis_tail, parent = parent)
         for c in root.children:
             child = bones[c]
             generate_bones(amt, child, bones, parent = b)
@@ -273,13 +279,19 @@ def generate_mesh(amt, asset, rescale=1.0, keep_sections=False, shading='SMOOTH'
             bpy.data.meshes.remove(s)
         
 #add mesh asset to scene
-def load_uasset(file, rename_armature=True, keep_sections=False, normalize_bones=True, rotate_bones=False, minimal_bone_length=0.025, rescale=1.0, shading='SMOOTH'):
+def load_uasset(file, rename_armature=True, keep_sections=False, \
+    normalize_bones=True, rotate_bones=False, \
+    minimal_bone_length=0.025, rescale=1.0, \
+    shading='SMOOTH', only_skeleton=False, \
+    show_axes=False, bone_display_type='OCTAHEDRAL'):
     
     #load .uasset
     asset=uasset.uexp.MeshUexp(file)
     asset_type = asset.asset_type
     if asset_type not in ['SkeletalMesh', 'Skeleton', 'StaticMesh']:
         raise RuntimeError('Unsupported asset. ({})'.format(asset.asset_type))
+    if asset.mesh is None and only_skeleton:
+        raise RuntimeError('"Only Skeleton" option is checked, but the asset has no skeleton.')
 
     bpy.context.view_layer.objects.active = bpy.context.view_layer.objects[0]
     bpy.ops.object.mode_set(mode='OBJECT')
@@ -293,11 +305,19 @@ def load_uasset(file, rename_armature=True, keep_sections=False, normalize_bones
     if asset.skeleton is not None:
         bones = asset.skeleton.bones
         amt = generate_armature(name, bones, normalize_bones, rotate_bones, minimal_bone_length, rescale=rescale)
+        amt.data.name = asset.name
+        amt.data.show_axes = show_axes
+        amt.data.display_type = bone_display_type
         bpy.ops.object.mode_set(mode='OBJECT')
     else:
         amt = None
 
     #add a mesh to scene
-    if asset.mesh is not None:
-        generate_mesh(amt, asset, rescale=rescale, keep_sections=keep_sections, shading=shading)
-    return amt    
+    if asset.mesh is not None and not only_skeleton:
+        mesh = generate_mesh(amt, asset, rescale=rescale, keep_sections=keep_sections, shading=shading)
+    
+    #return root object
+    if amt is None:
+        return mesh
+    else:
+        return amt
