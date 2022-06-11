@@ -285,7 +285,7 @@ def load_uasset(file, rename_armature=True, keep_sections=False, normalize_bones
     bpy.ops.object.mode_set(mode='OBJECT')
 
     #add a skeleton to scene
-    if keep_sections or rename_armature or asset_type=='Skeleton':
+    if keep_sections or (not rename_armature) or asset_type=='Skeleton':
         name = asset.name
     else:
         name = 'Armature'
