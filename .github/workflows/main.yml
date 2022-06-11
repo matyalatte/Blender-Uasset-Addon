@@ -1,0 +1,69 @@
+name: packaging
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+  
+env:
+  ZIP_NAME: blender_uasset_addon
+
+jobs:
+  packaging:
+    runs-on: windows-2022
+    steps:
+    
+      - name: Check tag
+        run: |
+          if [[ ${{ github.ref }} == refs/tags/v* ]]; then
+            VERSION=_$(echo ${{ github.ref }} | sed -e "s#refs/tags/##g")
+          else
+            VERSION=""
+          fi
+          echo "REPO_VERSION=$VERSION" >> $GITHUB_ENV
+        shell: bash
+        
+      - uses: actions/checkout@v2
+
+      - name: Copy files
+        run: |
+          mkdir -p ../release
+          cp -r ${{ env.ZIP_NAME }} ../release
+          cp changelog.txt ../release
+          cp LICENSE ../release
+        shell: bash
+
+      - name: Archive Release
+        uses: thedoctor0/zip-release@master
+        with:
+          directory: '../release'
+          type: 'zip'
+          filename: '${{ env.ZIP_NAME }}.zip'
+          exclusions: '*.git* .gitignore'
+          
+      - name: Create Release Draft
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: ${{ github.ref }}
+          body: |
+            Changelog
+            - First Change
+            - Second Change
+          draft: true
+          prerelease: false
+
+      - name: Upload Release Asset
+        id: upload-release-asset-python
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ../release/${{ env.ZIP_NAME }}.zip
+          asset_name: ${{ env.ZIP_NAME }}${{ env.REPO_VERSION }}.zip
+          asset_content_type: application/zip
