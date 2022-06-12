@@ -18,8 +18,10 @@ class Material:
         logger.log('Materials (offset: {})'.format(offset))
         for material in materials:
             material.slot_name=name_list[material.slot_name_id]
-            material.import_name=imports[-material.import_id-1].name
-            material.file_path = imports[-material.import_id-1].parent_name
+            material_import = imports[-material.import_id-1]
+            material.import_name=material_import.name
+            material.class_name=material_import.class_name
+            material.file_path = material_import.parent_name
             material.print()
 
     def print(self, padding=2):

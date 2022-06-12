@@ -36,6 +36,7 @@ class MeshUexp:
         self.name_list=self.uasset.name_list        
         self.exports = self.uasset.exports
         self.imports = self.uasset.imports
+        self.file_path = self.uasset.file_path
 
         self.ff7r = self.uasset.ff7r
         self.asset_type = self.uasset.asset_type
@@ -74,8 +75,6 @@ class MeshUexp:
                     elif self.asset_type=='Skeleton':
                         self.mesh = None
                         self.skeleton = SkeletonAsset.read(f, self.name_list)
-                    #elif self.asset_type=='SQEX_BonamikAsset':
-                    #    self.bonamik = Bonamik.read(f,self.name_list)
                     self.unknown2=f.read(export.offset+export.size-f.tell()-self.uasset.size)
 
             #footer

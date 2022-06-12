@@ -174,9 +174,10 @@ def generate_mesh(amt, asset, rescale=1.0, keep_sections=False, shading='SMOOTH'
     color_gen = ColorGenerator()
     materials = [add_material(name, color_gen) for name in material_names]
     for m, ue_m in zip(materials, asset.mesh.materials):
-        m['path'] = ue_m.file_path
+        m['class'] = ue_m.class_name
+        m['asset_path'] = ue_m.file_path
         m['slot_name'] = ue_m.slot_name
-
+        
     #get mesh data from asset
     material_ids, uv_num = asset.mesh.LODs[0].get_meta_for_blender()
     normals, positions, texcoords, vertex_groups, joints, weights, indices = asset.mesh.LODs[0].parse_buffers_for_blender()
@@ -318,6 +319,10 @@ def load_uasset(file, rename_armature=True, keep_sections=False, \
     
     #return root object
     if amt is None:
-        return mesh
+        root = mesh
     else:
-        return amt
+        root = amt
+    root['class'] = asset.asset_type
+    root['asset_path'] = asset.file_path
+    print(root['class'])
+    return root

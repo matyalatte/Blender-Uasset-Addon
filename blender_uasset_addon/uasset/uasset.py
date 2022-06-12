@@ -138,9 +138,10 @@ class UassetExport(c.LittleEndianStructure):
     def name_exports(exports, imports, name_list, file_name):
         asset_type=None
         for export in exports:
-            export.import_name = imports[-export.import_id-1].name
+            export_import = imports[-export.import_id-1]
+            export.import_name = export_import.name
             export.name=name_list[export.name_id]
-            export.class_name = imports[-export.class_id-1].name
+            export.class_name = export_import.class_name
             if export.class_name in UassetExport.MAIN_EXPORTS:
                 export.id=-1
                 asset_type = export.class_name
@@ -202,6 +203,16 @@ class Uasset:
             self.ff7r = name_imports(self.imports, self.name_list)
             logger.log('Import')
             [x.print(str(i)) for x,i in zip(self.imports, range(len(self.imports)))]
+
+            paths = [n for n in self.name_list if n[0]=='/']
+            import_names = list(set([imp.name for imp in self.imports] + [imp.parent_dir for imp in self.imports]))
+            for imp in import_names:
+                if imp in paths:
+                    paths.remove(imp)
+            if len(paths)!=1:
+                print(paths)
+                raise RuntimeError('Failed to get asset path.')
+            self.file_path = paths[0]
 
             #read exports
             check(self.header.export_offset, f.tell(), f)
