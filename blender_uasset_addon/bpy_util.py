@@ -42,12 +42,14 @@ def add_bone(amt, name, head, tail, z_axis_tail, parent = None):
         b.parent = parent
     return b
 
-def add_empty_mesh(amt, name):
+def add_empty_mesh(amt, name, collection=None):
     mesh = bpy.data.meshes.new(name)
     obj = bpy.data.objects.new(name, mesh)
     obj.rotation_mode = 'QUATERNION'
     obj.show_name = True
-    bpy.context.scene.collection.objects.link(obj)
+    if collection is None:
+        collection = bpy.context.scene.collection
+    collection.objects.link(obj)
     if amt is not None:
         obj.parent = amt
     m = obj.matrix_world.copy()
@@ -109,7 +111,6 @@ def generate_armature(name, bones, normalize_bones=True, rotate_bones=False, min
         trans = Vector((bone.trans[0], -bone.trans[1], bone.trans[2])) * rescale_factor
         rot = Quaternion((bone.rot[3], -bone.rot[0], bone.rot[1], -bone.rot[2]))
         scale = Vector((bone.scale[0], bone.scale[1], bone.scale[2]))
-        bone.roll = rot.angle
         bone.trs = Matrix.LocRotScale(trans, rot, scale)
         bone.trans = trans
     list(map(lambda b: cal_trs(b), bones))
@@ -175,8 +176,10 @@ def generate_mesh(amt, asset, rescale=1.0, keep_sections=False, shading='SMOOTH'
     materials = [add_material(name, color_gen) for name in material_names]
     for m, ue_m in zip(materials, asset.mesh.materials):
         m['class'] = ue_m.class_name
-        m['asset_path'] = ue_m.file_path
+        m['asset_path'] = ue_m.asset_path
         m['slot_name'] = ue_m.slot_name
+        for i, p in zip(range(len(ue_m.texture_asset_paths)), ue_m.texture_asset_paths):
+            m['texture_path_'+str(i)]=p
         
     #get mesh data from asset
     material_ids, uv_num = asset.mesh.LODs[0].get_meta_for_blender()
@@ -195,10 +198,11 @@ def generate_mesh(amt, asset, rescale=1.0, keep_sections=False, shading='SMOOTH'
         bones = asset.mesh.skeleton.bones
     sections = []
     section_data_list = []
+    collection = bpy.context.view_layer.active_layer_collection.collection
 
     for i in range(len(material_ids)):
         name = material_names[material_ids[i]]
-        section = add_empty_mesh(amt, name)
+        section = add_empty_mesh(amt, name, collection=collection)
         sections.append(section)
         if amt is not None:
             mod = section.modifiers.new(name="Armature", type="ARMATURE")
@@ -323,6 +327,6 @@ def load_uasset(file, rename_armature=True, keep_sections=False, \
     else:
         root = amt
     root['class'] = asset.asset_type
-    root['asset_path'] = asset.file_path
+    root['asset_path'] = asset.asset_path
     print(root['class'])
     return root

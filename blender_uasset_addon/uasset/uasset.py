@@ -143,7 +143,6 @@ class UassetExport(c.LittleEndianStructure):
             export.name=name_list[export.name_id]
             export.class_name = export_import.class_name
             if export.class_name in UassetExport.MAIN_EXPORTS:
-                export.id=-1
                 asset_type = export.class_name
                 export.ignore=False
             else:
@@ -210,9 +209,9 @@ class Uasset:
                 if imp in paths:
                     paths.remove(imp)
             if len(paths)!=1:
-                print(paths)
+                logger.log(paths)
                 raise RuntimeError('Failed to get asset path.')
-            self.file_path = paths[0]
+            self.asset_path = paths[0]
 
             #read exports
             check(self.header.export_offset, f.tell(), f)

@@ -36,7 +36,7 @@ class MeshUexp:
         self.name_list=self.uasset.name_list        
         self.exports = self.uasset.exports
         self.imports = self.uasset.imports
-        self.file_path = self.uasset.file_path
+        self.asset_path = self.uasset.asset_path
 
         self.ff7r = self.uasset.ff7r
         self.asset_type = self.uasset.asset_type
@@ -87,6 +87,12 @@ class MeshUexp:
                 print('Author: {}'.format(self.author))
             self.foot=f.read()
             check(self.foot, MeshUexp.UNREAL_SIGNATURE, f, 'Parse failed. (foot)')
+                        
+        if self.mesh is not None:
+            for m in self.mesh.materials:
+                m.load_asset(uasset_file, self.asset_path)
+                        
+        
 
     def save(self, file):
         logger.log('Saving '+file+'...', ignore_verbose=True)

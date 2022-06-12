@@ -4,6 +4,9 @@ from .logger import logger
 def mkdir(dir):
     os.makedirs(dir, exist_ok=True)
 
+def get_ext(file):
+    return file.split('.')[-1]
+
 def get_size(file):
     pos=file.tell()
     file.seek(0,2)

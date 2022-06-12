@@ -1,5 +1,6 @@
 from ..util.io_util import *
 from ..util.logger import logger
+from .uasset import Uasset
 
 #Base class for material
 class Material:
@@ -21,14 +22,14 @@ class Material:
             material_import = imports[-material.import_id-1]
             material.import_name=material_import.name
             material.class_name=material_import.class_name
-            material.file_path = material_import.parent_name
+            material.asset_path = material_import.parent_name
             material.print()
 
     def print(self, padding=2):
         pad=' '*padding
         logger.log(pad+self.import_name)
         logger.log(pad+'  slot name: {}'.format(self.slot_name))
-        logger.log(pad+'  file path: {}'.format(self.file_path))
+        logger.log(pad+'  asset path: {}'.format(self.asset_path))
 
     def check_confliction(materials1, materials2, ignore_material_names=False):
         def get_range(num):
@@ -77,6 +78,26 @@ class Material:
         if new_material_ids!=get_range(len(materials2)):
             logger.log('Material name conflicts detected. But it has been resolved correctly.')
         return new_material_ids
+
+    def load_asset(self, main_file_path, main_asset_path):
+        def get_actual_path(target_asset_path):
+            main_asset_dir = os.path.dirname(main_asset_path)
+            rel_path = os.path.relpath(os.path.dirname(target_asset_path), start = main_asset_dir)
+            return os.path.normpath(os.path.join(os.path.dirname(main_file_path), rel_path, os.path.basename(target_asset_path)+'.uasset'))
+
+        file_path = get_actual_path(self.asset_path)
+        if os.path.exists(file_path):
+            try:
+                material_asset = Uasset(file_path)
+                self.texture_asset_paths = [imp.parent_name for imp in material_asset.imports if 'Texture' in imp.class_name]
+                self.texture_actual_paths = [get_actual_path(p) for p in self.texture_asset_paths]
+            except:
+                self.texture_asset_paths = ['Failed to load the material asset. This is unexpected.']
+                self.texture_actual_paths = []
+        else:
+            self.texture_asset_paths = ['Material asset file not found.']
+            self.texture_actual_paths = []
+
 
 #material for static mesh
 class StaticMaterial(Material):
