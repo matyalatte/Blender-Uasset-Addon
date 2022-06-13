@@ -1,5 +1,6 @@
 v0.1.1
-- Import meta data (e.g. asset paths) as custom properties
+- Added load_textures option
+- Added meta data import (e.g. asset paths) as custom properties
 - Fixed a bug meshes won't be placed in the same collection as armatures
 
 v0.1.0
