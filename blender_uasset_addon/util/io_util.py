@@ -1,5 +1,12 @@
-import os, struct
+import os, struct, tempfile
 from .logger import logger
+
+#make a temp file and return its path. you need to delete the file by your self
+def make_temp_file(suffix=None):
+    temp = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
+    temp_path = temp.name
+    temp.close()
+    return temp_path
 
 def mkdir(dir):
     os.makedirs(dir, exist_ok=True)

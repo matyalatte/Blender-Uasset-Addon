@@ -1,10 +1,10 @@
 ![packaging](https://github.com/matyalatte/Blender-Uasset-Addon/actions/workflows/main.yml/badge.svg)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-# Blender Uasset Addon v0.1.1
+# Blender Uasset Addon v0.1.2
 Blender addon to import .uasset files
 
-Most of the source code is from [my mesh modding tool](https://github.com/matyalatte/FF7R-mesh-importer).
+Most of the source code is from [my mesh tool](https://github.com/matyalatte/FF7R-mesh-importer) and [texture tool](https://github.com/matyalatte/UE4-DDS-Tools).
 
 :warning: **This addon will only work with FF7R's assets.**
 
