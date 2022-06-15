@@ -1,6 +1,7 @@
 v0.1.2
 - Added UI panels
 - Added "Export as fbx" function
+- Added "Invert Nomral Maps" option
 
 v0.1.1
 - Added "Load Textures" option

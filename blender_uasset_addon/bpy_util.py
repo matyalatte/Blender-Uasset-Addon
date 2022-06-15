@@ -14,6 +14,13 @@ def set_unit_scale(unit_scale):
         unit_scale = UNIT[unit_scale]
     bpy.context.scene.unit_settings.scale_length=unit_scale
 
+def os_is_windows():
+    import sys
+    return sys.platform in ['win32', 'cygwin', 'msys']
+
+def update_window():
+    bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP', iterations=1)
+
 def add_armature(name='Armature', location = (0,0,0)):
     bpy.ops.object.armature_add(
         enter_editmode=True,
@@ -167,7 +174,7 @@ def add_material(name, color_gen=None):
 #COLOR: Color map
 #NORMAL: Normal map
 #GRAY: Gray scale
-def load_dds(file, name, type='COLOR'):
+def load_dds(file, name, type='COLOR', invert_normals=False):
     tex = bpy.data.images.load(file)
     tex.pack()    
     tex.filepath=''
@@ -177,16 +184,20 @@ def load_dds(file, name, type='COLOR'):
     
     if type=='NORMAL':
         #reconstruct z (x*x+y*y+z*z=1)
+        print('Reconstructing normal map...')
         pix = np.array(tex.pixels, dtype=np.float32)
         pix = pix.reshape((-1, 4))
         xy = pix[:,[0,1]] * 2 - 1 #(0~1)->(-1~1)
         squared = np.square(xy)
-        z = 1 - squared[:,0] - squared[:,1]
-        pix[:,2] = (np.sqrt(np.clip(z, 0, None))+ 1) * 0.5 #(-1~1)->(0~1)
+        z = np.sqrt(np.clip(1 - squared[:,0] - squared[:,1], 0, None))
+        pix[:,2] = (z + 1) * 0.5 #(-1~1)->(0~1)
+        if invert_normals:
+            pix[:,1]=1-pix[:,1]
         pix = pix.flatten()
-        tex.pixels = np.clip(pix, None, 1)
+        tex.pixels = np.clip(pix, 0, 1)
 
     elif type=='GRAY':
+        print('Reconstructing gray scale map...')
         #copy r to g and b
         pix = np.array(tex.pixels)
         pix = pix.reshape((-1, 4))
@@ -202,7 +213,7 @@ def load_dds(file, name, type='COLOR'):
 #NORMAL: Normal map
 #NORMAL_MAIN: Main normal map
 #ALPHA: Alpha texture
-def assign_texture(texture, material, type='COLOR', location=[-800, 300]):
+def assign_texture(texture, material, type='COLOR', location=[-800, 300], invert_normals=True):
     nodes = material.node_tree.nodes
     links = material.node_tree.links
 
@@ -213,17 +224,24 @@ def assign_texture(texture, material, type='COLOR', location=[-800, 300]):
 
     if type=='COLOR_MAIN':
         links.new(bsdf_node.inputs['Base Color'], tex_node.outputs['Color'])
-    if 'NORMAL' in type:    
-        curve_node = nodes.new('ShaderNodeRGBCurve')
-        curve_node.location = [location[0] + 300, location[1]]
-        curve_node.mapping.curves[1].points[0].location=(0,1)
-        curve_node.mapping.curves[1].points[1].location=(1,0)
-        curve_node.mapping.update()
+    if 'NORMAL' in type:
         normal_node = nodes.new('ShaderNodeNormalMap')
-        normal_node.location = [location[0] + 600, location[1]]
-        links.new(curve_node.inputs['Color'], tex_node.outputs['Color'])
-        links.new(normal_node.inputs['Color'], curve_node.outputs['Color'])
+        if invert_normals:
+            curve_node = nodes.new('ShaderNodeRGBCurve')
+            curve_node.location = [location[0] + 300, location[1]]
+            curve_node.mapping.curves[1].points[0].location=(0,1)
+            curve_node.mapping.curves[1].points[1].location=(1,0)
+            curve_node.mapping.update()
+            normal_node.location = [location[0] + 600, location[1]]
+            links.new(curve_node.inputs['Color'], tex_node.outputs['Color'])
+            links.new(normal_node.inputs['Color'], curve_node.outputs['Color'])
+        else:
+            normal_node.location = [location[0] + 450, location[1]]
+            links.new(normal_node.inputs['Color'], tex_node.outputs['Color'])
         if 'MAIN' in type:
             links.new(bsdf_node.inputs['Normal'], normal_node.outputs['Normal'])
     if 'ALPHA' in type:
         links.new(bsdf_node.inputs['Alpha'], tex_node.outputs['Color'])
+
+    if type!='COLOR_MAIN':
+        tex_node.image.colorspace_settings.name='Non-Color'

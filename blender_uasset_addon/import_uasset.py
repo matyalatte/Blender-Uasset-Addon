@@ -92,7 +92,7 @@ def generate_armature(name, bones, normalize_bones=True, rotate_bones=False, min
     generate_bones(amt, bones[0], bones)
     return amt
 
-def load_utexture(file, name):
+def load_utexture(file, name, invert_normals=False):
     temp = util.io_util.make_temp_file(suffix='.dds')
     try:
         utex = texture.utexture.Utexture(file, version='ff7r')
@@ -105,7 +105,7 @@ def load_utexture(file, name):
             type='COLOR'
         dds = texture.dds.DDS.asset_to_DDS(utex)
         dds.save(temp)
-        tex = bpy_util.load_dds(temp, name=name, type=type)
+        tex = bpy_util.load_dds(temp, name=name, type=type, invert_normals=invert_normals)
     except:
         print('Failed to load {}'.format(file))
         tex = None
@@ -115,8 +115,9 @@ def load_utexture(file, name):
         os.remove(temp)
     return tex, type
 
-def setup_materials(asset, load_textures=False):
-    print('Loading textures...')
+def generate_materials(asset, load_textures=False, invert_normal_maps=False):
+    if load_textures:
+        print('Loading textures...')
     #add materials to mesh
     material_names = [m.import_name for m in asset.mesh.materials]
     color_gen = bpy_util.ColorGenerator()
@@ -144,13 +145,12 @@ def setup_materials(asset, load_textures=False):
                 if not os.path.exists(tex_path):
                     print('Texture not found ({})'.format(asset_path))
                     continue
-                tex, type = load_utexture(tex_path, os.path.basename(asset_path))
+                tex, type = load_utexture(tex_path, os.path.basename(asset_path), invert_normals=invert_normal_maps)
                 if tex is not None:
                     texs[name]=(tex, type)
                     names.append(name)
 
             types = [texs[n][1] for n in names]
-            print(types)
 
             def search_suffix(suffix, type, new_suf, need_suffix=False):
                 if type not in types:
@@ -181,7 +181,8 @@ def setup_materials(asset, load_textures=False):
             y=300
             for name, type in zip(names, types):
                 tex, _ = texs[name]
-                bpy_util.assign_texture(tex, m, type=type, location=[-700, y])
+                #no need to invert normals if it is already inverted.
+                bpy_util.assign_texture(tex, m, type=type, location=[-800, y], invert_normals=not invert_normal_maps)
                 y -= 300
 
     return materials, material_names
@@ -241,15 +242,15 @@ def generate_mesh(amt, asset, materials, material_names, rescale=1.0, keep_secti
         bpy_util.join_meshes(sections)
 
     return sections[0]
-        
+
 #add mesh asset to scene
-def load_uasset(file, rename_armature=True, keep_sections=False, \
-    normalize_bones=True, rotate_bones=False, \
-    minimal_bone_length=0.025, rescale=1.0, \
-    shading='SMOOTH', only_skeleton=False, \
-    show_axes=False, bone_display_type='OCTAHEDRAL', \
-    load_textures=False):
-    
+def load_uasset(file, rename_armature=True, keep_sections=False,
+    normalize_bones=True, rotate_bones=False,
+    minimal_bone_length=0.025, rescale=1.0,
+    shading='SMOOTH', only_skeleton=False,
+    show_axes=False, bone_display_type='OCTAHEDRAL',
+    load_textures=False, invert_normal_maps=False):
+
     #load .uasset
     asset=uasset.uexp.MeshUexp(file)
     asset_type = asset.asset_type
@@ -279,7 +280,7 @@ def load_uasset(file, rename_armature=True, keep_sections=False, \
 
     #add a mesh to scene
     if asset.mesh is not None and not only_skeleton:
-        materials, material_names = setup_materials(asset, load_textures=load_textures)
+        materials, material_names = generate_materials(asset, load_textures=load_textures, invert_normal_maps=invert_normal_maps)
         mesh = generate_mesh(amt, asset, materials, material_names, rescale=rescale, keep_sections=keep_sections, shading=shading)
     
     #return root object
@@ -295,11 +296,13 @@ class TABFLAGS_WindowManager(PropertyGroup):
     ui_mesh : BoolProperty(name='Mesh', default=True)
     ui_armature : BoolProperty(name='Armature', default=False)
     ui_scale : BoolProperty(name='Scale', default=False)
+    ui_progress: FloatProperty(name='Progress', default=0)
+    ui_status: StringProperty(name='Status', default='')
 
 class ImportUasset(Operator, ImportHelper):
-    '''Load a .uasset file'''
     bl_idname = 'import.uasset'
     bl_label = 'Import Uasset'
+    bl_description = 'Import .uasset files'
     bl_options = {'REGISTER', 'UNDO'}
 
     filter_glob: StringProperty(default='*.uasset', options={'HIDDEN'})
@@ -341,6 +344,16 @@ class ImportUasset(Operator, ImportHelper):
         description=(
             'Load texture files if exists.\n'
             'It will take a long time'
+        ),
+        default=False,
+    )
+
+    invert_normal_maps: BoolProperty(
+        name='Invert Normal Maps',
+        description=(
+            'Flip Y axis for normal maps.\n'
+            'No need shader nodes to invert G channel,\n'
+            "But the textures won't work in the Games"
         ),
         default=False,
     )
@@ -427,6 +440,7 @@ class ImportUasset(Operator, ImportHelper):
             layout.prop(self, 'shading')
             layout.prop(self, 'keep_sections')
             layout.prop(self, 'load_textures')
+            layout.prop(self, 'invert_normal_maps')
             layout.separator()
         row = layout.row(align = True)
         row.alignment = 'LEFT'
@@ -447,11 +461,13 @@ class ImportUasset(Operator, ImportHelper):
             layout.prop(self, 'unit_scale')
             layout.prop(self, 'rescale')
 
-
     def invoke(self, context, event):
         return ImportHelper.invoke(self, context, event)
 
     def execute(self, context):
+        if bpy_util.os_is_windows():
+            bpy.ops.wm.console_toggle()
+            bpy.ops.wm.console_toggle()
         return self.import_uasset(context)
 
     def import_uasset(self, context):
@@ -464,35 +480,37 @@ class ImportUasset(Operator, ImportHelper):
             dirname = os.path.dirname(self.filepath)
             for file in self.files:
                 path = os.path.join(dirname, file.name)
-                if self.unit_import(path, import_settings) == {'FINISHED'}:
+                if self.unit_import(path, import_settings, context) == {'FINISHED'}:
                     ret = {'FINISHED'}
             return ret
         else:
             # Single file import
-            return self.unit_import(self.filepath, import_settings)
+            return self.unit_import(self.filepath, import_settings, context)
 
-    def unit_import(self, file, import_settings):
+    def unit_import(self, file, import_settings, context):
         import time
         try:
             start_time = time.time()
             bpy_util.set_unit_scale(import_settings['unit_scale'])
 
-            amt = load_uasset(file, \
-                rename_armature=import_settings['rename_armature'], \
-                keep_sections=import_settings['keep_sections'], \
-                normalize_bones=import_settings['normalize_bones'], \
-                rotate_bones=import_settings['rotate_bones'], \
-                minimal_bone_length = import_settings['minimal_bone_length'], \
-                rescale = import_settings['rescale'], \
-                shading = import_settings['shading'], \
-                only_skeleton = import_settings['only_skeleton'], \
-                show_axes=import_settings['show_axes'], \
-                bone_display_type=import_settings['bone_display_type'], \
-                load_textures=import_settings['load_textures']
+            amt = load_uasset(file,
+                rename_armature=import_settings['rename_armature'],
+                keep_sections=import_settings['keep_sections'],
+                normalize_bones=import_settings['normalize_bones'],
+                rotate_bones=import_settings['rotate_bones'],
+                minimal_bone_length = import_settings['minimal_bone_length'],
+                rescale = import_settings['rescale'],
+                shading = import_settings['shading'],
+                only_skeleton = import_settings['only_skeleton'],
+                show_axes=import_settings['show_axes'],
+                bone_display_type=import_settings['bone_display_type'],
+                load_textures=import_settings['load_textures'],
+                invert_normal_maps=import_settings['invert_normal_maps']
             )
 
             elapsed_s = '{:.2f}s'.format(time.time() - start_time)
             m = 'uasset import finished in ' + elapsed_s
+            print(m)
             self.report({'INFO'}, m)
             ret = {'FINISHED'}
 
@@ -501,16 +519,33 @@ class ImportUasset(Operator, ImportHelper):
             ret = {'CANCELLED'}
         return ret
 
+
+class ToggleConsole(Operator):
+    bl_idname = 'import.toggle_console'
+    bl_label = 'Toggle Console'
+    bl_description = 'Toggle the system console.\nI recommend enabling the system console to see the progress'
+
+    def execute(self, context):
+        if bpy_util.os_is_windows():
+            bpy.ops.wm.console_toggle()
+        return {'FINISHED'}
+
+
 class UASSET_PT_import_panel(bpy.types.Panel):
     bl_label = "Import Uasset"
     bl_idname = 'VIEW3D_PT_import_uasset'
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
     bl_category = "Uasset"
-    
+
     def draw(self, context):
         layout = self.layout
         layout.operator(ImportUasset.bl_idname, icon = 'MESH_DATA')
+        layout.separator()
+        if bpy_util.os_is_windows():
+            layout.label(text = 'I recommend enabling the system console to see the progress')
+            layout.operator(ToggleConsole.bl_idname, icon = 'CONSOLE')
+
 
 def menu_func_import(self, context):
     self.layout.operator(ImportUasset.bl_idname, text='Uasset (.uasset)')
@@ -518,6 +553,7 @@ def menu_func_import(self, context):
 classes = (
     TABFLAGS_WindowManager,
     ImportUasset,
+    ToggleConsole,
     UASSET_PT_import_panel,
 )
 

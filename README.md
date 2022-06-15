@@ -6,7 +6,7 @@ Blender addon to import .uasset files
 
 Most of the source code is from [my mesh tool](https://github.com/matyalatte/FF7R-mesh-importer) and [texture tool](https://github.com/matyalatte/UE4-DDS-Tools).
 
-:warning: **This addon will only work with FF7R's assets.**
+:warning: **This addon will only work with FF7R's assets for now.**
 
 ## Supported UE Versions
 

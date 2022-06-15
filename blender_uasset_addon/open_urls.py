@@ -11,12 +11,13 @@ class VIEW3D_PT_urls(bpy.types.Panel):
     urls = {
         "Readme (git repo)" : 'https://github.com/matyalatte/Blender-Uasset-Addon'
     }
+    icons = ['INFO']
     
     def draw(self, context):
         layout = self.layout
         col = layout.column()
-        for name, url in VIEW3D_PT_urls.urls.items():
-            op = col.operator('wm.url_open', text=name)
+        for (name, url), icon in zip(VIEW3D_PT_urls.urls.items(), VIEW3D_PT_urls.icons):
+            op = col.operator('wm.url_open', text=name, icon=icon)
             op.url = url
 
 classes = (

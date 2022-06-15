@@ -117,10 +117,10 @@ class EXPORT_OT_Run_Button(bpy.types.Operator):
                 raise RuntimeError('Select an armature.')
 
             file = base_file_name + '_' + armature.name +'.fbx'
-            global_scale = context.scene.fbx_export_options.fGlobalScale
-            smooth_type = context.scene.fbx_export_options.smooth_type
-            export_tangent = context.scene.fbx_export_options.bExportTangent
-            use_custom_props = context.scene.fbx_export_options.bUseCustomProps
+            global_scale = context.scene.uasset_addon_fbx_export_options.fGlobalScale
+            smooth_type = context.scene.uasset_addon_fbx_export_options.smooth_type
+            export_tangent = context.scene.uasset_addon_fbx_export_options.bExportTangent
+            use_custom_props = context.scene.uasset_addon_fbx_export_options.bUseCustomProps
             #main
             export_as_fbx(file, armature, global_scale, smooth_type, export_tangent, use_custom_props)
             self.report({'INFO'}, 'Success! {} has been generated.'.format(file))
@@ -147,10 +147,10 @@ class EXPORT_PT_Panel(bpy.types.Panel):
         layout.label(text='3. Click the button below')
         layout.operator(EXPORT_OT_Run_Button.bl_idname, icon='MESH_DATA')
         layout.label(text='Options')
-        layout.prop(context.scene.fbx_export_options, 'fGlobalScale')
-        layout.prop(context.scene.fbx_export_options, 'smooth_type')
-        layout.prop(context.scene.fbx_export_options, 'bExportTangent')
-        layout.prop(context.scene.fbx_export_options, 'bUseCustomProps')
+        layout.prop(context.scene.uasset_addon_fbx_export_options, 'fGlobalScale')
+        layout.prop(context.scene.uasset_addon_fbx_export_options, 'smooth_type')
+        layout.prop(context.scene.uasset_addon_fbx_export_options, 'bExportTangent')
+        layout.prop(context.scene.uasset_addon_fbx_export_options, 'bUseCustomProps')
 
 classes = (
         Export_Inputs,
@@ -163,11 +163,11 @@ def register():
     for cls in classes:
         register_class(cls)
 
-    bpy.types.Scene.fbx_export_options = PointerProperty(type=Export_Inputs)
+    bpy.types.Scene.uasset_addon_fbx_export_options = PointerProperty(type=Export_Inputs)
 
 def unregister():
     from bpy.utils import unregister_class
     for cls in classes:
         unregister_class(cls)
 
-    del bpy.types.Scene.fbx_export_options
+    del bpy.types.Scene.uasset_addon_fbx_export_options
