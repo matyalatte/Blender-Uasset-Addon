@@ -176,7 +176,8 @@ def add_material(name, color_gen=None):
 #GRAY: Gray scale
 def load_dds(file, name, type='COLOR', invert_normals=False):
     tex = bpy.data.images.load(file)
-    tex.pack()    
+    tex.pack()
+    tex.colorspace_settings.name='Non-Color'
     tex.filepath=''
     tex.filepath_raw=''
 
@@ -194,7 +195,7 @@ def load_dds(file, name, type='COLOR', invert_normals=False):
         if invert_normals:
             pix[:,1]=1-pix[:,1]
         pix = pix.flatten()
-        tex.pixels = np.clip(pix, 0, 1)
+        tex.pixels = pix
 
     elif type=='GRAY':
         print('Reconstructing gray scale map...')
@@ -204,7 +205,6 @@ def load_dds(file, name, type='COLOR', invert_normals=False):
         pix[:, [1, 2]]=pix[:, [0, 0]]
         pix = pix.flatten()
         tex.pixels = pix
-
     return tex
 
 #types
@@ -224,6 +224,7 @@ def assign_texture(texture, material, type='COLOR', location=[-800, 300], invert
 
     if type=='COLOR_MAIN':
         links.new(bsdf_node.inputs['Base Color'], tex_node.outputs['Color'])
+        tex_node.image.colorspace_settings.name='sRGB'
     if 'NORMAL' in type:
         normal_node = nodes.new('ShaderNodeNormalMap')
         if invert_normals:
@@ -242,6 +243,3 @@ def assign_texture(texture, material, type='COLOR', location=[-800, 300], invert
             links.new(bsdf_node.inputs['Normal'], normal_node.outputs['Normal'])
     if 'ALPHA' in type:
         links.new(bsdf_node.inputs['Alpha'], tex_node.outputs['Color'])
-
-    if type!='COLOR_MAIN':
-        tex_node.image.colorspace_settings.name='Non-Color'
