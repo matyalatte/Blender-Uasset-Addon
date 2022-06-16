@@ -1,8 +1,8 @@
-from .io_util import *
+from ..util.io_util import *
 import ctypes as c
 
 #mipmap class for texture asset
-class Umipmap(c.LittleEndianStructure):
+class Mipmap(c.LittleEndianStructure):
     _pack_=1
     _fields_ = [
         ("one", c.c_uint32), #1
@@ -34,7 +34,7 @@ class Umipmap(c.LittleEndianStructure):
         self.one=1
 
     def read(f, version):
-        mip = Umipmap(version)
+        mip = Mipmap(version)
         f.readinto(mip)
         mip.uexp = mip.ubulk_flag not in [1025, 1281, 1]
         mip.meta = mip.ubulk_flag==32
@@ -57,7 +57,7 @@ class Umipmap(c.LittleEndianStructure):
         print(pad + 'width: {}'.format(self.width))
         print(pad + 'height: {}'.format(self.height))
 
-    def write(self, f, uasset_size):
+    def write(self, f):
         if self.uexp:
             if self.meta:
                 self.ubulk_flag=32

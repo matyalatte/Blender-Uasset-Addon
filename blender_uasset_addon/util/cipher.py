@@ -1,3 +1,6 @@
+#Note that this cipher is vulnerable.
+#Hard to read in hex editors, but easy to decode for programers.
+
 class Cipher:
     #Block chained XOR cipher
     KEY=list('F-JaNcRfUjXn2r5u8x/A?D(G+KbPeSgV'.encode())

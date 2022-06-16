@@ -1,6 +1,6 @@
 from ..util.io_util import *
 from ..util.logger import logger
-from .uasset import Uasset
+from . import uasset
 
 #Base class for material
 class Material:
@@ -79,7 +79,7 @@ class Material:
             logger.log('Material name conflicts detected. But it has been resolved correctly.')
         return new_material_ids
 
-    def load_asset(self, main_file_path, main_asset_path):
+    def load_asset(self, main_file_path, main_asset_path, version):
         def get_actual_path(target_asset_path):
             main_asset_dir = os.path.dirname(main_asset_path)
             rel_path = os.path.relpath(os.path.dirname(target_asset_path), start = main_asset_dir)
@@ -88,7 +88,7 @@ class Material:
         file_path = get_actual_path(self.asset_path)
         if os.path.exists(file_path):
             try:
-                material_asset = Uasset(file_path)
+                material_asset = uasset.Uasset(file_path, ignore_uexp=True, version=version, asset_type='Material')
                 self.texture_asset_paths = [imp.parent_name for imp in material_asset.imports if 'Texture' in imp.class_name]
                 self.texture_actual_paths = [get_actual_path(p) for p in self.texture_asset_paths]
             except:

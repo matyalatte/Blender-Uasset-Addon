@@ -1,7 +1,7 @@
 ![packaging](https://github.com/matyalatte/Blender-Uasset-Addon/actions/workflows/main.yml/badge.svg)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-# Blender Uasset Addon v0.1.2
+# Blender Uasset Addon v0.1.3
 Blender addon to import .uasset files
 
 Most of the source code is from [my mesh tool](https://github.com/matyalatte/FF7R-mesh-importer) and [texture tool](https://github.com/matyalatte/UE4-DDS-Tools).
@@ -17,6 +17,7 @@ Most of the source code is from [my mesh tool](https://github.com/matyalatte/FF7
 - Skeletal mesh
 - Static mesh
 - Skeleton (*_Skeleton.uasset)
+- Texture (Blender will load it as a dds image. But I don't know if it supports all dds formats.)
 
 ## Installation
 

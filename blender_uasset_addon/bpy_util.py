@@ -114,15 +114,15 @@ def join_meshes(meshes):
 
 #mesh_data: (bpy.types.Mesh).data
 #normals: 2d numpy array of normals (vertex_count, 3)
-def smoothing(mesh_data, face_count, normals, shading=True):
+def smoothing(mesh_data, face_count, normals, smoothing=True):
     smooth = np.empty(face_count, dtype=np.bool)
-    smooth.fill(shading)
+    smooth.fill(smoothing)
     mesh_data.polygons.foreach_set('use_smooth', smooth)
     mesh_data.validate()
     mesh_data.update()
     mesh_data.create_normals_split()
     mesh_data.normals_split_custom_set_from_vertices(normals)
-    mesh_data.use_auto_smooth = shading
+    mesh_data.use_auto_smooth = smoothing
 
 #color generator
 #https://martin.ankerl.com/2009/12/09/how-to-create-random-colors-programmatically/
@@ -174,10 +174,10 @@ def add_material(name, color_gen=None):
 #COLOR: Color map
 #NORMAL: Normal map
 #GRAY: Gray scale
-def load_dds(file, name, type='COLOR', invert_normals=False):
+def load_dds(file, name, type='COLOR', color_space='Non-Color', invert_normals=False):
     tex = bpy.data.images.load(file)
     tex.pack()
-    tex.colorspace_settings.name='Non-Color'
+    tex.colorspace_settings.name=color_space
     tex.filepath=''
     tex.filepath_raw=''
 

@@ -45,6 +45,10 @@ def read_int32(file):
     bin=file.read(4)
     return int.from_bytes(bin, "little", signed=True)
 
+def read_uint64(file):
+    bin=file.read(8)
+    return int.from_bytes(bin, "little")
+
 def read_float32(file):
     bin=file.read(4)
     return struct.unpack('<f', bin)[0]
@@ -126,6 +130,10 @@ def read_struct_array(f, obj, len=None):
     objects = [obj() for i in range(len)]
     list(map(lambda x: f.readinto(x), objects))
     return objects
+
+def write_uint64(file, n):
+    bin = n.to_bytes(8, byteorder="little")
+    file.write(bin)
 
 def write_uint32(file, n):
     bin = n.to_bytes(4, byteorder="little")

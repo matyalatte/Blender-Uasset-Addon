@@ -1,7 +1,7 @@
 import os
-from .io_util import *
+from ..util.io_util import *
 import ctypes as c
-from .utexture import BYTE_PER_PIXEL
+from .texture import BYTE_PER_PIXEL
 
 #classes for dds
 

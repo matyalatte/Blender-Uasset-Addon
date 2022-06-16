@@ -110,12 +110,10 @@ class EXPORT_OT_Run_Button(bpy.types.Operator):
 
             #get armature
             selected = bpy.context.selected_objects
-            if len(selected)==0:
-                raise RuntimeError('Select an armature.')
-            armature=selected[0]
-            if armature.type!='ARMATURE':
+            if len(selected)==0 or selected[0].type!='ARMATURE':
                 raise RuntimeError('Select an armature.')
 
+            armature=selected[0]
             file = base_file_name + '_' + armature.name +'.fbx'
             global_scale = context.scene.uasset_addon_fbx_export_options.fGlobalScale
             smooth_type = context.scene.uasset_addon_fbx_export_options.smooth_type

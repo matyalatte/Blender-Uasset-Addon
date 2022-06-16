@@ -1,5 +1,6 @@
 from ..util.io_util import *
 from ..util.logger import logger
+from .uexp import Uexp
 import ctypes as c
 
 #classes for .uasset
@@ -103,15 +104,6 @@ def name_imports(imports, name_list):
         else:
             x.parent_name = import_names[-x.parent_import_id-1]
     list(map(lambda x: name_parent(x), imports))
-    skeletal='SkeletalMesh' in import_names
-    ff7r=False
-    for import_ in imports:
-        if import_.class_name in ['MaterialInstanceConstant', 'SQEX_BonamikAsset']:
-            ff7r=True
-        if not skeletal and import_.class_name=='Material' and ('NavCollision' not in name_list):
-            ff7r=True
-
-    return ff7r
         
 #export data of .uasset
 class UassetExport(c.LittleEndianStructure): 
@@ -129,13 +121,13 @@ class UassetExport(c.LittleEndianStructure):
         ("unk", c.c_ubyte*64),
     ]
 
-    MAIN_EXPORTS=['SkeletalMesh', 'StaticMesh', 'Skeleton', 'SQEX_BonamikAsset', 'Material', 'MaterialInstanceConstant']
+    MAIN_EXPORTS=['SkeletalMesh', 'StaticMesh', 'Skeleton', 'Texture2D', 'Material', 'MaterialInstanceConstant']
 
     def update(self, size, offset):
         self.size=size
         self.offset=offset
 
-    def name_exports(exports, imports, name_list, file_name):
+    def name_exports(exports, imports, name_list):
         asset_type=None
         for export in exports:
             export_import = imports[-export.import_id-1]
@@ -167,14 +159,21 @@ class UassetExport(c.LittleEndianStructure):
 
 class Uasset:
 
-    def __init__(self, uasset_file):
-        if uasset_file[-7:]!='.uasset':
-            raise RuntimeError('Not .uasset. ({})'.format(uasset_file))
+    def __init__(self, file, version='ff7r', ignore_uexp=False, asset_type=''):
+        ext = get_ext(file)
+        base = file[:-len(ext)]
+        if ext!='uasset':
+            if ext!='uexp':
+                raise RuntimeError('Not .uasset! ({})'.format(file))
+            else:
+                file = base+'uasset'
 
-        logger.log('Loading '+uasset_file+'...', ignore_verbose=True)
+        logger.log('Loading '+file+'...', ignore_verbose=True)
 
-        self.file=os.path.basename(uasset_file)[:-7]
-        with open(uasset_file, 'rb') as f:
+        self.file=os.path.basename(file)[:-7]
+        self.name = os.path.splitext(os.path.basename(file))[0]
+        self.version=version
+        with open(file, 'rb') as f:
             self.size=get_size(f)
             #read header
             self.header=UassetHeader()
@@ -199,7 +198,7 @@ class Uasset:
             #read imports
             check(self.header.import_offset, f.tell(), f)
             self.imports=read_struct_array(f, UassetImport, len=self.header.import_count)
-            self.ff7r = name_imports(self.imports, self.name_list)
+            name_imports(self.imports, self.name_list)
             logger.log('Import')
             [x.print(str(i)) for x,i in zip(self.imports, range(len(self.imports)))]
 
@@ -216,7 +215,9 @@ class Uasset:
             #read exports
             check(self.header.export_offset, f.tell(), f)
             self.exports=read_struct_array(f, UassetExport, len=self.header.export_count)
-            self.asset_type = UassetExport.name_exports(self.exports, self.imports, self.name_list, self.file)
+            self.asset_type = UassetExport.name_exports(self.exports, self.imports, self.name_list)
+            if asset_type not in self.asset_type:
+                raise RuntimeError('Not {}.'.format(asset_type))
 
             logger.log('Export')
             list(map(lambda x: x.print(), self.exports))
@@ -239,8 +240,24 @@ class Uasset:
 
             check(f.tell(), self.size)
             check(self.header.uasset_size, self.size)
+
+        if ignore_uexp:
+            return
+        
+        self.uexp = Uexp(base+'uexp', self)
     
     def save(self, file, uexp_size):
+        ext = get_ext(file)
+        base = file[:-len(ext)]
+        if ext!='uasset':
+            if ext!='uexp':
+                raise RuntimeError('Not .uasset! ({})'.format(file))
+            else:
+                file = base+'uasset'
+
+        uexp_file = base+'uexp'
+        uexp_size = self.uexp.save(uexp_file)
+        
         logger.log('Saving '+file+'...', ignore_verbose=True)
         with open(file, 'wb') as f:
             #skip header part

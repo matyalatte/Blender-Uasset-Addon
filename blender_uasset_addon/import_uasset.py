@@ -11,15 +11,13 @@ from bpy.types import Operator, PropertyGroup
 from bpy_extras.io_utils import ImportHelper
 import os
 
-from . import bpy_util, uasset, texture, util
+from . import bpy_util, unreal, util
 if "bpy" in locals():
     import importlib
     if "bpy_util" in locals():
         importlib.reload(bpy_util)
-    if "uasset" in locals():
-        importlib.reload(uasset)
-    if "texture" in locals():
-        importlib.reload(texture)
+    if "unreal" in locals():
+        importlib.reload(unreal)
     if "util" in locals():
         importlib.reload(util)
 
@@ -92,10 +90,15 @@ def generate_armature(name, bones, normalize_bones=True, rotate_bones=False, min
     generate_bones(amt, bones[0], bones)
     return amt
 
-def load_utexture(file, name, invert_normals=False):
+def load_utexture(file, name, version, asset=None, invert_normals=False):
     temp = util.io_util.make_temp_file(suffix='.dds')
+    if asset is not None:
+        name = asset.name
+        file = name
     try:
-        utex = texture.utexture.Utexture(file, version='ff7r')
+        if asset is None:
+            asset = unreal.uasset.Uasset(file, version=version, asset_type='Texture')
+        utex = asset.uexp.texture
         utex.remove_mipmaps()
         if 'BC5' in utex.type:
             type='NORMAL'
@@ -103,7 +106,7 @@ def load_utexture(file, name, invert_normals=False):
             type='GRAY'
         else:
             type='COLOR'
-        dds = texture.dds.DDS.asset_to_DDS(utex)
+        dds = unreal.dds.DDS.asset_to_DDS(utex)
         dds.save(temp)
         tex = bpy_util.load_dds(temp, name=name, type=type, invert_normals=invert_normals)
     except:
@@ -115,17 +118,17 @@ def load_utexture(file, name, invert_normals=False):
         os.remove(temp)
     return tex, type
 
-def generate_materials(asset, load_textures=False, invert_normal_maps=False):
+def generate_materials(asset, version, load_textures=False, invert_normal_maps=False, suffix_list=['_C', '_N', '_A']):
     if load_textures:
         print('Loading textures...')
     #add materials to mesh
-    material_names = [m.import_name for m in asset.mesh.materials]
+    material_names = [m.import_name for m in asset.uexp.mesh.materials]
     color_gen = bpy_util.ColorGenerator()
     materials = [bpy_util.add_material(name, color_gen) for name in material_names]
-    texture_num = sum([len(m.texture_asset_paths) for m in asset.mesh.materials])
+    texture_num = sum([len(m.texture_asset_paths) for m in asset.uexp.mesh.materials])
     progress = 1
     texs = {}
-    for m, ue_m in zip(materials, asset.mesh.materials):
+    for m, ue_m in zip(materials, asset.uexp.mesh.materials):
         m['class'] = ue_m.class_name
         m['asset_path'] = ue_m.asset_path
         m['slot_name'] = ue_m.slot_name
@@ -145,38 +148,34 @@ def generate_materials(asset, load_textures=False, invert_normal_maps=False):
                 if not os.path.exists(tex_path):
                     print('Texture not found ({})'.format(asset_path))
                     continue
-                tex, type = load_utexture(tex_path, os.path.basename(asset_path), invert_normals=invert_normal_maps)
+                tex, type = load_utexture(tex_path, os.path.basename(asset_path), version, invert_normals=invert_normal_maps)
                 if tex is not None:
                     texs[name]=(tex, type)
                     names.append(name)
 
             types = [texs[n][1] for n in names]
 
-            def search_suffix(suffix, type, new_suf, need_suffix=False):
+            def search_suffix(suffix, type, new_type_suffix, need_suffix=False):
                 if type not in types:
                     return
                 id = None
-                if material_name+suffix in names:
+                type_names = [n for n,t in zip(names, types) if t==type]
+                if material_name+suffix in type_names:
                     id = names.index(material_name+suffix)
-                    if types[id]!=type:
-                        id = None
                 if id is None:
-                    ns = [n for n in names if suffix in n]
+                    ns = [n for n in type_names if n[-len(suffix):]==suffix]
                     if len(ns)>0:
                         id = names.index(ns[0])
-                        if types[id]!=type:
-                            id = None
                     elif need_suffix:
                         return
                 if id is None:
-                    ns = [n for n,t in zip(names, types) if t==type]
-                    id = names.index(ns[0])
+                    id = names.index(type_names[0])
                 if id is not None:
-                    types[id]+='_' + new_suf
+                    types[id]+=new_type_suffix
                     print('{}: {}'.format(types[id], names[id]))
-            search_suffix('_C', 'COLOR', 'MAIN')
-            search_suffix('_N', 'NORMAL', 'MAIN')
-            search_suffix('_A', 'GRAY', 'ALPHA', need_suffix=True)
+            search_suffix(suffix_list[0], 'COLOR', '_MAIN')
+            search_suffix(suffix_list[1], 'NORMAL', '_MAIN')
+            search_suffix(suffix_list[2], 'GRAY', '_ALPHA', need_suffix=True)
         
             y=300
             for name, type in zip(names, types):
@@ -184,22 +183,21 @@ def generate_materials(asset, load_textures=False, invert_normal_maps=False):
                 #no need to invert normals if it is already inverted.
                 bpy_util.assign_texture(tex, m, type=type, location=[-800, y], invert_normals=not invert_normal_maps)
                 y -= 300
-
     return materials, material_names
 
 #add meshes to scene
-def generate_mesh(amt, asset, materials, material_names, rescale=1.0, keep_sections=False, shading='SMOOTH'):
+def generate_mesh(amt, asset, materials, material_names, rescale=1.0, keep_sections=False, smoothing=True):
 
     print('Generating meshes...')
     #get mesh data from asset
-    material_ids, _ = asset.mesh.LODs[0].get_meta_for_blender()
-    normals, positions, texcoords, vertex_groups, joints, weights, indices = asset.mesh.LODs[0].parse_buffers_for_blender()
+    material_ids, _ = asset.uexp.mesh.LODs[0].get_meta_for_blender()
+    normals, positions, texcoords, vertex_groups, joints, weights, indices = asset.uexp.mesh.LODs[0].parse_buffers_for_blender()
 
     rescale_factor = get_rescale_factor(rescale)
     y_invert = np.array((1, -1, 1))
 
     if amt is not None:
-        bone_names = [b.name for b in asset.mesh.skeleton.bones]
+        bone_names = [b.name for b in asset.uexp.mesh.skeleton.bones]
 
     sections = []
     collection = bpy.context.view_layer.active_layer_collection.collection
@@ -232,7 +230,7 @@ def generate_mesh(amt, asset, materials, material_names, rescale=1.0, keep_secti
         #smoothing
         norm = np.array(normals[i], dtype=np.float32) / 127 - 1
         norm *= y_invert
-        bpy_util.smoothing(mesh_data, len(indice)//3, norm, shading=shading=='SMOOTH')
+        bpy_util.smoothing(mesh_data, len(indice)//3, norm, smoothing=smoothing)
         
 
     if not keep_sections:
@@ -247,17 +245,25 @@ def generate_mesh(amt, asset, materials, material_names, rescale=1.0, keep_secti
 def load_uasset(file, rename_armature=True, keep_sections=False,
     normalize_bones=True, rotate_bones=False,
     minimal_bone_length=0.025, rescale=1.0,
-    shading='SMOOTH', only_skeleton=False,
+    smoothing=True, only_skeleton=False,
     show_axes=False, bone_display_type='OCTAHEDRAL',
-    load_textures=False, invert_normal_maps=False):
+    load_textures=False, invert_normal_maps=False, ue_version='4.18', \
+    suffix_list=['_C', '_N', '_A']):
 
     #load .uasset
-    asset=uasset.uexp.MeshUexp(file)
+    asset=unreal.uasset.Uasset(file, version=ue_version)
     asset_type = asset.asset_type
     print('Asset type: {}'.format(asset_type))
+
+    if 'Texture' in asset_type:
+        tex, _ = load_utexture('', '', ue_version, asset=asset, invert_normals=invert_normal_maps)
+        return tex, asset_type
+    if 'Material' in asset_type:
+        raise RuntimeError('Unsupported asset. ({})'.format(asset.asset_type))
+
     if asset_type not in ['SkeletalMesh', 'Skeleton', 'StaticMesh']:
         raise RuntimeError('Unsupported asset. ({})'.format(asset.asset_type))
-    if asset.mesh is None and only_skeleton:
+    if asset.uexp.mesh is None and only_skeleton:
         raise RuntimeError('"Only Skeleton" option is checked, but the asset has no skeleton.')
 
     bpy.context.view_layer.objects.active = bpy.context.view_layer.objects[0]
@@ -269,8 +275,8 @@ def load_uasset(file, rename_armature=True, keep_sections=False,
     else:
         name = 'Armature'
 
-    if asset.skeleton is not None:
-        bones = asset.skeleton.bones
+    if asset.uexp.skeleton is not None:
+        bones = asset.uexp.skeleton.bones
         amt = generate_armature(name, bones, normalize_bones, rotate_bones, minimal_bone_length, rescale=rescale)
         amt.data.show_axes = show_axes
         amt.data.display_type = bone_display_type
@@ -279,9 +285,9 @@ def load_uasset(file, rename_armature=True, keep_sections=False,
         amt = None
 
     #add a mesh to scene
-    if asset.mesh is not None and not only_skeleton:
-        materials, material_names = generate_materials(asset, load_textures=load_textures, invert_normal_maps=invert_normal_maps)
-        mesh = generate_mesh(amt, asset, materials, material_names, rescale=rescale, keep_sections=keep_sections, shading=shading)
+    if asset.uexp.mesh is not None and not only_skeleton:
+        materials, material_names = generate_materials(asset, ue_version, load_textures=load_textures, invert_normal_maps=invert_normal_maps, suffix_list=suffix_list)
+        mesh = generate_mesh(amt, asset, materials, material_names, rescale=rescale, keep_sections=keep_sections, smoothing=smoothing)
     
     #return root object
     if amt is None:
@@ -290,14 +296,14 @@ def load_uasset(file, rename_armature=True, keep_sections=False,
         root = amt
     root['class'] = asset.asset_type
     root['asset_path'] = asset.asset_path
-    return root
+    return root, asset.asset_type
 
 class TABFLAGS_WindowManager(PropertyGroup):
+    ui_general : BoolProperty(name='General', default=True)
     ui_mesh : BoolProperty(name='Mesh', default=True)
+    ui_texture : BoolProperty(name='Texture', default=False)
     ui_armature : BoolProperty(name='Armature', default=False)
     ui_scale : BoolProperty(name='Scale', default=False)
-    ui_progress: FloatProperty(name='Progress', default=0)
-    ui_status: StringProperty(name='Status', default='')
 
 class ImportUasset(Operator, ImportHelper):
     bl_idname = 'import.uasset'
@@ -312,6 +318,15 @@ class ImportUasset(Operator, ImportHelper):
         type=bpy.types.OperatorFileListElement,
     )
 
+    ue_version: EnumProperty(
+        name='UE version',
+        items=(('ff7r', 'FF7R', ''),
+            ('4.18', '4.18', '')),
+        description='UE version of assets',
+        default='ff7r'
+    )
+
+
     rename_armature: BoolProperty(
         name='Rename Armature',
         description=(
@@ -322,12 +337,12 @@ class ImportUasset(Operator, ImportHelper):
         default=True,
     )
 
-    shading: EnumProperty(
-        name='Shading',
-        items=(('SMOOTH', 'Smooth', ''),
-            ('FLAT', 'Flat', '')),
-        description='Apply smooth shading',
-        default='SMOOTH'
+    smoothing: BoolProperty(
+        name='Apply Smooth shading',
+        description=(
+            'Apply smooth shading'
+        ),
+        default=True,
     )
 
     keep_sections: BoolProperty(
@@ -353,9 +368,33 @@ class ImportUasset(Operator, ImportHelper):
         description=(
             'Flip Y axis for normal maps.\n'
             'No need shader nodes to invert G channel,\n'
-            "But the textures won't work in the Games"
+            "But the textures won't work in the games"
         ),
         default=False,
+    )
+
+    suffix_for_color: StringProperty(
+        name='Suffix for color map',
+        description=(
+            'The suffix will be used to determine which 3ch texture is the main color map'
+        ),
+        default='_C',
+    )
+
+    suffix_for_normal: StringProperty(
+        name='Suffix for normal map',
+        description=(
+            'The suffix will be used to determine which 2ch texture is the main normal map'
+        ),
+        default='_N',
+    )
+
+    suffix_for_alpha: StringProperty(
+        name='Suffix for alpha texture',
+        description=(
+            'The suffix will be used to detect alpha texture'
+        ),
+        default='_A',
     )
 
     minimal_bone_length : FloatProperty(
@@ -384,7 +423,7 @@ class ImportUasset(Operator, ImportHelper):
     only_skeleton: BoolProperty(
         name='Only Skeleton',
         description=(
-            "Import skeleton data. but won't import mesh."
+            "Won't import mesh"
         ),
         default=False,
     )
@@ -392,7 +431,7 @@ class ImportUasset(Operator, ImportHelper):
     show_axes: BoolProperty(
         name='Show Bone Axes',
         description=(
-            'Display bone axes.'
+            'Display bone axes'
         ),
         default=False,
     )
@@ -429,37 +468,26 @@ class ImportUasset(Operator, ImportHelper):
         layout.use_property_split = False
         layout.use_property_decorate = False  # No animation.
 
-        layout.label(text = 'Only works with FF7R.')
-        layout.separator()
-
         wm = bpy.context.window_manager.tabflags
-        row = layout.row(align = True)
-        row.alignment = 'LEFT'
-        row.prop(wm, 'ui_mesh', icon='TRIA_DOWN' if wm.ui_mesh else 'TRIA_RIGHT', emboss=False)
-        if wm.ui_mesh:
-            layout.prop(self, 'shading')
-            layout.prop(self, 'keep_sections')
-            layout.prop(self, 'load_textures')
-            layout.prop(self, 'invert_normal_maps')
-            layout.separator()
-        row = layout.row(align = True)
-        row.alignment = 'LEFT'
-        row.prop(wm, 'ui_armature', icon='TRIA_DOWN' if wm.ui_armature else 'TRIA_RIGHT', emboss=False)
-        if wm.ui_armature:
-            layout.prop(self, 'rotate_bones')
-            layout.prop(self, 'minimal_bone_length')
-            layout.prop(self, 'normalize_bones')
-            layout.prop(self, 'rename_armature')
-            layout.prop(self, 'only_skeleton')
-            layout.prop(self, 'show_axes')
-            layout.prop(self, 'bone_display_type')
-            layout.separator()
-        row = layout.row(align = True)
-        row.alignment = 'LEFT'
-        row.prop(wm, 'ui_scale', icon='TRIA_DOWN' if wm.ui_scale else 'TRIA_RIGHT', emboss=False)
-        if wm.ui_scale:
-            layout.prop(self, 'unit_scale')
-            layout.prop(self, 'rescale')
+        show_flags = [wm.ui_general, wm.ui_mesh, wm.ui_texture, wm.ui_armature, wm.ui_scale]
+        labels = ['ui_general', 'ui_mesh', 'ui_texture', 'ui_armature', 'ui_scale']
+        props = [
+            ['ue_version'],
+            ['load_textures', 'keep_sections', 'smoothing'],
+            ['invert_normal_maps', 'suffix_for_color', 'suffix_for_normal', 'suffix_for_alpha'],
+            ['rotate_bones', 'minimal_bone_length', 'normalize_bones', 'rename_armature', 'only_skeleton','show_axes', 'bone_display_type'],
+            ['unit_scale', 'rescale']
+        ]
+        for show_flag, label, prop_list in zip(show_flags, labels, props):
+            box = layout.box()
+            row = box.row(align = True)
+            row.alignment = 'LEFT'
+            row.prop(wm, label, icon='DOWNARROW_HLT' if show_flag else 'RIGHTARROW', emboss=False)
+            if show_flag:
+                box.use_property_split = True
+                box.use_property_decorate = False
+                for prop in prop_list:
+                    box.prop(self, prop)
 
     def invoke(self, context, event):
         return ImportHelper.invoke(self, context, event)
@@ -493,19 +521,21 @@ class ImportUasset(Operator, ImportHelper):
             start_time = time.time()
             bpy_util.set_unit_scale(import_settings['unit_scale'])
 
-            amt = load_uasset(file,
+            root_obj, asset_type = load_uasset(file,
                 rename_armature=import_settings['rename_armature'],
                 keep_sections=import_settings['keep_sections'],
                 normalize_bones=import_settings['normalize_bones'],
                 rotate_bones=import_settings['rotate_bones'],
                 minimal_bone_length = import_settings['minimal_bone_length'],
                 rescale = import_settings['rescale'],
-                shading = import_settings['shading'],
+                smoothing = import_settings['smoothing'],
                 only_skeleton = import_settings['only_skeleton'],
                 show_axes=import_settings['show_axes'],
                 bone_display_type=import_settings['bone_display_type'],
                 load_textures=import_settings['load_textures'],
-                invert_normal_maps=import_settings['invert_normal_maps']
+                invert_normal_maps=import_settings['invert_normal_maps'],
+                ue_version=import_settings['ue_version'],
+                suffix_list=[import_settings['suffix_for_color'], import_settings['suffix_for_normal'], import_settings['suffix_for_alpha']]
             )
 
             elapsed_s = '{:.2f}s'.format(time.time() - start_time)

@@ -1,7 +1,6 @@
-import os, io
-from .io_util import *
-from .uasset import Uasset
-from .umipmap import Umipmap
+import os
+from ..util.io_util import *
+from .mipmap import Mipmap
 
 #classes for texture assets (.uexp and .ubulk)
 
@@ -48,50 +47,37 @@ def get_all_file_path(file):
 VERSION_ERR_MSG = 'Make sure you specified UE4 version correctly.'
 
 #texture class for ue4
-class Utexture:
+class Texture:
     UNREAL_SIGNATURE = b'\xC1\x83\x2A\x9E'
     UBULK_FLAG = [0, 16384]
     
-    def __init__(self, file_path, version='ff7r', verbose=False):
+    def read(f, uasset):
+        return Texture(f, uasset)
+
+    def __init__(self, f, uasset, verbose=False):
+        self.uasset = uasset
+        version = self.uasset.version
         if version=='4.26':
             version='4.27'
         if version in ['4.23', '4.24']:
             version='4.25'
         if version in ['4.21', '4.22']:
             version='4.20'
-        self.version = version
+
+        file_path = f.name
         
-        if not os.path.isfile(file_path):
-            raise RuntimeError('Not File. ({})'.format(file_path))
-
         uasset_name, uexp_name, ubulk_name = get_all_file_path(file_path)
-        print('load: ' + uasset_name)
 
-        #read .uasset
-        self.uasset = Uasset(uasset_name, version)
-        self.nouexp = self.uasset.nouexp
-        if self.version in ['4.14', '4.13', '4.15']:
-            if not self.nouexp:
-                raise RuntimeError('Uexp should not exist.')
-        elif self.nouexp:
-            raise RuntimeError('Uexp should exist.')
-
+        self.version = version
 
         if len(self.uasset.exports)!=1:
             raise RuntimeError('Unexpected number of exports')
 
         self.uasset_size = self.uasset.size
         self.name_list = self.uasset.name_list
-        self.texture_type = self.uasset.texture_type
+        self.texture_type = '2D' if self.uasset.asset_type=='Texture2D' else 'Cube'
         
         #read .uexp
-        if self.nouexp:
-            with open(uasset_name, 'rb') as f:
-                f.seek(self.uasset_size)
-                uexp = f.read(self.uasset.exports[0].size)
-            f = io.BytesIO(uexp)
-        else:
-            f = open(uexp_name, 'rb')
 
         self.read_uexp(f)
         if self.version in ['4.25', '4.27']:
@@ -99,30 +85,15 @@ class Utexture:
         #check(self.end_offset, f.tell()+self.uasset_size)
         self.none_name_id = read_uint64(f)
         
-        if not self.nouexp:
-            foot=f.read(4)
-            check(foot, Utexture.UNREAL_SIGNATURE)
-        f.close()
-
         #read .ubulk
         if self.has_ubulk:
-            if self.nouexp:
-                with open(uasset_name, 'rb') as f:
-                    f.seek(self.uasset.size + self.uasset.exports[0].size)
-                    size = get_size(f) - self.uasset.size - self.uasset.exports[0].size - 4
-                    ubulk = f.read(size)
-                    foot=f.read(4)
-                    check(foot, Utexture.UNREAL_SIGNATURE)
-                f = io.BytesIO(ubulk)
-            else:
-                f = open(ubulk_name, 'rb')
-                size = get_size(f)
-            for mip in self.mipmaps:
-                if mip.uexp:
-                    continue
-                mip.data = f.read(mip.data_size)
-            check(size, f.tell())
-            f.close()
+            with open(ubulk_name, 'rb') as bulk_f:
+                size = get_size(bulk_f)
+                for mip in self.mipmaps:
+                    if mip.uexp:
+                        continue
+                    mip.data = bulk_f.read(mip.data_size)
+                check(size, bulk_f.tell())
 
         self.print(verbose)
     
@@ -184,7 +155,7 @@ class Utexture:
         else:
             raise RuntimeError('Not a cube flag! ' + VERSION_ERR_MSG)
         self.type = read_str(f)
-        if self.version=='ff7r' and self.unk_int==Utexture.UBULK_FLAG[1]:
+        if self.version=='ff7r' and self.unk_int==Texture.UBULK_FLAG[1]:
             read_null(f)
             read_null(f)
             ubulk_map_num = read_uint32(f) #bulk map num + unk_map_num
@@ -193,12 +164,12 @@ class Utexture:
 
         if self.version=='ff7r':
             #ff7r have all mipmap data in a mipmap object
-            self.uexp_mip_bulk = Umipmap.read(f, 'ff7r')
+            self.uexp_mip_bulk = Mipmap.read(f, 'ff7r')
             read_const_uint32(f, self.cube_flag)
             f.seek(4, 1) #uexp mip map num
 
         #read mipmaps
-        self.mipmaps = [Umipmap.read(f, self.version) for i in range(map_num)]
+        self.mipmaps = [Mipmap.read(f, self.version) for i in range(map_num)]
         _, ubulk_map_num = self.get_mipmap_num()
         self.has_ubulk=ubulk_map_num>0
 
@@ -239,22 +210,17 @@ class Utexture:
         return uexp_map_num, ubulk_map_num
 
     #save as uasset
-    def save(self, file):
-        folder = os.path.dirname(file)
+    def write(self, f):
+        file_path = f.name
+        folder = os.path.dirname(file_path)
         if folder not in ['.', ''] and not os.path.exists(folder):
             mkdir(folder)
 
-        uasset_name, uexp_name, ubulk_name = get_all_file_path(file)
-        if self.nouexp:
-            uexp_name = None
-        if not self.has_ubulk or self.nouexp:
+        uasset_name, uexp_name, ubulk_name = get_all_file_path(file_path)
+        if not self.has_ubulk:
             ubulk_name = None
         
         #write .uexp
-        if self.nouexp:
-            f = io.BytesIO(b'')
-        else:
-            f = open(uexp_name, 'wb')
             
         self.write_uexp(f)
         if self.version in ['4.25', '4.27']:
@@ -265,42 +231,13 @@ class Utexture:
         f.seek(self.offset_to_end_offset)
         write_uint32(f, new_end_offset)
         f.seek(0, 2)
-        if not self.nouexp:
-            f.write(Utexture.UNREAL_SIGNATURE)
-            size = f.tell()
-        else:
-            f.seek(0)
-            uexp = f.read()
-            size = f.tell() + 4
-        f.close()
 
         #write .ubulk if exist
         if self.has_ubulk:
-            if self.nouexp:
-                f = io.BytesIO(b'')
-            else:
-                f = open(ubulk_name, 'wb')
-            for mip in self.mipmaps:
-                if not mip.uexp:
-                    f.write(mip.data)
-            if self.nouexp:
-                f.seek(0)
-                ubulk = f.read()
-
-        #write .uasset
-        #if self.version=='4.13':
-        #    size += len(ubulk) + 4
-        self.uasset.exports[0].update(size -4, size -4)
-        
-        self.uasset.save(uasset_name, size)
-        if self.nouexp:
-            with open(uasset_name, 'ab') as f:
-                f.write(uexp)
-                if self.has_ubulk:
-                    f.write(ubulk)
-                f.write(Utexture.UNREAL_SIGNATURE)
-                
-        return uasset_name, uexp_name, ubulk_name
+            with open(ubulk_name, 'wb') as bulk_f:
+                for mip in self.mipmaps:
+                    if not mip.uexp:
+                        bulk_f.write(mip.data)
 
     def write_uexp(self, f):
         #get mipmap info
@@ -337,7 +274,7 @@ class Utexture:
 
         write_str(f, self.type)
 
-        if self.version=='ff7r' and self.unk_int==Utexture.UBULK_FLAG[1]:
+        if self.version=='ff7r' and self.unk_int==Texture.UBULK_FLAG[1]:
             write_null(f)
             write_null(f)
             write_uint32(f, ubulk_map_num+self.unk_map_num)
@@ -353,7 +290,7 @@ class Utexture:
                 if mip.uexp:
                     uexp_bulk = b''.join([uexp_bulk, mip.data])
             size = self.get_max_uexp_size()
-            self.uexp_mip_bulk=Umipmap('ff7r')
+            self.uexp_mip_bulk=Mipmap('ff7r')
             self.uexp_mip_bulk.update(uexp_bulk, size, True)
             self.uexp_mip_bulk.offset=self.uasset_size+f.tell()+24
             self.uexp_mip_bulk.write(f, self.uasset_size)
@@ -428,7 +365,7 @@ class Utexture:
 
         #inject
         i=0
-        self.mipmaps=[Umipmap(self.version) for i in range(len(dds.mipmap_data))]
+        self.mipmaps=[Mipmap(self.version) for i in range(len(dds.mipmap_data))]
         for data, size, mip in zip(dds.mipmap_data, dds.mipmap_size, self.mipmaps):
             if self.has_ubulk and i+1<len(dds.mipmap_data) and size[0]*size[1]>uexp_width*uexp_height:
                 mip.update(data, size, False)
@@ -443,7 +380,7 @@ class Utexture:
         if ubulk_map_num==0:
             self.has_ubulk=False
         if self.version=="ff7r":
-            self.unk_int=Utexture.UBULK_FLAG[self.has_ubulk]
+            self.unk_int=Texture.UBULK_FLAG[self.has_ubulk]
         new_mipmap_num = len(self.mipmaps)
 
         print('dds has been injected.')
