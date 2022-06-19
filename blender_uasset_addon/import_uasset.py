@@ -194,7 +194,6 @@ def generate_mesh(amt, asset, materials, material_names, rescale=1.0, keep_secti
     normals, positions, texcoords, vertex_groups, joints, weights, indices = asset.uexp.mesh.LODs[0].parse_buffers_for_blender()
 
     rescale_factor = get_rescale_factor(rescale)
-    y_invert = np.array((1, -1, 1))
 
     if amt is not None:
         bone_names = [b.name for b in asset.uexp.mesh.skeleton.bones]
@@ -214,10 +213,11 @@ def generate_mesh(amt, asset, materials, material_names, rescale=1.0, keep_secti
         mesh_data = section.data
         mesh_data.materials.append(materials[material_id])
 
-        pos = np.array(positions[i], dtype=np.float32) * y_invert * rescale_factor
+        pos = np.array(positions[i], dtype=np.float32) * rescale_factor
+        pos = bpy_util.flip_y_for_3d_vectors(pos)
         indice = np.array(indices[i], dtype=np.uint32)
-        uv_maps = [uv[i] for uv in texcoords]
-        uv_maps = np.array((0, 1)) + np.array(uv_maps, dtype=np.float32) * np.array((1, -1))
+        uv_maps = np.array([uv[i] for uv in texcoords], dtype=np.float32)
+        uv_maps = bpy_util.flip_uv_maps(uv_maps)
         bpy_util.construct_mesh(mesh_data, pos, indice, uv_maps)
 
         if amt is not None:
@@ -229,10 +229,9 @@ def generate_mesh(amt, asset, materials, material_names, rescale=1.0, keep_secti
         
         #smoothing
         norm = np.array(normals[i], dtype=np.float32) / 127 - 1
-        norm *= y_invert
+        norm = bpy_util.flip_y_for_3d_vectors(norm)
         bpy_util.smoothing(mesh_data, len(indice)//3, norm, smoothing=smoothing)
         
-
     if not keep_sections:
         #join meshes
         sections[0].name=asset.name
@@ -305,19 +304,7 @@ class TABFLAGS_WindowManager(PropertyGroup):
     ui_armature : BoolProperty(name='Armature', default=False)
     ui_scale : BoolProperty(name='Scale', default=False)
 
-class ImportUasset(Operator, ImportHelper):
-    bl_idname = 'import.uasset'
-    bl_label = 'Import Uasset'
-    bl_description = 'Import .uasset files'
-    bl_options = {'REGISTER', 'UNDO'}
-
-    filter_glob: StringProperty(default='*.uasset', options={'HIDDEN'})
-
-    files: CollectionProperty(
-        name='File Path',
-        type=bpy.types.OperatorFileListElement,
-    )
-
+class GeneralOptions(PropertyGroup):
     ue_version: EnumProperty(
         name='UE version',
         items=(('ff7r', 'FF7R', ''),
@@ -326,7 +313,15 @@ class ImportUasset(Operator, ImportHelper):
         default='ff7r'
     )
 
+    source_file: StringProperty(
+        name='Source file',
+        description=(
+            'Path to .uasset file you want to mod'
+        ),
+        default='',
+    )
 
+class ImportOptions(PropertyGroup):
     rename_armature: BoolProperty(
         name='Rename Armature',
         description=(
@@ -400,7 +395,7 @@ class ImportUasset(Operator, ImportHelper):
     minimal_bone_length : FloatProperty(
         name = 'Minimal Bone Length',
         description = 'Force all bones to be longer than this value',
-        default = 0.025, min = 0.01, max = 1, step = 0.005, precision = 4,
+        default = 0.025, min = 0.01, max = 1, step = 0.005, precision = 3,
     )
 
     normalize_bones: BoolProperty(
@@ -459,8 +454,23 @@ class ImportUasset(Operator, ImportHelper):
     rescale : FloatProperty(
         name = 'Rescale',
         description = 'Rescale mesh and skeleton',
-        default = 1, min = 0.01, max = 100, step = 0.01, precision = 3,
+        default = 1, min = 0.01, max = 100, step = 0.01, precision = 2,
     )
+
+class ImportUasset(Operator, ImportHelper):
+    bl_idname = 'import.uasset'
+    bl_label = 'Import Uasset'
+    bl_description = 'Import .uasset files'
+    bl_options = {'REGISTER', 'UNDO'}
+
+    filter_glob: StringProperty(default='*.uasset', options={'HIDDEN'})
+
+    files: CollectionProperty(
+        name='File Path',
+        type=bpy.types.OperatorFileListElement,
+    )
+
+    
 
     def draw(self, context):
         layout = self.layout
@@ -469,6 +479,9 @@ class ImportUasset(Operator, ImportHelper):
         layout.use_property_decorate = False  # No animation.
 
         wm = bpy.context.window_manager.tabflags
+        goption = context.scene.general_options
+        ioption = context.scene.import_options
+        options = [goption] + [ioption]*4
         show_flags = [wm.ui_general, wm.ui_mesh, wm.ui_texture, wm.ui_armature, wm.ui_scale]
         labels = ['ui_general', 'ui_mesh', 'ui_texture', 'ui_armature', 'ui_scale']
         props = [
@@ -478,7 +491,8 @@ class ImportUasset(Operator, ImportHelper):
             ['rotate_bones', 'minimal_bone_length', 'normalize_bones', 'rename_armature', 'only_skeleton','show_axes', 'bone_display_type'],
             ['unit_scale', 'rescale']
         ]
-        for show_flag, label, prop_list in zip(show_flags, labels, props):
+        
+        for option, show_flag, label, prop_list in zip(options, show_flags, labels, props):
             box = layout.box()
             row = box.row(align = True)
             row.alignment = 'LEFT'
@@ -487,7 +501,7 @@ class ImportUasset(Operator, ImportHelper):
                 box.use_property_split = True
                 box.use_property_decorate = False
                 for prop in prop_list:
-                    box.prop(self, prop)
+                    box.prop(option, prop)
 
     def invoke(self, context, event):
         return ImportHelper.invoke(self, context, event)
@@ -500,7 +514,6 @@ class ImportUasset(Operator, ImportHelper):
 
     def import_uasset(self, context):
         import os
-        import_settings = self.as_keywords()
 
         if self.files:
             # Multiple file import
@@ -508,38 +521,43 @@ class ImportUasset(Operator, ImportHelper):
             dirname = os.path.dirname(self.filepath)
             for file in self.files:
                 path = os.path.join(dirname, file.name)
-                if self.unit_import(path, import_settings, context) == {'FINISHED'}:
+                if self.unit_import(path, context) == {'FINISHED'}:
                     ret = {'FINISHED'}
             return ret
         else:
             # Single file import
-            return self.unit_import(self.filepath, import_settings, context)
+            return self.unit_import(self.filepath, context)
 
-    def unit_import(self, file, import_settings, context):
+    def unit_import(self, file, context):
         import time
         try:
             start_time = time.time()
-            bpy_util.set_unit_scale(import_settings['unit_scale'])
+            general_options = context.scene.general_options
+            import_options = context.scene.import_options
+
+            bpy_util.set_unit_scale(import_options.unit_scale)
 
             root_obj, asset_type = load_uasset(file,
-                rename_armature=import_settings['rename_armature'],
-                keep_sections=import_settings['keep_sections'],
-                normalize_bones=import_settings['normalize_bones'],
-                rotate_bones=import_settings['rotate_bones'],
-                minimal_bone_length = import_settings['minimal_bone_length'],
-                rescale = import_settings['rescale'],
-                smoothing = import_settings['smoothing'],
-                only_skeleton = import_settings['only_skeleton'],
-                show_axes=import_settings['show_axes'],
-                bone_display_type=import_settings['bone_display_type'],
-                load_textures=import_settings['load_textures'],
-                invert_normal_maps=import_settings['invert_normal_maps'],
-                ue_version=import_settings['ue_version'],
-                suffix_list=[import_settings['suffix_for_color'], import_settings['suffix_for_normal'], import_settings['suffix_for_alpha']]
+                rename_armature=import_options.rename_armature,
+                keep_sections=import_options.keep_sections,
+                normalize_bones=import_options.normalize_bones,
+                rotate_bones=import_options.rotate_bones,
+                minimal_bone_length = import_options.minimal_bone_length,
+                rescale = import_options.rescale,
+                smoothing = import_options.smoothing,
+                only_skeleton = import_options.only_skeleton,
+                show_axes=import_options.show_axes,
+                bone_display_type=import_options.bone_display_type,
+                load_textures=import_options.load_textures,
+                invert_normal_maps=import_options.invert_normal_maps,
+                ue_version=general_options.ue_version,
+                suffix_list=[import_options.suffix_for_color, import_options.suffix_for_normal, import_options.suffix_for_alpha]
             )
 
+            context.scene.general_options.source_file=file
+
             elapsed_s = '{:.2f}s'.format(time.time() - start_time)
-            m = 'uasset import finished in ' + elapsed_s
+            m = 'Imported {} in {}'.format(asset_type, elapsed_s)
             print(m)
             self.report({'INFO'}, m)
             ret = {'FINISHED'}
@@ -571,9 +589,17 @@ class UASSET_PT_import_panel(bpy.types.Panel):
     def draw(self, context):
         layout = self.layout
         layout.operator(ImportUasset.bl_idname, icon = 'MESH_DATA')
+        general_options = context.scene.general_options
+        import_options = context.scene.import_options
+        col = layout.column()
+        col.use_property_split = True
+        col.use_property_decorate = False
+        col.prop(general_options, 'ue_version')
+        col.prop(import_options, 'load_textures')
+        col.prop(import_options, 'keep_sections')
+
         layout.separator()
         if bpy_util.os_is_windows():
-            layout.label(text = 'I recommend enabling the system console to see the progress')
             layout.operator(ToggleConsole.bl_idname, icon = 'CONSOLE')
 
 
@@ -582,6 +608,8 @@ def menu_func_import(self, context):
 
 classes = (
     TABFLAGS_WindowManager,
+    GeneralOptions,
+    ImportOptions,
     ImportUasset,
     ToggleConsole,
     UASSET_PT_import_panel,
@@ -592,9 +620,13 @@ def register():
         bpy.utils.register_class(c)
     bpy.types.TOPBAR_MT_file_import.append(menu_func_import)
     bpy.types.WindowManager.tabflags = PointerProperty(type=TABFLAGS_WindowManager)
+    bpy.types.Scene.general_options = PointerProperty(type=GeneralOptions)
+    bpy.types.Scene.import_options = PointerProperty(type=ImportOptions)
 
 def unregister():
     for c in classes:
         bpy.utils.unregister_class(c)
     bpy.types.TOPBAR_MT_file_import.remove(menu_func_import)
     del bpy.types.WindowManager.tabflags
+    del bpy.types.Scene.general_options
+    del bpy.types.Scene.import_options

@@ -1,5 +1,5 @@
 #Note that this cipher is vulnerable.
-#Hard to read in hex editors, but easy to decode for programers.
+#Hard to edit with hex editors, but easy to decode for programers.
 
 class Cipher:
     #Block chained XOR cipher

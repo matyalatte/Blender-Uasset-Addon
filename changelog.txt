@@ -1,3 +1,7 @@
+v0.1.4
+- Added functions to extract mesh data from blender objects
+- Added UI panel for injection
+
 v0.1.3
 - Added support for texture assets
 - Added a parameter for UE version

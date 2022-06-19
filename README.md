@@ -17,7 +17,7 @@ Most of the source code is from [my mesh tool](https://github.com/matyalatte/FF7
 - Skeletal mesh
 - Static mesh
 - Skeleton (*_Skeleton.uasset)
-- Texture (Blender will load it as a dds image. But I don't know if it supports all dds formats.)
+- Texture (Blender will load assets as dds textures. But I don't know if it supports all dds formats.)
 
 ## Installation
 

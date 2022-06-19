@@ -26,7 +26,7 @@ def export_as_fbx(file, armature, global_scale, smooth_type, export_tangent, use
         true_armature = None
 
     if true_armature is not None:
-        true_armature.name = 'foobarfoobarfoobar'
+        true_armature.name = '__temp__'
     armature.name = 'Armature'
         
     #deselect all
@@ -68,7 +68,7 @@ def export_as_fbx(file, armature, global_scale, smooth_type, export_tangent, use
     bpy.ops.object.mode_set(mode=mode)
 
 
-class Export_Inputs(bpy.types.PropertyGroup):
+class ExportFbxOptions(bpy.types.PropertyGroup):
     fGlobalScale : FloatProperty(
         name = 'Scale',
         description = 'Scale all data',
@@ -115,10 +115,11 @@ class EXPORT_OT_Run_Button(bpy.types.Operator):
 
             armature=selected[0]
             file = base_file_name + '_' + armature.name +'.fbx'
-            global_scale = context.scene.uasset_addon_fbx_export_options.fGlobalScale
-            smooth_type = context.scene.uasset_addon_fbx_export_options.smooth_type
-            export_tangent = context.scene.uasset_addon_fbx_export_options.bExportTangent
-            use_custom_props = context.scene.uasset_addon_fbx_export_options.bUseCustomProps
+            export_options = context.scene.uasset_addon_fbx_export_options
+            global_scale = export_options.fGlobalScale
+            smooth_type = export_options.smooth_type
+            export_tangent = export_options.bExportTangent
+            use_custom_props = export_options.bUseCustomProps
             #main
             export_as_fbx(file, armature, global_scale, smooth_type, export_tangent, use_custom_props)
             self.report({'INFO'}, 'Success! {} has been generated.'.format(file))
@@ -143,15 +144,18 @@ class EXPORT_PT_Panel(bpy.types.Panel):
         layout.label(text='1. Save .blend')
         layout.label(text='2. Select an armature')
         layout.label(text='3. Click the button below')
-        layout.operator(EXPORT_OT_Run_Button.bl_idname, icon='MESH_DATA')
-        layout.label(text='Options')
-        layout.prop(context.scene.uasset_addon_fbx_export_options, 'fGlobalScale')
-        layout.prop(context.scene.uasset_addon_fbx_export_options, 'smooth_type')
-        layout.prop(context.scene.uasset_addon_fbx_export_options, 'bExportTangent')
-        layout.prop(context.scene.uasset_addon_fbx_export_options, 'bUseCustomProps')
+        col = layout.column()
+        col.use_property_split = True
+        col.use_property_decorate = False
+        col.operator(EXPORT_OT_Run_Button.bl_idname, icon='MESH_DATA')
+        export_options = context.scene.uasset_addon_fbx_export_options
+        col.prop(export_options, 'fGlobalScale')
+        col.prop(export_options, 'smooth_type')
+        col.prop(export_options, 'bExportTangent')
+        col.prop(export_options, 'bUseCustomProps')
 
 classes = (
-        Export_Inputs,
+        ExportFbxOptions,
         EXPORT_PT_Panel,
         EXPORT_OT_Run_Button
     )
@@ -161,7 +165,7 @@ def register():
     for cls in classes:
         register_class(cls)
 
-    bpy.types.Scene.uasset_addon_fbx_export_options = PointerProperty(type=Export_Inputs)
+    bpy.types.Scene.uasset_addon_fbx_export_options = PointerProperty(type=ExportFbxOptions)
 
 def unregister():
     from bpy.utils import unregister_class

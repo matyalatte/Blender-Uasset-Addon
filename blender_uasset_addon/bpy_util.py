@@ -21,6 +21,143 @@ def os_is_windows():
 def update_window():
     bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP', iterations=1)
 
+def deselect_all():
+    bpy.ops.object.select_all(action='DESELECT')
+
+def get_meshes(armature):
+    if armature.type!='ARMATURE':
+        raise RuntimeError('Not an armature.')
+    meshes=[child for child in armature.children if child.type=='MESH']
+    return meshes
+
+def get_armature(mesh):
+    parent = mesh.parent
+    if parent is not None and parent.type!='ARMATURE':
+        raise RuntimeError('Not an armature.')
+    return parent
+
+#select an armature -> return the armature and its meshes
+#select meshes -> return their armature and the selected meshes
+#select an armature and meshes -> return themselves
+def get_selected_armature_and_meshes():
+    selected = bpy.context.selected_objects
+    amt_list = [obj for obj in selected if obj.type=='ARMATURE']
+    meshes = [obj for obj in selected if obj.type=='MESH']
+    if len(amt_list)>1:
+        raise RuntimeError('Multiple armatures are selected.')
+    parents = [get_armature(mesh) for mesh in meshes]
+    parents = list(set(parents))
+    if len(parents)>1:
+        raise RuntimeError('All selected meshes should have the same armature.')
+
+    if len(amt_list)==0:
+        if len(parents)==0:
+            armature = None
+        else:
+            armature = parents[0]
+    else:
+        armature = amt_list[0]
+    if len(meshes)==0:
+        meshes = get_meshes(armature)
+    return armature, meshes
+
+def split_mesh_by_materials(mesh):
+    deselect_all()
+    mesh.select_set(True)
+    bpy.ops.mesh.separate(type='MATERIAL')
+    return bpy.context.selected_objects
+
+#vectors: 2d numpy array (-1, 3 or 4)
+def flip_y_for_3d_vectors(vectors):
+    vectors[:,1]*=-1
+    return vectors
+
+#uv_maps: 3d numpy array (uv_count, vertex_count, 2)
+def flip_uv_maps(uv_maps):
+    uv_maps[:, :, 1] *= -1
+    uv_maps[:, :, 1] += 1
+    return uv_maps
+
+def get_uv_maps(mesh_data):
+    layers = mesh_data.uv_layers
+    uv_count = len(layers)
+    uvs = np.empty((uv_count, len(mesh_data.loops) * 2), dtype=np.float32)
+    for layer, uv in zip(layers, uvs):
+        layer.data.foreach_get('uv', uv)
+    uvs = uvs.reshape(uv_count, len(mesh_data.loops), 2)
+    return uvs
+
+def get_positions(mesh_data, rescale=1.0):
+    vertex_count = len(mesh_data.vertices)
+    positions = np.empty(vertex_count * 3, dtype=np.float32)
+    mesh_data.vertices.foreach_get('co', positions)
+    positions = positions.reshape(vertex_count, 3) * rescale
+    return positions
+
+def get_normals(mesh_data):
+    #calculate tangents and normals
+    mesh_data.calc_tangents()
+    vertex_count = len(mesh_data.loops)
+
+    normals = np.empty(vertex_count * 3, dtype=np.float32)
+    mesh_data.loops.foreach_get('normal', normals)
+    normals = normals.reshape(vertex_count, 3)
+
+    tangents = np.empty(vertex_count * 3, dtype=np.float32)
+    mesh_data.loops.foreach_get('tangent', tangents)
+    tangents = tangents.reshape(vertex_count, 3)
+
+    signs = np.empty(vertex_count, dtype=np.float32)
+    mesh_data.loops.foreach_get('bitangent_sign', signs)
+    signs = signs.reshape((vertex_count, 1))
+    return normals, tangents, signs
+
+def get_triangle_indices(mesh_data):
+    mesh_data.calc_loop_triangles()
+    indices = np.empty(len(mesh_data.loop_triangles) * 3, dtype=np.uint32)
+    mesh_data.loop_triangles.foreach_get('loops', indices)
+    return indices
+
+def get_vertex_weight(vertex, bone_names):
+    joint = []
+    weight = []
+    if vertex.groups:
+        for group_element in vertex.groups:
+            w = group_element.weight
+            try:
+                j = bone_names.index(group_element.group)
+            except Exception:
+                continue
+            if j is None or joint==-1 or weight==0:
+                continue
+            joint.append(j)
+            weight.append(w)
+    return [joint, weight]
+
+def get_weights(mesh_data, bone_names):
+
+    def floor4(i):
+        mod = i % 4
+        return i + 4*(mod>0) - mod
+
+    def lists_zero_fill(lists, length):
+        return [l+[0]*(length-len(l)) for l in lists]
+
+    influences = [get_vertex_weight(v, bone_names) for v in mesh_data.vertices]
+    joints = [i[0] for i in influences]
+    weights = [i[1] for i in influences]
+    vertex_groups = list(set(sum(joints,[])))
+    joints = [[vertex_groups.index(j) for j in joint] for joint in joints]
+    max_influence_count = floor4(max([len(j) for j in joints]))
+    joints = lists_zero_fill(joints, max_influence_count)
+    weights = lists_zero_fill(weights, max_influence_count)
+    weights = np.array(weights, dtype=np.float32) * 255
+    weights = weights.astype(np.uint8)
+
+    return vertex_groups, joints, weights.tolist(), max_influence_count
+
+
+
 def add_armature(name='Armature', location = (0,0,0)):
     bpy.ops.object.armature_add(
         enter_editmode=True,
@@ -108,9 +245,10 @@ def join_meshes(meshes):
     bpy.ops.object.join(ctx)
 
     #remove unnecessary mesh data
-    bpy.ops.object.select_all(action='DESELECT')
+    deselect_all()
     for s in mesh_data_list[1:]:
         bpy.data.meshes.remove(s)
+    return meshes[0]
 
 #mesh_data: (bpy.types.Mesh).data
 #normals: 2d numpy array of normals (vertex_count, 3)
