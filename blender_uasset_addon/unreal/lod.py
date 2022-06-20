@@ -329,70 +329,67 @@ class SkeletalLOD(LOD):
         indices = [[i-first_id for i in ids] for ids, first_id in zip(indices, first_vertex_ids)]
         return normals, positions, texcoords, vertex_groups, joints, weights, indices
 
-    def import_gltf(self, gltf):
-        bone_ids = [i for i in range(len(gltf.bones))]
+    def import_from_blender(self, primitives):
+        s_num1=len(self.sections)
+        f_num1=self.ib.size//3
+        v_num1=self.vb.vertex_num
+        uv_num1 = self.uv_num
+
+        bone_ids = [i for i in range(len(primitives['BONES']))]
         bone_ids = struct.pack('<'+'H'*len(bone_ids), *bone_ids)
         self.active_bone_ids = bone_ids
         self.required_bone_ids = bone_ids
-        self.uv_num = gltf.uv_num
-        texcoords = [flatten(l) for l in gltf.texcoords]
-        pos_range = self.vb.get_range()
-        positions = flatten(gltf.positions)
-        x = [pos[0] for pos in positions]
-        y = [pos[2] for pos in positions]
-        z = [pos[1] for pos in positions]
-        pos_range_gltf = [max(x)-min(x), max(y)-min(y), max(z)-min(z)]
-        c=0
-        for i in range(3):
-            c+=pos_range_gltf[i]>(pos_range[i]*10)
-        if c>=2:
-            positions = [[p/100 for p in pos] for pos in positions]
-
-        self.vb.import_gltf(flatten(gltf.normals), flatten(gltf.tangents), positions, texcoords, gltf.uv_num)
-
-        joints = gltf.joints
-        weights = gltf.weights
-        joints2 = gltf.joints2
-        weights2 = gltf.weights2
-
-        if joints2!=[]:
-            joints = [[j+j2 for j,j2 in zip(joint, joint2)] for joint, joint2 in zip(joints, joints2)]
-            weights = [[w+w2 for w,w2 in zip(weight, wegiht2)] for weight, wegiht2 in zip(weights, weights2)]
-        vertex_groups = [[[m for m,n in zip(j,w) if n>0] for j,w in zip(joint, weight)] for joint, weight in zip(joints, weights)]
-        vertex_groups = [list(set(flatten(vg))) for vg in vertex_groups]
-        for vg in vertex_groups:
-            if len(vg)>255:
-                print(len(vg))
-                raise RuntimeError('Can not use more than 255 bones for a material.')
+        uv_maps = primitives['UV_MAPS'] #(sction count, uv count, vertex count, 2)
+        self.uv_num = len(uv_maps)
+        #pos_range = self.vb.get_range()
+        positions = flatten(primitives['POSITIONS'])
+        #pos_range_gltf = [max(x)-min(x), max(y)-min(y), max(z)-min(z)]
+        #c=0
+        #for i in range(3):
+        #    c+=pos_range_gltf[i]>(pos_range[i]*10)
+        #if c>=2:
+        #    positions = [[p/100 for p in pos] for pos in positions]
+        normals = flatten(primitives['NORMALS'])
+        self.vb.import_from_blender(normals, positions, uv_maps, self.uv_num)
         
+        vertex_groups = primitives['VERTEX_GROUPS']
+        material_ids = primitives['MATERIAL_IDS']
+        joints = primitives['JOINTS']
+        weights = primitives['WEIGHTS']
+        indices = primitives['INDICES']
+
         if len(self.sections)<len(joints):
             self.sections += [self.sections[-1].copy() for i in range(len(joints)-len(self.sections))]
         self.sections=self.sections[:len(joints)]
 
-        max_bone_influences = 4*(1+(joints2!=[]))
-        vertex_nums = [len(joint) for joint in gltf.joints]
-        face_nums = [len(face)//3 for face in gltf.indices]
+        max_bone_influences = len(joints[0][0])
+        vertex_count = [len(joint) for joint in joints]
+        face_count = [len(ids)//3 for ids in indices]
         first_vertex_id = 0
         first_ids =[]
         first_ib_id = 0
-        for section, vg, id, vert_num, face_num in zip(self.sections, vertex_groups, gltf.material_ids, vertex_nums, face_nums):
+        for section, vg, id, vert_num, face_num in zip(self.sections, vertex_groups, material_ids, vertex_count, face_count):
             first_ids.append(first_vertex_id)
-            section.import_gltf(vg, id, first_vertex_id, vert_num, first_ib_id, face_num, max_bone_influences)
+            section.import_from_blender(vg, id, first_vertex_id, vert_num, first_ib_id, face_num, max_bone_influences)
             first_vertex_id += vert_num
             first_ib_id += face_num*3
-        vertex_groups = [vg+[0] for vg in vertex_groups]
 
-        joints = [[[vg.index(m)*(n!=0) for m,n in zip(j,w)] for j, w in zip(joint, weight)] for joint, weight, vg in zip(joints, weights, vertex_groups)]
-
-        self.vb2.import_gltf(flatten(joints), flatten(weights), joints2!=[])
-        indices = [[i+first_id for i in ids] for ids, first_id in zip(gltf.indices, first_ids)]
+        self.vb2.import_from_blender(flatten(joints), flatten(weights), max_bone_influences>4)
+        indices = [[i+first_id for i in ids] for ids, first_id in zip(indices, first_ids)]
         indices = flatten(indices)
+
         self.ib.update(indices, ((self.vb.size>65000)+1)*2)
         self.no_tessellation=True
         self.ib2 = None
-        #indices = [indices[i*3:(i+1)*3] for i in range(len(indices)//3)]
-        #indices = [f + [f[0] + f[1] + f[1] + f[2] + f[2] + f[0]] + f for f in indices]
-        #indices = flatten(indices)
-        #self.ib2.update(indices, ((self.vb.size>65000)+1)*2)
-
         self.remove_KDI()
+
+        s_num2=len(self.sections)
+        f_num2=self.ib.size//3
+        v_num2=self.vb.vertex_num
+        uv_num2 = self.uv_num
+
+        print('LOD0 has been updated.')
+        print('  sections: {} -> {}'.format(s_num1, s_num2))
+        print('  faces: {} -> {}'.format(f_num1, f_num2))
+        print('  vertices: {} -> {}'.format(v_num1, v_num2))
+        print('  uv maps: {} -> {}'.format(uv_num1, uv_num2))

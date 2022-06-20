@@ -273,36 +273,28 @@ class SkeletalMesh(Mesh):
         #gltf.set_parsed_buffers(normals, tangents, positions, texcoords, joints, weights, joints2, weights2, indices)
         #gltf.save(name, save_folder)
 
-    def import_gltf(self, gltf, imports, name_list, file_data_ids, only_mesh = True, ignore_material_names=True):
-        if not self.ff7r:
-            raise RuntimeError("The file should be an FF7R's asset!")
-        bones = [Bone.gltf_to_bone(bone) for bone in gltf.bones]
-
-        bone_diff=len(self.skeleton.bones)-len(bones)
-        if (only_mesh) and bone_diff!=0:
-            msg = 'Skeletons are not the same.'
-            raise RuntimeError(msg)
+    def import_from_blender(self, primitives, imports, name_list, file_data_ids, only_mesh = True, ignore_material_names=True):
         if not only_mesh:
-            raise RuntimeError('Bone injection is not supported for glTF.')
+            raise RuntimeError('Bone injection is not supported.')
             #self.skeleton.import_bones(bones, name_list)
         #if not only_mesh and self.phy_mesh is not None:
             #self.phy_mesh.update_bone_ids(self.skeleton.bones)
 
         ignore_material_names=False
-        if len(self.materials)<len(gltf.materials):
+        materials = primitives['MATERIALS']
+        if len(self.materials)<len(materials):
+            raise RuntimeError('Can not add material slots. (source file: {}, blender: {})'.format(len(self.materials), len(materials)))
             ignore_material_names=True
-            added_num = len(gltf.materials)-len(self.materials)
+            added_num = len(materials)-len(self.materials)
             for i in range(added_num):
-                self.add_material_slot(imports, name_list, file_data_ids, gltf.materials[len(self.materials)].name)
+                self.add_material_slot(imports, name_list, file_data_ids, materials[len(self.materials)].name)
             logger.warn('Added {} materials. You need to edit name table to use the new materials.'.format(added_num))
 
-        for m in gltf.materials:
-            m.import_name = m.name
-        new_material_ids = Material.check_confliction(self.materials, gltf.materials, ignore_material_names=ignore_material_names)
+        new_material_ids = Material.assign_materials(self.materials, materials, ignore_material_names=ignore_material_names)
         
         self.remove_LODs()
         lod = self.LODs[0]
-        lod.import_gltf(gltf)
+        lod.import_from_blender(primitives)
         lod.update_material_ids(new_material_ids)
         pass
 

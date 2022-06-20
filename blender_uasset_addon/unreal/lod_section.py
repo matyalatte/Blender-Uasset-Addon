@@ -180,7 +180,7 @@ class SkeletalLODSection(LODSection):
             logger.log(pad+'  KDI flag: {}'.format(self.unk1==True))
             logger.log(pad+'  vertices influenced by KDI: {}'.format(len(self.unk2)//16))
 
-    def import_gltf(self, vertex_group, material_id, first_vertex_id, vertex_num, first_ib_id, face_num, max_bone_influences):
+    def import_from_blender(self, vertex_group, material_id, first_vertex_id, vertex_num, first_ib_id, face_num, max_bone_influences):
         self.material_id = material_id
         self.vertex_group = vertex_group
 

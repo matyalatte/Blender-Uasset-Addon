@@ -96,7 +96,10 @@ def get_positions(mesh_data, rescale=1.0):
 
 def get_normals(mesh_data):
     #calculate tangents and normals
-    mesh_data.calc_tangents()
+    try:
+        mesh_data.calc_tangents()
+    except:
+        raise RuntimeError('Failed to calculate tangents. Meshes should be triangulated.')
     vertex_count = len(mesh_data.loops)
 
     normals = np.empty(vertex_count * 3, dtype=np.float32)
@@ -110,22 +113,22 @@ def get_normals(mesh_data):
     signs = np.empty(vertex_count, dtype=np.float32)
     mesh_data.loops.foreach_get('bitangent_sign', signs)
     signs = signs.reshape((vertex_count, 1))
+
     return normals, tangents, signs
 
 def get_triangle_indices(mesh_data):
-    mesh_data.calc_loop_triangles()
-    indices = np.empty(len(mesh_data.loop_triangles) * 3, dtype=np.uint32)
-    mesh_data.loop_triangles.foreach_get('loops', indices)
+    indices = np.empty(len(mesh_data.loops), dtype=np.uint32)
+    mesh_data.loops.foreach_get('vertex_index', indices)
     return indices
 
-def get_vertex_weight(vertex, bone_names):
+def get_vertex_weight(vertex, bone_names, mesh_vgs):
     joint = []
     weight = []
     if vertex.groups:
         for group_element in vertex.groups:
             w = group_element.weight
             try:
-                j = bone_names.index(group_element.group)
+                j = bone_names.index(mesh_vgs[group_element.group].name)
             except Exception:
                 continue
             if j is None or joint==-1 or weight==0:
@@ -134,29 +137,17 @@ def get_vertex_weight(vertex, bone_names):
             weight.append(w)
     return [joint, weight]
 
-def get_weights(mesh_data, bone_names):
+def get_weights(mesh, bone_names):
+    mesh_data = mesh.data
+    mesh_vgs = mesh.vertex_groups
 
-    def floor4(i):
-        mod = i % 4
-        return i + 4*(mod>0) - mod
-
-    def lists_zero_fill(lists, length):
-        return [l+[0]*(length-len(l)) for l in lists]
-
-    influences = [get_vertex_weight(v, bone_names) for v in mesh_data.vertices]
+    influences = [get_vertex_weight(v, bone_names, mesh_vgs) for v in mesh_data.vertices]
     joints = [i[0] for i in influences]
     weights = [i[1] for i in influences]
     vertex_groups = list(set(sum(joints,[])))
     joints = [[vertex_groups.index(j) for j in joint] for joint in joints]
-    max_influence_count = floor4(max([len(j) for j in joints]))
-    joints = lists_zero_fill(joints, max_influence_count)
-    weights = lists_zero_fill(weights, max_influence_count)
-    weights = np.array(weights, dtype=np.float32) * 255
-    weights = weights.astype(np.uint8)
-
-    return vertex_groups, joints, weights.tolist(), max_influence_count
-
-
+    max_influence_count = max([len(j) for j in joints])
+    return vertex_groups, joints, weights, max_influence_count
 
 def add_armature(name='Armature', location = (0,0,0)):
     bpy.ops.object.armature_add(

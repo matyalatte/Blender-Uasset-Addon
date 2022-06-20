@@ -136,10 +136,10 @@ class Uexp:
             else:
                 raise RuntimeError('ue4_18_file should have skeleton.')
 
-    def import_gltf(self, gltf):
+    def import_from_blender(self, primitives):
         if self.asset_type!='SkeletalMesh':
-            raise RuntimeError('gltf injection is not supported for {}'.format(self.asset_type))
-        self.mesh.import_gltf(gltf, self.imports, self.name_list, self.uasset.file_data_ids)
+            raise RuntimeError('Injection is not supported for {}'.format(self.asset_type))
+        self.mesh.import_from_blender(primitives, self.imports, self.name_list, self.uasset.file_data_ids)
 
     def remove_KDI(self):
         if self.asset_type=='SkeletalMesh':

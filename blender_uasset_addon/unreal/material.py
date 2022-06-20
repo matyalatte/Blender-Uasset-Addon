@@ -31,52 +31,70 @@ class Material:
         logger.log(pad+'  slot name: {}'.format(self.slot_name))
         logger.log(pad+'  asset path: {}'.format(self.asset_path))
 
-    def check_confliction(materials1, materials2, ignore_material_names=False):
+    def assign_materials(materials1, materials2, ignore_material_names=False):
+        if len(materials1)!=len(materials2):
+            raise RuntimeError('Number of materials should be the same.')
+
+        print('Assigning materials...')
+
         def get_range(num):
             return [i for i in range(num)]
 
         new_material_ids = get_range(len(materials2))
 
         if ignore_material_names:
-            logger.log('Material names have been ignored.')
             return new_material_ids
 
-        material_names1 = [mat1.import_name for mat1 in materials1]
-        material_names2 = [mat2.import_name for mat2 in materials2]
-        if len(material_names1)!=len(list(set(material_names1))) or len(material_names2)!=len(list(set(material_names2))):
-            logger.warn('Material name conflicts detected. Materials might not be assigned correctly.')
-            return new_material_ids
+        slot_names1 = [m.slot_name for m in materials1]
+        slot_names2 = [m.slot_name for m in materials2]
+        assigned1 = [False]*len(materials1)
+        assigned2 = [False]*len(materials2)
 
-        resolved_mat1 = [False for i in range(len(materials1))]
-        unresolved_mat2 = []
-        for mat2, i in zip(material_names2, get_range(len(materials2))):
-            found = False
-            
-            for mat1, j in zip(material_names1, get_range(len(materials1))):
-                if mat1==mat2:
-                    new_material_ids[i]=j
-                    resolved_mat1[j]=True
-                    found=True
-                    break
-            if not found:
-                unresolved_mat2.append((mat2, i))
+        def assign(names1, names2, assigned1, assigned2, new_material_ids):
+            for i, name in zip(range(len(materials2)), names2):
+                if assigned2[i]:
+                    continue
+                if name in names1:
+                    new_id = names1.index(name)
+                    if not assigned1[new_id]:
+                        new_material_ids[i]=new_id
+                        assigned2[i]=True
+                        assigned1[new_id]=True
+            return new_material_ids, assigned1, assigned2
 
-        unresolved_count = 0
-        for f in resolved_mat1:
-            if not f:
-                unresolved_count+=1
+        #assign to the materials have same slot names
+        new_material_ids, assigned1, assigned2 = assign(slot_names1, slot_names2, assigned1, assigned2, new_material_ids)
 
-        if len(unresolved_mat2)==1 and unresolved_count==1:
-            new_material_ids[unresolved_mat2[0][1]]=resolved_mat1.index(False)
-            unresolved_mat2 = []
-            
-        if len(unresolved_mat2)!=0:
-            mat2=unresolved_mat2[0][0]
-            logger.warn('Material name conflicts detected. Materials might not be assigned correctly. ({})'.format(mat2))
-            return get_range(len(materials2))
+        names1 = [m.import_name for m in materials1]
+        names2 = [m.import_name for m in materials2]
+        #assign to the materials have same material names
+        new_material_ids, assigned1, assigned2 = assign(names1, names2, assigned1, assigned2, new_material_ids)
+        
+        def remove_suffix(s):
+            if s[-4]=='.':
+                return s[:-4]
+            return s
 
-        if new_material_ids!=get_range(len(materials2)):
-            logger.log('Material name conflicts detected. But it has been resolved correctly.')
+        #Remove suffix (.xxx) from material names
+        names2 = [remove_suffix(n) for n in names2]
+        #compare the names again
+        new_material_ids, assigned1, assigned2 = assign(names1, names2, assigned1, assigned2, new_material_ids)
+
+        for i in range(len(materials2)):
+            if not assigned2[i]:
+                new_id = assigned1.index(False)
+                assigned2[i]=True
+                assigned1[new_id]=True
+                new_material_ids[i]=new_id
+
+        for i,m2 in zip(range(len(materials2)), materials2):
+            m1 = materials1[new_material_ids[i]]
+            m1str = '{}({})'.format(m1.import_name, m1.slot_name)
+            m2str = m2.import_name
+            if m2.slot_name is not None:
+                m2str+='({})'.format(m2.slot_name)
+            print('Assigned {} to {}'.format(m2str, m1str))
+
         return new_material_ids
 
     def load_asset(self, main_file_path, main_asset_path, version):
@@ -97,7 +115,6 @@ class Material:
         else:
             self.texture_asset_paths = ['Material asset file not found.']
             self.texture_actual_paths = []
-
 
 #material for static mesh
 class StaticMaterial(Material):

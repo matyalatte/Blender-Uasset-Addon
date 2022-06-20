@@ -246,7 +246,7 @@ class Uasset:
         
         self.uexp = Uexp(base+'uexp', self)
     
-    def save(self, file, uexp_size):
+    def save(self, file):
         ext = get_ext(file)
         base = file[:-len(ext)]
         if ext!='uasset':

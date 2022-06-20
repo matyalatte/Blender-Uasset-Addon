@@ -173,24 +173,17 @@ class SkeletalMeshVertexBuffer(VertexBuffer):
         parsed = struct.unpack('<'+('B'*8+'fff'+uv_type*2*self.uv_num)*self.size, self.buf)
         stride = 11+2*self.uv_num
         position = [parsed[i*stride+8:i*stride+11] for i in range(self.size)]
-        position = [[p/100 for p in pos] for pos in position]
         x = [pos[0] for pos in position]
-        y = [pos[2] for pos in position]
-        z = [pos[1] for pos in position]
+        y = [pos[1] for pos in position]
+        z = [pos[2] for pos in position]
         return [max(x)-min(x), max(y)-min(y), max(z)-min(z)]
 
-    def import_gltf(self, normal, tangent, position, texcoords, uv_num):
+    def import_from_blender(self, normal, position, texcoords, uv_num):
         uv_type = 'f'*self.use_float32+'e'*(not self.use_float32)
         self.uv_num = uv_num
         self.stride = 20+(1+self.use_float32)*4*self.uv_num
         self.size = len(normal)
         self.vertex_num = self.size
-        normal = [[n[0], n[2], n[1], 1] for n, t in zip(normal, tangent)]
-        tangent = [[t[0], t[2], t[1], t[3]] for t in tangent]
-        normal = [tan+nor for tan, nor in zip(tangent, normal)]
-        normal = [[int((i+1)*255/2) for i in n] for n in normal]
-        position = [[pos[0], pos[2], pos[1]] for pos in position]
-        position = [[p*100 for p in pos] for pos in position]
         buf = [n+p for n, p in zip(normal, position)]
         for texcoord in texcoords:
             buf = [b+t for b,t in zip(buf, texcoord)]
@@ -228,15 +221,13 @@ class SkinWeightVertexBuffer(VertexBuffer):
         weight = [parsed[i*self.stride+self.stride//2:(i+1)*self.stride] for i in range(self.size)]
         return joint, weight
 
-    def import_gltf(self, joint, weight, extra_bone_flag):
+    def import_from_blender(self, joint, weight, extra_bone_flag):
         self.size = len(joint)
         self.vertex_num = self.size
         self.extra_bone_flag = extra_bone_flag
         self.stride = 8*(1+self.extra_bone_flag)
-        weight = [[int(i*255) for i in w] for w in weight]
         buf = [j+w for j, w in zip(joint, weight)]
         buf = flatten(buf)
-        #buf = [int(i) for i in buf]
         self.buf = struct.pack('<'+'B'*self.size*self.stride, *buf)
         pass
 
