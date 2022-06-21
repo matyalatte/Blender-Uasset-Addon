@@ -104,6 +104,23 @@ class Mesh:
         new_dir_import.name_id = len(name_list)
         name_list.append(file_path)
 
+    def import_from_blender(self, primitives, imports, name_list, file_data_ids, only_mesh = True):
+        materials = primitives['MATERIALS']
+        if len(self.materials)<len(materials):
+            raise RuntimeError('Can not add material slots. (source file: {}, blender: {})'.format(len(self.materials), len(materials)))
+            ignore_material_names=True
+            added_num = len(materials)-len(self.materials)
+            for i in range(added_num):
+                self.add_material_slot(imports, name_list, file_data_ids, materials[len(self.materials)].name)
+            logger.warn('Added {} materials. You need to edit name table to use the new materials.'.format(added_num))
+
+        new_material_ids = Material.assign_materials(self.materials, materials)
+        
+        self.remove_LODs()
+        lod = self.LODs[0]
+        lod.import_from_blender(primitives)
+        lod.update_material_ids(new_material_ids)
+
 #static mesh
 class StaticMesh(Mesh):
     def __init__(self, unk, materials, LODs):
@@ -273,30 +290,13 @@ class SkeletalMesh(Mesh):
         #gltf.set_parsed_buffers(normals, tangents, positions, texcoords, joints, weights, joints2, weights2, indices)
         #gltf.save(name, save_folder)
 
-    def import_from_blender(self, primitives, imports, name_list, file_data_ids, only_mesh = True, ignore_material_names=True):
+    def import_from_blender(self, primitives, imports, name_list, file_data_ids, only_mesh = True):
         if not only_mesh:
             raise RuntimeError('Bone injection is not supported.')
             #self.skeleton.import_bones(bones, name_list)
         #if not only_mesh and self.phy_mesh is not None:
             #self.phy_mesh.update_bone_ids(self.skeleton.bones)
-
-        ignore_material_names=False
-        materials = primitives['MATERIALS']
-        if len(self.materials)<len(materials):
-            raise RuntimeError('Can not add material slots. (source file: {}, blender: {})'.format(len(self.materials), len(materials)))
-            ignore_material_names=True
-            added_num = len(materials)-len(self.materials)
-            for i in range(added_num):
-                self.add_material_slot(imports, name_list, file_data_ids, materials[len(self.materials)].name)
-            logger.warn('Added {} materials. You need to edit name table to use the new materials.'.format(added_num))
-
-        new_material_ids = Material.assign_materials(self.materials, materials, ignore_material_names=ignore_material_names)
-        
-        self.remove_LODs()
-        lod = self.LODs[0]
-        lod.import_from_blender(primitives)
-        lod.update_material_ids(new_material_ids)
-        pass
+        super().import_from_blender(self, primitives, imports, name_list, file_data_ids)
 
 #collider or something? low poly mesh.
 class PhysicalMesh:

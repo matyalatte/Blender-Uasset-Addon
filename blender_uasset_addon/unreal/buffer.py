@@ -67,6 +67,13 @@ class PositionVertexBuffer(VertexBuffer):
         position = [parsed[i*3:i*3+3] for i in range(self.size)]
         return position
 
+    def import_from_blender(self, position):
+        self.stride = 12
+        self.size = len(position)
+        self.vertex_num = self.size
+        buf = flatten(position)
+        self.buf = struct.pack('<'+'f'*3*self.size, *buf)
+
 #Normals and UV maps for static mesh
 class StaticMeshVertexBuffer(VertexBuffer):
     def __init__(self, uv_num, use_float32, stride, size, buf, offset, name):
@@ -110,22 +117,44 @@ class StaticMeshVertexBuffer(VertexBuffer):
             texcoords.append(texcoord)
         return normal, texcoords
 
+    def import_from_blender(self, normal, texcoords, uv_num):
+        uv_type = 'f'*self.use_float32+'e'*(not self.use_float32)
+        self.uv_num = uv_num
+        self.stride = 8+(1+self.use_float32)*4*self.uv_num
+        self.size = len(normal)
+        self.vertex_num = self.size
+        buf = normal
+        for texcoord in texcoords:
+            buf = [b+t for b,t in zip(buf, texcoord)]
+        buf = flatten(buf)
+        self.buf = struct.pack('<'+('B'*8+uv_type*2*self.uv_num)*self.size, *buf)
+
 #Vertex colors
 class ColorVertexBuffer(VertexBuffer):
     def read(f, name=''):
         one = read_uint16(f)
         check(one, 1, f)
-        read_const_uint32(f, 4)
+        stride = read_uint32(f)
         vertex_num  = read_uint32(f)
-        buf = Buffer.read(f, name=name)
-        check(vertex_num, buf.size, f)
-        return ColorVertexBuffer(buf.stride, buf.size, buf.buf, buf.offset, name)
+        if stride>0:
+            buf = Buffer.read(f, name=name)
+            check(stride, buf.stride)
+            check(vertex_num, buf.size, f)
+            return ColorVertexBuffer(buf.stride, buf.size, buf.buf, buf.offset, name)
+        else:
+            return ColorVertexBuffer(stride, vertex_num, None, f.tell(), name)
 
     def write(f, vb):
         write_uint16(f, 1)
-        write_uint32(f, 4)
+        write_uint32(f, vb.stride)
         write_uint32(f, vb.vertex_num)
-        Buffer.write(f, vb)
+        if vb.buf is not None:
+            Buffer.write(f, vb)
+    
+    def disable(self):
+        self.buf = None
+        self.stride=0
+        self.vertex_num=0
 
 #Normals, positions, and UV maps for skeletal mesh
 class SkeletalMeshVertexBuffer(VertexBuffer):
@@ -240,6 +269,8 @@ class StaticIndexBuffer(Buffer):
     def read(f, name=''):
         uint32_flag=read_uint32(f) #0: uint16 id, 1: uint32 id
         buf = Buffer.read(f, name=name)
+        #buf.stride==1
+        #buf.size==index_count*(2+2*uint32_flag)
         return StaticIndexBuffer(uint32_flag, buf.stride, buf.size, buf.buf, buf.offset, name)
 
     def write(f, ib):
@@ -256,6 +287,18 @@ class StaticIndexBuffer(Buffer):
         form = [None, None, 'H', None, 'I']
         indices = struct.unpack('<'+form[stride]*size, self.buf)
         return indices
+    
+    def update(self, new_ids, use_uint32=False):
+        form = [None, None, 'H', None, 'I']
+        self.uint32_flag = use_uint32
+        stride = 2+2*use_uint32
+        size = len(new_ids)
+        self.size = size*stride
+        self.stride = 1
+        self.buf = struct.pack('<'+form[stride]*size, *new_ids)
+
+    def disable(self):
+        self.update([])
 
 #Index buffer for skeletal mesh
 class SkeletalIndexBuffer(Buffer):

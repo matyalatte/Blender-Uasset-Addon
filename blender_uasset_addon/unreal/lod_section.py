@@ -33,7 +33,6 @@ class StaticLODSection(LODSection):
         write_uint32(f, section.cast_shadow)
 
     def import_section(self, section):
-        self.not_first = section.not_first
         self.material_id=section.material_id
         self.first_ib_id=section.first_ib_id
         self.face_num=section.face_num
@@ -52,6 +51,13 @@ class StaticLODSection(LODSection):
         logger.log(pad+'  last_vertex_id: {}'.format(self.last_vertex_id))
         logger.log(pad+'  enable_collision: {}'.format(self.enable_collision>0))
         logger.log(pad+'  cast_shadow: {}'.format(self.cast_shadow>0))
+
+    def import_from_blender(self, material_id, first_vertex_id, vert_num, first_ib_id, face_num):
+        self.material_id=material_id
+        self.first_ib_id=first_ib_id
+        self.face_num=face_num
+        self.first_vertex_id=first_vertex_id
+        self.last_vertex_id=first_vertex_id + vert_num - 1
 
 #LOD section for skeletal mesh
 class SkeletalLODSection(LODSection):

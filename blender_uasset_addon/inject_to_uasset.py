@@ -71,6 +71,10 @@ def get_primitives(asset, armature, meshes, rescale = 1.0):
     for mesh in meshes:
         name = mesh.name
         data_name = mesh.data.name
+        try:
+            mesh.data.calc_tangents()
+        except:
+            raise RuntimeError('Failed to calculate tangents. Meshes should be triangulated.')
         splitted = bpy_util.split_mesh_by_materials(mesh)
         for m in splitted:
             primitives['MATERIAL_IDS'].append(material_names.index(m.data.materials[0].name))
@@ -84,7 +88,7 @@ def get_primitives(asset, armature, meshes, rescale = 1.0):
             normal = np.concatenate([tangent, signs, normal, zeros], axis=1)
             vertex_indices = np.empty(len(m.data.loops), dtype=np.uint32)
             m.data.loops.foreach_get('vertex_index', vertex_indices)
-            unique, indices, inverse = np.unique(vertex_indices, return_index=True, return_inverse=True)
+            unique, indices = np.unique(vertex_indices, return_index=True)
             sort_ids = np.argsort(unique)
             normal = normal[indices][sort_ids]
             normal = ((normal + 1) * 127).astype(np.uint8)
@@ -107,24 +111,28 @@ def get_primitives(asset, armature, meshes, rescale = 1.0):
                 if max_influence_count>8:
                     raise RuntimeError('Some vertices have more than 8 bone weights. UE can not handle the weight data.')
 
-        def floor4(i):
-            mod = i % 4
-            return i + 4*(mod>0) - mod
-
-        def lists_zero_fill(lists, length):
-            return [l+[0]*(length-len(l)) for l in lists]
-        def f_to_i(w):
-            w = np.array(w, dtype=np.float32) * 255
-            w = w.astype(np.uint8)
-            return w.tolist()
- 
-        influence_count = max([floor4(i) for i in influence_counts])
-        primitives['JOINTS'] = [lists_zero_fill(j, influence_count) for j in primitives['JOINTS']]
-        primitives['WEIGHTS'] = [f_to_i(lists_zero_fill(w, influence_count)) for w in primitives['WEIGHTS']]
-        primitives['UV_MAPS'] = primitives['UV_MAPS'].tolist()
+        
         joined = bpy_util.join_meshes(splitted)
         joined.name=name
         joined.data.name=data_name
+        primitives['UV_MAPS'] = primitives['UV_MAPS'].tolist()
+
+        if armature is not None:
+            def floor4(i):
+                mod = i % 4
+                return i + 4*(mod>0) - mod
+
+            def lists_zero_fill(lists, length):
+                return [l+[0]*(length-len(l)) for l in lists]
+            def f_to_i(w):
+                w = np.array(w, dtype=np.float32) * 255
+                w = w.astype(np.uint8)
+                return w.tolist()
+
+            influence_count = max([floor4(i) for i in influence_counts])
+            primitives['JOINTS'] = [lists_zero_fill(j, influence_count) for j in primitives['JOINTS']]
+            primitives['WEIGHTS'] = [f_to_i(lists_zero_fill(w, influence_count)) for w in primitives['WEIGHTS']]
+        
     return primitives
 
 class InjectOptions(PropertyGroup):
@@ -200,7 +208,11 @@ class InjectToUasset(Operator):
             asset = unreal.uasset.Uasset(general_options.source_file, version=general_options.ue_version)
             asset_type = asset.asset_type
 
-            if asset_type!='SkeletalMesh':
+            if armature is None and 'Skelet' in asset_type:
+                raise RuntimeError('Armature not found.')
+            if meshes==[] and 'Mesh' in asset_type:
+                raise RuntimeError('Mesh not found.')
+            if 'Mesh' not in asset_type:
                 raise RuntimeError('Unsupported asset. ({})'.format(asset_type))
             
             primitives = get_primitives(asset, armature, meshes)
@@ -210,8 +222,10 @@ class InjectToUasset(Operator):
             asset.save(os.path.join(self.directory, asset.name+'.uasset'))
 
             elapsed_s = '{:.2f}s'.format(time.time() - start_time)
+            m = 'Injected {} in {}'.format(asset_type, elapsed_s)
+            print(m)
+            self.report({'INFO'}, m)
             self.report({'ERROR'}, 'Injection is unsupported yet.')
-            #self.report({'INFO'}, self.directory)
             ret = {'FINISHED'}
 
         except ImportError as e:

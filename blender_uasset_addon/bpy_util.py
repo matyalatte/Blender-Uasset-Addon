@@ -95,11 +95,8 @@ def get_positions(mesh_data, rescale=1.0):
     return positions
 
 def get_normals(mesh_data):
-    #calculate tangents and normals
-    try:
-        mesh_data.calc_tangents()
-    except:
-        raise RuntimeError('Failed to calculate tangents. Meshes should be triangulated.')
+    #need to calculate tangents and normals
+    
     vertex_count = len(mesh_data.loops)
 
     normals = np.empty(vertex_count * 3, dtype=np.float32)

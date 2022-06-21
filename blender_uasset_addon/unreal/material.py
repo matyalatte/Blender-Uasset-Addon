@@ -31,7 +31,7 @@ class Material:
         logger.log(pad+'  slot name: {}'.format(self.slot_name))
         logger.log(pad+'  asset path: {}'.format(self.asset_path))
 
-    def assign_materials(materials1, materials2, ignore_material_names=False):
+    def assign_materials(materials1, materials2):
         if len(materials1)!=len(materials2):
             raise RuntimeError('Number of materials should be the same.')
 
@@ -41,9 +41,6 @@ class Material:
             return [i for i in range(num)]
 
         new_material_ids = get_range(len(materials2))
-
-        if ignore_material_names:
-            return new_material_ids
 
         slot_names1 = [m.slot_name for m in materials1]
         slot_names2 = [m.slot_name for m in materials2]

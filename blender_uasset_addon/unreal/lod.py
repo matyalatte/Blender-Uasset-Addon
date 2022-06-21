@@ -62,12 +62,15 @@ def flatten(l):
 
 #LOD for static mesh
 class StaticLOD(LOD):
-    def __init__(self, offset, sections, flags, vb, vb2, color_vb, ib, ib2, unk):
+    def __init__(self, offset, sections, flags, vb, vb2, color_vb, ib, ib2, reversed_ib, reversed_ib2, adjacency_ib, unk):
         self.offset = offset
         self.sections = sections
         self.flags = flags
         self.uv_num = vb2.uv_num
         super().__init__(vb, vb2, ib, ib2, color_vb=color_vb)
+        self.reversed_ib = reversed_ib
+        self.reversed_ib2 = reversed_ib2
+        self.adjacency_ib = adjacency_ib
         self.unk = unk
         self.face_num=0
         for section in self.sections:
@@ -75,7 +78,7 @@ class StaticLOD(LOD):
 
     def read(f):
         offset = f.tell()
-        one = read_uint16(f) #strip flags
+        one = read_uint16(f)
         check(one, 1, f)
         sections = read_array(f, StaticLODSection.read)
 
@@ -84,25 +87,17 @@ class StaticLOD(LOD):
         vb = PositionVertexBuffer.read(f, name='VB0') #xyz
         vb2 = StaticMeshVertexBuffer.read(f, name='VB2') #normals+uv_maps
 
-        one = read_uint32(f)
-        if one!=1: #color vertex buffer
-            f.seek(-4, 1)
-            color_vb = ColorVertexBuffer.read(f, name='ColorVB')
-        else:
-            color_vb = None
-            null=f.read(6)
-            check(null, b'\x00'*6, f)
+        color_vb = ColorVertexBuffer.read(f, name='ColorVB')
+        ib = StaticIndexBuffer.read(f, name='IB') #IndexBuffer
+        reversed_ib = StaticIndexBuffer.read(f, name='Reversed_IB') #ReversedIndexBuffer
+        ib2 = StaticIndexBuffer.read(f, name='IB2') #DepathOnlyIndexBuffer
+        reversed_ib2 = StaticIndexBuffer.read(f, name='Reversed_IB2') #ReversedDepthOnlyIndexBuffer
+        adjacency_ib =StaticIndexBuffer.read(f, name='Adjacency_IB') #AdjacencyIndexBuffer
+        print(f.tell())
+        unk = f.read(24)
 
-        ib = StaticIndexBuffer.read(f, name='IB')
-        read_null(f)
-        read_const_uint32(f, 1)
-        null = read_uint32(f)
-        if null!=0:
-            raise RuntimeError('Unsupported index buffer detected. You can not import "Adjacency Buffer" and "Reversed Index Buffer".')
 
-        ib2 = StaticIndexBuffer.read(f, name='IB2')
-        unk = f.read(48)
-        return StaticLOD(offset, sections, flags, vb, vb2, color_vb, ib, ib2, unk)
+        return StaticLOD(offset, sections, flags, vb, vb2, color_vb, ib, ib2, reversed_ib, reversed_ib2, adjacency_ib, unk)
 
     def write(f, lod):
         write_uint16(f, 1)
@@ -111,15 +106,13 @@ class StaticLOD(LOD):
         PositionVertexBuffer.write(f, lod.vb)
         StaticMeshVertexBuffer.write(f, lod.vb2)
 
-        if lod.color_vb is not None:
-            ColorVertexBuffer.write(f, lod.color_vb)
-        else:
-            write_uint32(f, 1)
-            f.write(b'\x00'*6)
+        ColorVertexBuffer.write(f, lod.color_vb)
 
         StaticIndexBuffer.write(f, lod.ib)
-        write_uint32_array(f, [0, 1, 0])
+        StaticIndexBuffer.write(f, lod.reversed_ib)
         StaticIndexBuffer.write(f, lod.ib2)
+        StaticIndexBuffer.write(f, lod.reversed_ib2)
+        StaticIndexBuffer.write(f, lod.adjacency_ib)
         f.write(lod.unk)
 
     def print(self, i, padding=0):
@@ -132,17 +125,6 @@ class StaticLOD(LOD):
         logger.log(pad+'  uv_num: {}'.format(self.uv_num))
         for buf in self.get_buffers():
             buf.print(padding=padding+2)
-
-    def import_LOD(self, lod, name=''):
-        super().import_LOD(lod, name=name)
-        if len(self.sections)<len(lod.sections):
-            self.sections += [self.sections[-1].copy() for i in range(len(lod.sections)-len(self.sections))]
-        self.sections=self.sections[:len(lod.sections)]
-        for self_section, lod_section in zip(self.sections, lod.sections):
-            self_section.import_section(lod_section)
-        self.face_num = lod.face_num
-        self.flags = lod.flags
-        #self.unk = new_lod.unk #if import this, umodel will crash
 
     def parse_buffers_for_blender(self):
         pos = self.vb.parse()
@@ -161,6 +143,67 @@ class StaticLOD(LOD):
         
         return normals, positions, texcoords, None, None, None, indices
 
+    def import_from_blender(self, primitives):
+        s_num1=len(self.sections)
+        f_num1=self.ib.size//3
+        v_num1=self.vb.vertex_num
+        uv_num1 = self.uv_num
+
+        uv_maps = primitives['UV_MAPS'] #(sction count, uv count, vertex count, 2)
+        self.uv_num = len(uv_maps)
+        #pos_range = self.vb.get_range()
+        positions = primitives['POSITIONS']
+        vertex_count = [len(pos) for pos in positions]
+        positions = flatten(positions)
+        self.vb.import_from_blender(positions)
+
+        #pos_range_gltf = [max(x)-min(x), max(y)-min(y), max(z)-min(z)]
+        #c=0
+        #for i in range(3):
+        #    c+=pos_range_gltf[i]>(pos_range[i]*10)
+        #if c>=2:
+        #    positions = [[p/100 for p in pos] for pos in positions]
+        normals = flatten(primitives['NORMALS'])
+        
+        material_ids = primitives['MATERIAL_IDS']
+        indices = primitives['INDICES']
+
+        if len(self.sections)<len(material_ids):
+            self.sections += [self.sections[-1].copy() for i in range(len(material_ids)-len(self.sections))]
+        self.sections=self.sections[:len(material_ids)]
+
+        face_count = [len(ids)//3 for ids in indices]
+        first_vertex_id = 0
+        first_ids =[]
+        first_ib_id = 0
+        for section, id, vert_num, face_num in zip(self.sections, material_ids, vertex_count, face_count):
+            first_ids.append(first_vertex_id)
+            section.import_from_blender(id, first_vertex_id, vert_num, first_ib_id, face_num)
+            first_vertex_id += vert_num
+            first_ib_id += face_num*3
+
+        self.vb2.import_from_blender(normals, uv_maps, self.uv_num)
+        indices = [[i+first_id for i in ids] for ids, first_id in zip(indices, first_ids)]
+        indices = flatten(indices)
+
+        self.color_vb.disable()
+        self.ib.update(indices, use_uint32=self.vb.size>65000)
+        self.reversed_ib.disable()
+        self.ib2.disable()
+        self.reversed_ib2.disable()
+        self.adjacency_ib.disable()
+
+        s_num2=len(self.sections)
+        f_num2=self.ib.size//3
+        v_num2=self.vb.vertex_num
+        uv_num2 = self.uv_num
+
+        print('LOD0 has been updated.')
+        print('  sections: {} -> {}'.format(s_num1, s_num2))
+        print('  faces: {} -> {}'.format(f_num1, f_num2))
+        print('  vertices: {} -> {}'.format(v_num1, v_num2))
+        print('  uv maps: {} -> {}'.format(uv_num1, uv_num2))
+
 
 #LOD for skeletal mesh
 class SkeletalLOD(LOD):
@@ -174,7 +217,7 @@ class SkeletalLOD(LOD):
         self.offset=f.tell()
         one = read_uint8(f)
         check(one, 1, f, 'Parse failed! (LOD:one)')
-        self.no_tessellation = read_uint8(f)
+        no_tessellation = read_uint8(f)
         self.sections=[SkeletalLODSection.read(f, ff7r=ff7r) for i in range(read_uint32(f))]
 
         self.KDI_buffer_size=0
@@ -220,7 +263,7 @@ class SkeletalLOD(LOD):
         else:
             self.color_vb=None
 
-        if not self.no_tessellation:
+        if not no_tessellation:
             self.ib2 = SkeletalIndexBuffer.read(f, name='IB2')
         else:
             self.ib2 = None
@@ -235,7 +278,7 @@ class SkeletalLOD(LOD):
     
     def write(f, lod):
         write_uint8(f, 1)
-        write_uint8(f, lod.no_tessellation)
+        write_uint8(f, lod.ib2 is None)
         write_array(f, lod.sections, SkeletalLODSection.write, with_length=True)
         SkeletalIndexBuffer.write(f, lod.ib)
         write_uint32(f, len(lod.active_bone_ids)//2)
@@ -258,30 +301,12 @@ class SkeletalLOD(LOD):
         if lod.color_vb is not None:
             ColorVertexBuffer.write(f, lod.color_vb)
 
-        if not lod.no_tessellation:
+        if lod.ib2 is not None:
             SkeletalIndexBuffer.write(f, lod.ib2)
 
         if lod.KDI_buffer_size>0:
             KDIBuffer.write(f, lod.KDI_buffer)
             KDIBuffer.write(f, lod.KDI_VB)
-
-    def import_LOD(self, lod, name=''):
-        self.no_tessellation = lod.no_tessellation
-        super().import_LOD(lod, name=name)
-        if len(self.sections)<len(lod.sections):
-            self.sections += [self.sections[-1].copy() for i in range(len(lod.sections)-len(self.sections))]
-        self.sections=self.sections[:len(lod.sections)]
-        for self_section, lod_section in zip(self.sections, lod.sections):
-            self_section.import_section(lod_section)
-        
-        self.active_bone_ids=lod.active_bone_ids
-        self.required_bone_ids=lod.required_bone_ids
-        if self.KDI_buffer_size>0:
-            if self.vb.vertex_num>=self.KDI_VB.size:
-                self.KDI_VB.buf=self.KDI_VB.buf[:self.vb.vertex_num*16]
-            else:
-                self.KDI_VB.buf=b''.join([self.KDI_VB.buf, b'\xff'*4*(self.vb.vertex_num-self.KDI_VB.size)])
-            self.KDI_VB.size=self.vb.size
 
     def get_buffers(self):
         buffers = super().get_buffers()
@@ -375,11 +400,12 @@ class SkeletalLOD(LOD):
             first_ib_id += face_num*3
 
         self.vb2.import_from_blender(flatten(joints), flatten(weights), max_bone_influences>4)
+        self.color_vb=None
+
         indices = [[i+first_id for i in ids] for ids, first_id in zip(indices, first_ids)]
         indices = flatten(indices)
 
         self.ib.update(indices, ((self.vb.size>65000)+1)*2)
-        self.no_tessellation=True
         self.ib2 = None
         self.remove_KDI()
 

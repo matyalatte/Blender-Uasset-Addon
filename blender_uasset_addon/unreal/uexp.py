@@ -137,7 +137,7 @@ class Uexp:
                 raise RuntimeError('ue4_18_file should have skeleton.')
 
     def import_from_blender(self, primitives):
-        if self.asset_type!='SkeletalMesh':
+        if 'Mesh' not in self.asset_type:
             raise RuntimeError('Injection is not supported for {}'.format(self.asset_type))
         self.mesh.import_from_blender(primitives, self.imports, self.name_list, self.uasset.file_data_ids)
 
