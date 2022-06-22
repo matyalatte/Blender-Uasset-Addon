@@ -15,27 +15,11 @@ class Mesh:
     def remove_LODs(self):
         num=len(self.LODs)
         if num<=1:
-            logger.log('Nothing has been removed.'.format(num-1), ignore_verbose=True)
             return
 
         self.LODs=[self.LODs[0]]
 
-        logger.log('LOD1~{} have been removed.'.format(num-1), ignore_verbose=True)
-
-    def import_LODs(self, mesh, imports, name_list, file_data_ids, ignore_material_names=False):
-
-        new_material_ids = Material.check_confliction(self.materials, mesh.materials, ignore_material_names=ignore_material_names)
-        
-        LOD_num_self=len(self.LODs)
-        LOD_num=min(LOD_num_self, len(mesh.LODs))
-        #LOD_num=1
-        if LOD_num<LOD_num_self:
-            self.LODs=self.LODs[:LOD_num]
-            logger.log('LOD{}~{} have been removed.'.format(LOD_num, LOD_num_self-1), ignore_verbose=True)
-        for i in range(LOD_num):
-            new_lod = mesh.LODs[i]
-            new_lod.update_material_ids(new_material_ids)
-            self.LODs[i].import_LOD(new_lod, str(i))
+        logger.log('Removed LOD1~{}'.format(num-1), ignore_verbose=True)
 
     def dump_buffers(self, save_folder):
         logs={}
@@ -291,12 +275,15 @@ class SkeletalMesh(Mesh):
         #gltf.save(name, save_folder)
 
     def import_from_blender(self, primitives, imports, name_list, file_data_ids, only_mesh = True):
-        if not only_mesh:
-            raise RuntimeError('Bone injection is not supported.')
-            #self.skeleton.import_bones(bones, name_list)
+        bones = primitives['BONES']
+        if only_mesh:
+            if len(bones)!=len(self.skeleton.bones):
+                raise RuntimeError('The number of bones are not the same. (source file: {}, blender: {})'.format(len(self.skeleton.bones), len(bones)))
+
+        #self.phy_mesh=None
         #if not only_mesh and self.phy_mesh is not None:
             #self.phy_mesh.update_bone_ids(self.skeleton.bones)
-        super().import_from_blender(self, primitives, imports, name_list, file_data_ids)
+        super().import_from_blender(primitives, imports, name_list, file_data_ids)
 
 #collider or something? low poly mesh.
 class PhysicalMesh:

@@ -25,6 +25,8 @@ def deselect_all():
     bpy.ops.object.select_all(action='DESELECT')
 
 def get_meshes(armature):
+    if armature is None:
+        return []
     if armature.type!='ARMATURE':
         raise RuntimeError('Not an armature.')
     meshes=[child for child in armature.children if child.type=='MESH']
@@ -62,6 +64,8 @@ def get_selected_armature_and_meshes():
     return armature, meshes
 
 def split_mesh_by_materials(mesh):
+    bpy.context.view_layer.objects.active = bpy.context.view_layer.objects[0]
+    bpy.ops.object.mode_set(mode='OBJECT')
     deselect_all()
     mesh.select_set(True)
     bpy.ops.mesh.separate(type='MATERIAL')
@@ -121,17 +125,22 @@ def get_triangle_indices(mesh_data):
 def get_vertex_weight(vertex, bone_names, mesh_vgs):
     joint = []
     weight = []
-    if vertex.groups:
-        for group_element in vertex.groups:
-            w = group_element.weight
-            try:
-                j = bone_names.index(mesh_vgs[group_element.group].name)
-            except Exception:
-                continue
-            if j is None or joint==-1 or weight==0:
-                continue
-            joint.append(j)
-            weight.append(w)
+    if not vertex.groups:
+        return [[], []]
+
+    def get_vg_info(group_element):
+        w = group_element.weight
+        name = mesh_vgs[group_element.group].name
+        if name in bone_names:
+            j = bone_names.index(name)
+        else:
+            j = -1
+        if j==-1 or weight==0:
+            return
+        joint.append(j)
+        weight.append(w)
+
+    list(map(lambda x: get_vg_info(x), vertex.groups))
     return [joint, weight]
 
 def get_weights(mesh, bone_names):
@@ -226,6 +235,10 @@ def skinning(mesh, vg_names, joints, weights):
 
 #meshes: an array of bpy.types.Mesh
 def join_meshes(meshes):
+    if len(meshes)==0:
+        return None
+    if len(meshes)==1:
+        return meshes[0]
     mesh_data_list = [mesh.data for mesh in meshes]
     ctx = bpy.context.copy()
     ctx['active_object'] = meshes[0]

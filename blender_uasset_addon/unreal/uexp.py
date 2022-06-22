@@ -136,10 +136,16 @@ class Uexp:
             else:
                 raise RuntimeError('ue4_18_file should have skeleton.')
 
-    def import_from_blender(self, primitives):
-        if 'Mesh' not in self.asset_type:
+    def import_from_blender(self, primitives, only_mesh=True):
+        if self.skeleton is None and self.mesh is None:
             raise RuntimeError('Injection is not supported for {}'.format(self.asset_type))
-        self.mesh.import_from_blender(primitives, self.imports, self.name_list, self.uasset.file_data_ids)
+        if self.mesh is None and only_mesh:
+            raise RuntimeError("Enabled 'Only Mesh' option, but the asset have no meshes. ({})".format(self.asset_type))
+        if not only_mesh and self.skeleton is not None:
+            self.skeleton.import_bones(primitives['BONES'], self.name_list)
+        if self.mesh is not None:
+            self.mesh.import_from_blender(primitives, self.imports, self.name_list, self.uasset.file_data_ids, only_mesh=only_mesh)
+        
 
     def remove_KDI(self):
         if self.asset_type=='SkeletalMesh':

@@ -23,7 +23,45 @@ if "bpy" in locals():
 def get_rescale_factor(rescale):
     return bpy.context.scene.unit_settings.scale_length * 100 * rescale
 
-def get_primitives(asset, armature, meshes, rescale = 1.0):
+def get_bones(armature, rescale=1.0):
+    bpy.context.view_layer.objects.active=armature
+    bpy.ops.object.mode_set(mode='EDIT')
+    rescale_factor = get_rescale_factor(rescale)
+    class BlenderBone:
+        def __init__(self, name, parent, matrix, index):
+            self.name = name
+            self.global_matrix = matrix
+            if parent is None:
+                self.parent_name = 'None'
+                loc, rot, scale = self.global_matrix.decompose()
+            else:
+                self.parent_name = parent.name
+                self.local_matrix = parent.matrix.inverted() @ matrix
+                loc, rot, scale = self.local_matrix.decompose()
+            loc = loc * rescale_factor
+            self.trans = [loc[0], -loc[1], loc[2]]
+            self.rot = [rot[1], -rot[2], rot[3], -rot[0]]
+            self.scale = [scale[0], scale[1], scale[2]]
+            self.index=index
+
+    edit_bones = armature.data.edit_bones
+    edit_bones = [BlenderBone(b.name, b.parent, b.matrix, i) for i, b in zip(range(len(edit_bones)), edit_bones)]
+
+    bone_names = [b.name for b in edit_bones]
+
+    def set_parent(bone, bone_names, edit_bones):
+        if bone.parent_name=='None':
+            bone.parent=None
+        else:
+            bone.parent = edit_bones[bone_names.index(bone.parent_name)]
+
+    list(map(lambda x: set_parent(x, bone_names, edit_bones), edit_bones))
+
+    bpy.context.view_layer.objects.active = bpy.context.view_layer.objects[0]
+    bpy.ops.object.mode_set(mode='OBJECT')
+    return edit_bones, bone_names
+
+def get_primitives(asset, armature, meshes, rescale = 1.0, only_mesh=False):
     print('Extracting mesh data from selected objects...')
     primitives = {
         'MATERIAL_IDS':[],
@@ -34,14 +72,12 @@ def get_primitives(asset, armature, meshes, rescale = 1.0):
         'INDICES': []
     }
     if armature is not None:
-        primitives['VERTEX_GROUPS']=[]
-        primitives['JOINTS']=[]
-        primitives['WEIGHTS']=[]
-        bone_names = [b.name for b in asset.uexp.skeleton.bones]
-        primitives['BONES']=bone_names
-        if len(bone_names) != len(armature.data.bones):
-            raise RuntimeError('The number of bones are not the same. (source file: {}, blender: {})'.format(len(bone_names), len(armature.data.bones)))
+        bones, bone_names = get_bones(armature, rescale=rescale)
+        primitives['BONES']=bones
+        primitives['BONE_NAMES']=bone_names
     
+    if meshes==[]:
+        return
 
     class BlenderMaterial:
         def __init__(self, m):
@@ -68,6 +104,17 @@ def get_primitives(asset, armature, meshes, rescale = 1.0):
 
     rescale_factor = get_rescale_factor(rescale)
     influence_counts = []
+    if armature is not None:
+        primitives['VERTEX_GROUPS']=[]
+        primitives['JOINTS']=[]
+        primitives['WEIGHTS']=[]
+        if only_mesh:
+            asset_bone_names = [b.name for b in asset.uexp.skeleton.bones]
+            for n in bone_names:
+                if n not in asset_bone_names:
+                    raise RuntimeError("Skeletons should be same when using 'Only Mesh' option")
+            bone_names = asset_bone_names
+
     for mesh in meshes:
         name = mesh.name
         data_name = mesh.data.name
@@ -115,23 +162,24 @@ def get_primitives(asset, armature, meshes, rescale = 1.0):
         joined = bpy_util.join_meshes(splitted)
         joined.name=name
         joined.data.name=data_name
-        primitives['UV_MAPS'] = primitives['UV_MAPS'].tolist()
+    primitives['UV_MAPS'] = primitives['UV_MAPS'].tolist()
 
-        if armature is not None:
-            def floor4(i):
-                mod = i % 4
-                return i + 4*(mod>0) - mod
+    if armature is not None:
+        def floor4(i):
+            mod = i % 4
+            return i + 4*(mod>0) - mod
 
-            def lists_zero_fill(lists, length):
-                return [l+[0]*(length-len(l)) for l in lists]
-            def f_to_i(w):
-                w = np.array(w, dtype=np.float32) * 255
-                w = w.astype(np.uint8)
-                return w.tolist()
+        def lists_zero_fill(lists, length):
+            return [l+[0]*(length-len(l)) for l in lists]
 
-            influence_count = max([floor4(i) for i in influence_counts])
-            primitives['JOINTS'] = [lists_zero_fill(j, influence_count) for j in primitives['JOINTS']]
-            primitives['WEIGHTS'] = [f_to_i(lists_zero_fill(w, influence_count)) for w in primitives['WEIGHTS']]
+        def f_to_i(w):
+            w = np.array(w, dtype=np.float32) * 255.0
+            w = np.rint(w).astype(np.uint8)
+            return w.tolist()
+
+        influence_count = max([floor4(i) for i in influence_counts])
+        primitives['JOINTS'] = [lists_zero_fill(j, influence_count) for j in primitives['JOINTS']]
+        primitives['WEIGHTS'] = [f_to_i(lists_zero_fill(w, influence_count)) for w in primitives['WEIGHTS']]
         
     return primitives
 
@@ -144,13 +192,31 @@ class InjectOptions(PropertyGroup):
         ),
         default=True,
     )
-    auto_rescaling: BoolProperty(
-        name='Auto Rescaling',
+
+    duplicate_folder_structure: BoolProperty(
+        name='Duplicate Folder Structure',
         description=(
-            'Execute m to cm (or cm to m) conversion\n'
-            'if the size is more than 10 times as big (or small) as the source asset'
+            'Duplicate the folder structure .uasset have'
         ),
-        default=True,
+        default=False,
+    )
+
+    content_folder: StringProperty(
+        name='Content Folder',
+        description=(
+            'Replace the root directory of asset paths with this value\n'
+            'when duplicating the folder structure'
+        ),
+        default='End\\Content',
+    )
+
+    mod_name: StringProperty(
+        name='Mod Name',
+        description=(
+            'Add this value to asset paths as a root folder\n'
+            'when duplicating the folder structure'
+        ),
+        default='mod_name_here',
     )
 
 class InjectToUasset(Operator):
@@ -178,7 +244,7 @@ class InjectToUasset(Operator):
         for prop in props:
             col.prop(general_options, prop)
         inject_options = context.scene.inject_options
-        props = ['only_mesh', 'auto_rescaling']
+        props = ['only_mesh', 'duplicate_folder_structure', 'content_folder', 'mod_name']
         for prop in props:
             col.prop(inject_options, prop)
 
@@ -194,7 +260,6 @@ class InjectToUasset(Operator):
             bpy.ops.wm.console_toggle()
             bpy.ops.wm.console_toggle()
         try:
-            print(self.directory)
             #get selected objects
             armature, meshes = bpy_util.get_selected_armature_and_meshes()
 
@@ -205,6 +270,7 @@ class InjectToUasset(Operator):
 
             #load source file
             general_options = context.scene.general_options
+            inject_options = context.scene.inject_options
             asset = unreal.uasset.Uasset(general_options.source_file, version=general_options.ue_version)
             asset_type = asset.asset_type
 
@@ -214,18 +280,31 @@ class InjectToUasset(Operator):
                 raise RuntimeError('Mesh not found.')
             if 'Mesh' not in asset_type:
                 raise RuntimeError('Unsupported asset. ({})'.format(asset_type))
-            
-            primitives = get_primitives(asset, armature, meshes)
 
-            asset.uexp.import_from_blender(primitives)
+            if asset_type=='Skeleton':
+                meshes=[]
 
-            asset.save(os.path.join(self.directory, asset.name+'.uasset'))
+            rescale=1.0            
+            primitives = get_primitives(asset, armature, meshes, rescale=rescale, only_mesh=inject_options.only_mesh)
+
+            asset.uexp.import_from_blender(primitives, only_mesh=inject_options.only_mesh)
+            if inject_options.duplicate_folder_structure:
+                dirs = asset.asset_path.split('/')
+                if dirs[0]=='':
+                    dirs = dirs[2:]
+                else:
+                    dirs = dirs[1:]
+                dirs = '\\'.join(dirs)
+                asset_path = os.path.join(self.directory, inject_options.mod_name, inject_options.content_folder, dirs)
+            else:
+                asset_path = os.path.join(self.directory, asset.name)
+
+            asset.save(asset_path+'.uasset')
 
             elapsed_s = '{:.2f}s'.format(time.time() - start_time)
             m = 'Injected {} in {}'.format(asset_type, elapsed_s)
             print(m)
             self.report({'INFO'}, m)
-            self.report({'ERROR'}, 'Injection is unsupported yet.')
             ret = {'FINISHED'}
 
         except ImportError as e:

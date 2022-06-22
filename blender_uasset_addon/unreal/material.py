@@ -32,8 +32,8 @@ class Material:
         logger.log(pad+'  asset path: {}'.format(self.asset_path))
 
     def assign_materials(materials1, materials2):
-        if len(materials1)!=len(materials2):
-            raise RuntimeError('Number of materials should be the same.')
+        #if len(materials1)!=len(materials2):
+            #raise RuntimeError('Number of materials should be the same.')
 
         print('Assigning materials...')
 
@@ -86,10 +86,11 @@ class Material:
 
         for i,m2 in zip(range(len(materials2)), materials2):
             m1 = materials1[new_material_ids[i]]
-            m1str = '{}({})'.format(m1.import_name, m1.slot_name)
+            m1str = m1.import_name
+            if m1str!=m1.slot_name:
+                m1str+='({})'.format(m1.slot_name)
+
             m2str = m2.import_name
-            if m2.slot_name is not None:
-                m2str+='({})'.format(m2.slot_name)
             print('Assigned {} to {}'.format(m2str, m1str))
 
         return new_material_ids
@@ -106,11 +107,13 @@ class Material:
                 material_asset = uasset.Uasset(file_path, ignore_uexp=True, version=version, asset_type='Material')
                 self.texture_asset_paths = [imp.parent_name for imp in material_asset.imports if 'Texture' in imp.class_name]
                 self.texture_actual_paths = [get_actual_path(p) for p in self.texture_asset_paths]
+                m = None
             except:
-                self.texture_asset_paths = ['Failed to load the material asset. This is unexpected.']
-                self.texture_actual_paths = []
+                m = 'Failed to load the material asset. This is unexpected. ({})'.format(file_path)
         else:
-            self.texture_asset_paths = ['Material asset file not found.']
+            m = 'File not found. ({})'.format(file_path)
+        if m is not None:
+            self.texture_asset_paths = [m]
             self.texture_actual_paths = []
 
 #material for static mesh

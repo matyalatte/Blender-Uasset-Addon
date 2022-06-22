@@ -141,7 +141,6 @@ class UassetExport(c.LittleEndianStructure):
                 export.ignore=True
         return asset_type
 
-
     def read_uexp(self, f):
         self.bin=f.read(self.size)
 
@@ -155,7 +154,6 @@ class UassetExport(c.LittleEndianStructure):
         logger.log(pad+'  import: {}'.format(self.import_name))
         logger.log(pad+'  size: {}'.format(self.size))
         logger.log(pad+'  offset: {}'.format(self.offset))
-
 
 class Uasset:
 
@@ -254,6 +252,10 @@ class Uasset:
                 raise RuntimeError('Not .uasset! ({})'.format(file))
             else:
                 file = base+'uasset'
+        
+        directory = os.path.dirname(file)
+        if not os.path.exists(directory):
+            mkdir(directory)
 
         uexp_file = base+'uexp'
         uexp_size = self.uexp.save(uexp_file)

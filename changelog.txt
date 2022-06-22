@@ -1,5 +1,6 @@
 v0.1.4
 - Added support for mesh injection
+- Added support for skeleton injection
 
 v0.1.3
 - Added support for texture assets

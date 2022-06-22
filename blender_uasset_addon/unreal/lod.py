@@ -83,6 +83,7 @@ class StaticLOD(LOD):
         sections = read_array(f, StaticLODSection.read)
 
         flags = f.read(4)
+        print(flags)
 
         vb = PositionVertexBuffer.read(f, name='VB0') #xyz
         vb2 = StaticMeshVertexBuffer.read(f, name='VB2') #normals+uv_maps
@@ -93,7 +94,6 @@ class StaticLOD(LOD):
         ib2 = StaticIndexBuffer.read(f, name='IB2') #DepathOnlyIndexBuffer
         reversed_ib2 = StaticIndexBuffer.read(f, name='Reversed_IB2') #ReversedDepthOnlyIndexBuffer
         adjacency_ib =StaticIndexBuffer.read(f, name='Adjacency_IB') #AdjacencyIndexBuffer
-        print(f.tell())
         unk = f.read(24)
 
 
@@ -198,7 +198,7 @@ class StaticLOD(LOD):
         v_num2=self.vb.vertex_num
         uv_num2 = self.uv_num
 
-        print('LOD0 has been updated.')
+        print('Updated LOD0.')
         print('  sections: {} -> {}'.format(s_num1, s_num2))
         print('  faces: {} -> {}'.format(f_num1, f_num2))
         print('  vertices: {} -> {}'.format(v_num1, v_num2))
@@ -258,7 +258,7 @@ class SkeletalLOD(LOD):
         self.vb2 = SkinWeightVertexBuffer.read(f, name='VB2')
         u=read_uint8(f)
         f.seek(-1,1)
-        if u==1 and not self.no_tessellation:#HasVertexColors
+        if u==1 and not no_tessellation:#HasVertexColors
             self.color_vb = ColorVertexBuffer.read(f, name='ColorVB')
         else:
             self.color_vb=None

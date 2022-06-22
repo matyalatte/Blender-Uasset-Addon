@@ -33,7 +33,7 @@ def generate_armature(name, bones, normalize_bones=True, rotate_bones=False, min
     
     def cal_trs(bone):
         trans = Vector((bone.trans[0], -bone.trans[1], bone.trans[2])) * rescale_factor
-        rot = Quaternion((bone.rot[3], -bone.rot[0], bone.rot[1], -bone.rot[2]))
+        rot = Quaternion((-bone.rot[3], bone.rot[0], -bone.rot[1], bone.rot[2]))
         scale = Vector((bone.scale[0], bone.scale[1], bone.scale[2]))
         bone.trs = Matrix.LocRotScale(trans, rot, scale)
         bone.trans = trans
@@ -224,7 +224,7 @@ def generate_mesh(amt, asset, materials, material_names, rescale=1.0, keep_secti
             #skinning
             vg_names = [bone_names[vg] for vg in vertex_groups[i]]
             joint = np.array(joints[i], dtype=np.uint32)
-            weight = np.array(weights[i], dtype=np.uint32) / 255
+            weight = np.array(weights[i], dtype=np.float32) / 255
             bpy_util.skinning(section, vg_names, joint, weight)
         
         #smoothing
