@@ -76,7 +76,7 @@ def get_primitives(asset, armature, meshes, rescale = 1.0, only_mesh=False):
         primitives['BONE_NAMES']=bone_names
     
     if meshes==[]:
-        return
+        return primitives
 
     class BlenderMaterial:
         def __init__(self, m):
@@ -183,15 +183,15 @@ def get_primitives(asset, armature, meshes, rescale = 1.0, only_mesh=False):
             return i + 4*(mod>0) - mod
 
         def lists_zero_fill(lists, length):
-            return np.array([l+[0]*(length-len(l)) for l in lists], dtype=np.uint8)
+            return [l+[0]*(length-len(l)) for l in lists]
 
         def f_to_i(w):
             w = np.array(w, dtype=np.float32) * 255.0
             w = np.rint(w).astype(np.uint8)
             return w
 
-        influence_count = max([floor4(i) for i in influence_counts])
-        primitives['JOINTS'] = [lists_zero_fill(j, influence_count) for j in primitives['JOINTS']]
+        influence_count = floor4(max(influence_counts))
+        primitives['JOINTS'] = [np.array(lists_zero_fill(j, influence_count), dtype=np.uint8) for j in primitives['JOINTS']]
         primitives['JOINTS'] = np.concatenate(primitives['JOINTS'], axis=0).tolist()
         primitives['WEIGHTS'] = [f_to_i(lists_zero_fill(w, influence_count)) for w in primitives['WEIGHTS']]
         primitives['WEIGHTS'] = np.concatenate(primitives['WEIGHTS'], axis=0).tolist()
@@ -233,6 +233,13 @@ class InjectOptions(PropertyGroup):
         default='mod_name_here',
     )
 
+    rescale : FloatProperty(
+        name = 'Rescale',
+        description = 'Rescale mesh and skeleton',
+        default = 1, min = 0.01, max = 100, step = 0.01, precision = 2,
+    )
+
+
 class InjectToUasset(Operator):
     bl_idname = 'inject.uasset'
     bl_label = 'Export .uasset here'
@@ -258,7 +265,7 @@ class InjectToUasset(Operator):
         for prop in props:
             col.prop(general_options, prop)
         inject_options = context.scene.inject_options
-        props = ['only_mesh', 'duplicate_folder_structure', 'content_folder', 'mod_name']
+        props = ['only_mesh', 'duplicate_folder_structure', 'content_folder', 'mod_name', 'rescale']
         for prop in props:
             col.prop(inject_options, prop)
 
@@ -292,14 +299,13 @@ class InjectToUasset(Operator):
                 raise RuntimeError('Armature not found.')
             if meshes==[] and 'Mesh' in asset_type:
                 raise RuntimeError('Mesh not found.')
-            if 'Mesh' not in asset_type:
+            if 'Mesh' not in asset_type and asset_type!='Skeleton':
                 raise RuntimeError('Unsupported asset. ({})'.format(asset_type))
 
             if asset_type=='Skeleton':
                 meshes=[]
 
-            rescale=1.0            
-            primitives = get_primitives(asset, armature, meshes, rescale=rescale, only_mesh=inject_options.only_mesh)
+            primitives = get_primitives(asset, armature, meshes, rescale=inject_options.rescale, only_mesh=inject_options.only_mesh)
             bpy_util.deselect_all()
             bpy_util.select_objects([armature]+meshes)
 

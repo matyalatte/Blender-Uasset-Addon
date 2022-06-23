@@ -168,8 +168,7 @@ def get_weights(mesh, bone_names):
     joints = [i[0] for i in influences]
     weights = [i[1] for i in influences]
     vertex_groups = list(set(sum(joints,[])))
-    joint_to_vg = [f(i, vertex_groups) for i in range(max(vertex_groups)+1)]
-    joints = [[joint_to_vg[j] for j in joint] for joint in joints]
+    joints = [[vertex_groups.index(j) for j in joint] for joint in joints]
     max_influence_count = max([len(j) for j in joints])
     return vertex_groups, joints, weights, max_influence_count
 

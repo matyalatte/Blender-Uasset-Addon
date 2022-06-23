@@ -11,9 +11,9 @@ class VIEW3D_PT_urls(bpy.types.Panel):
     urls = {
         "Readme" : 'https://github.com/matyalatte/Blender-Uasset-Addon',
         'Getting Started': 'https://github.com/matyalatte/Blender-Uasset-Addon/wiki/Getting-Started',
-        'FAQ': 'https://github.com/matyalatte/Blender-Uasset-Addon/wiki/FAQ'   
+        'FAQ': 'https://github.com/matyalatte/Blender-Uasset-Addon/wiki/FAQ'
     }
-    icons = ['INFO']
+    icons = ['TEXT', 'INFO', 'QUESTION']
     
     def draw(self, context):
         layout = self.layout
