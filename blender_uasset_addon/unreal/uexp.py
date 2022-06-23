@@ -7,37 +7,30 @@ from ..util.logger import logger
 from ..util.cipher import Cipher
 from .mesh import StaticMesh, SkeletalMesh
 from .skeleton import SkeletonAsset
-from .uasset import Uasset
-#from asset.bonamik import Bonamik
+from .texture import Texture
 
-class MeshUexp:
+class Uexp:
 
     UNREAL_SIGNATURE=b'\xC1\x83\x2A\x9E'
     
-    def __init__(self, file):
-        self.load(file)
+    def __init__(self, file, uasset):
+        self.load(file, uasset)
 
-    def load(self, file):
+    def load(self, file, uasset):
         if file[-4:]!='uexp':
-            if file[-6:]!='uasset':
-                raise RuntimeError('Not .uexp! ({})'.format(file))
-            else:
-                uasset_file = file
-                file = file[:-6]+'uexp'
-        else:
-            uasset_file=file[:-4]+'uasset'
-
-        self.name = os.path.splitext(os.path.basename(file))[0]
+            raise RuntimeError('Not .uexp! ({})'.format(file))
+        if not os.path.exists(file):
+            raise RuntimeError('FileNotFound: You should put .uexp in the same directory as .uasset. ({})'.format(file))
 
         #get name list and export data from .uasset
-        if not os.path.exists(uasset_file):
-            raise RuntimeError('FileNotFound: You should put .uasset in the same directory as .uexp. ({})'.format(uasset_file))
-        self.uasset = Uasset(uasset_file)
+        self.uasset = uasset
         self.name_list=self.uasset.name_list        
         self.exports = self.uasset.exports
         self.imports = self.uasset.imports
+        self.asset_path = self.uasset.asset_path
 
-        self.ff7r = self.uasset.ff7r
+        self.version=self.uasset.version
+        self.ff7r = self.version=='ff7r'
         self.asset_type = self.uasset.asset_type
         logger.log('FF7R: {}'.format(self.ff7r))
         logger.log('Asset type: {}'.format(self.asset_type))
@@ -51,8 +44,10 @@ class MeshUexp:
             if not has_material:
                 raise RuntimeError('Material slot is empty. Be sure materials are assigned correctly in UE4.')
 
-        logger.log('Loading '+file+'...', ignore_verbose=True)
+        #logger.log('Loading '+file+'...', ignore_verbose=True)
         #open .uexp
+        self.mesh=None
+        self.skeleton=None
         with open(file, 'rb') as f:
             for export in self.exports:
                 if f.tell()+self.uasset.size!=export.offset:
@@ -70,12 +65,10 @@ class MeshUexp:
                         self.skeleton = self.mesh.skeleton
                     elif self.asset_type=='StaticMesh':
                         self.mesh=StaticMesh.read(f, self.ff7r, self.name_list, self.imports)
-                        self.skeleton = None
                     elif self.asset_type=='Skeleton':
-                        self.mesh = None
                         self.skeleton = SkeletonAsset.read(f, self.name_list)
-                    #elif self.asset_type=='SQEX_BonamikAsset':
-                    #    self.bonamik = Bonamik.read(f,self.name_list)
+                    elif 'Texture' in self.asset_type:
+                        self.texture = Texture.read(f, self.uasset)
                     self.unknown2=f.read(export.offset+export.size-f.tell()-self.uasset.size)
 
             #footer
@@ -87,7 +80,12 @@ class MeshUexp:
             if self.author!='':
                 print('Author: {}'.format(self.author))
             self.foot=f.read()
-            check(self.foot, MeshUexp.UNREAL_SIGNATURE, f, 'Parse failed. (foot)')
+            check(self.foot, Uexp.UNREAL_SIGNATURE, f, 'Parse failed. (foot)')
+
+    def load_material_asset(self):
+        if self.mesh is not None:
+            for m in self.mesh.materials:
+                m.load_asset(self.uasset.actual_path, self.asset_path, version=self.version)
 
     def save(self, file):
         logger.log('Saving '+file+'...', ignore_verbose=True)
@@ -104,8 +102,8 @@ class MeshUexp:
                         StaticMesh.write(f, self.mesh)
                     elif self.asset_type=='Skeleton':
                         SkeletonAsset.write(f, self.skeleton)
-                    #elif self.asset_type=='SQEX_BonamikAsset':
-                    #    Bonamik.write(f,self.bonamik)
+                    elif 'Texture' in self.asset_type:
+                        self.texture.write(f)
                     else:
                         raise RuntimeError('Unsupported asset. ({})'.format(self.asset_type))
                     f.write(self.unknown2)
@@ -116,15 +114,7 @@ class MeshUexp:
             f.write(self.meta)
             f.write(self.foot)
             uexp_size=f.tell()
-        self.uasset.save(file[:-4]+'uasset', uexp_size)
-
-    def save_as_gltf(self, save_folder):
-        if 'Mesh' in self.asset_type:
-            self.mesh.save_as_gltf(self.name, save_folder)
-        #elif self.asset_type=='Skeleton':
-            #self.skeleton.save_as_gltf(self.name, save_folder)
-        else:
-            raise RuntimeError('Unsupported feature for static mesh')
+        return uexp_size
 
     def remove_LODs(self):
         self.mesh.remove_LODs()
@@ -147,10 +137,16 @@ class MeshUexp:
             else:
                 raise RuntimeError('ue4_18_file should have skeleton.')
 
-    def import_gltf(self, gltf):
-        if self.asset_type!='SkeletalMesh':
-            raise RuntimeError('gltf injection is not supported for {}'.format(self.asset_type))
-        self.mesh.import_gltf(gltf, self.imports, self.name_list, self.uasset.file_data_ids)
+    def import_from_blender(self, primitives, only_mesh=True):
+        if self.skeleton is None and self.mesh is None:
+            raise RuntimeError('Injection is not supported for {}'.format(self.asset_type))
+        if self.mesh is None and only_mesh:
+            raise RuntimeError("Enabled 'Only Mesh' option, but the asset have no meshes. ({})".format(self.asset_type))
+        if not only_mesh and self.skeleton is not None:
+            self.skeleton.import_bones(primitives['BONES'], self.name_list)
+        if self.mesh is not None:
+            self.mesh.import_from_blender(primitives, self.imports, self.name_list, self.uasset.file_data_ids, only_mesh=only_mesh)
+        
 
     def remove_KDI(self):
         if self.asset_type=='SkeletalMesh':

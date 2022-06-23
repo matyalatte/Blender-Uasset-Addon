@@ -1,8 +1,18 @@
-import os, struct
+import os, struct, tempfile
 from .logger import logger
+
+#make a temp file and return its path. you need to delete the file by your self
+def make_temp_file(suffix=None):
+    temp = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
+    temp_path = temp.name
+    temp.close()
+    return temp_path
 
 def mkdir(dir):
     os.makedirs(dir, exist_ok=True)
+
+def get_ext(file):
+    return file.split('.')[-1]
 
 def get_size(file):
     pos=file.tell()
@@ -34,6 +44,10 @@ def read_uint8(file):
 def read_int32(file):
     bin=file.read(4)
     return int.from_bytes(bin, "little", signed=True)
+
+def read_uint64(file):
+    bin=file.read(8)
+    return int.from_bytes(bin, "little")
 
 def read_float32(file):
     bin=file.read(4)
@@ -116,6 +130,10 @@ def read_struct_array(f, obj, len=None):
     objects = [obj() for i in range(len)]
     list(map(lambda x: f.readinto(x), objects))
     return objects
+
+def write_uint64(file, n):
+    bin = n.to_bytes(8, byteorder="little")
+    file.write(bin)
 
 def write_uint32(file, n):
     bin = n.to_bytes(4, byteorder="little")

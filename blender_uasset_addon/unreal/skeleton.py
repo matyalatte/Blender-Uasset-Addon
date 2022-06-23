@@ -15,7 +15,6 @@ class Bone:
         self.name_id = name_id
         self.instance = instance
         self.parent = parent
-        self.pos = None
         self.name = None
         self.parent_name = None
         self.children = []
@@ -41,9 +40,10 @@ class Bone:
         write_float32_array(f, bone.rot+bone.trans+bone.scale)
 
     def update(self, bone):
-        self.pos=bone.pos
+        self.trans = bone.trans
+        self.rot = bone.rot
+        self.scale = bone.scale
         self.name = bone.name
-        self.instance = bone.instance
         self.parent_name = bone.parent_name
 
     def update_name_id(self, name_list):
@@ -93,39 +93,16 @@ class Bone:
         for b, c in zip(bones, children):
             b.children=c
 
-    def to_gltf_bone(self):
-        ary = list(struct.unpack('<'+'f'*10, self.pos))
-        children = [c+1 for c in self.children]
-        rot = [-ary[0], -ary[2], -ary[1], ary[3]]
-        trans = ary[4:7]
-        trans = [trans[0]/100, trans[2]/100, trans[1]/100]
-        scale = [ary[7], ary[9], ary[8]]
-        #return gltfBone(self.name, children, rot, trans, scale)
-
-    def gltf_to_bone(gltf_bone):
-        rot = gltf_bone.rot
-        rot = [-rot[0], -rot[2], -rot[1], rot[3]]
-        trans = gltf_bone.trans
-        trans = [trans[0]*100, trans[2]*100, trans[1]*100]
-        scale = [1]*3
-        ary = rot+trans+scale
-        bone = Bone(-1, 0, -1)
-        bone.pos = struct.pack('<'+'f'*10, *ary)
-        bone.name = gltf_bone.name
-        bone.parent_name = gltf_bone.parent_name
-        return bone
-
-    def bones_to_gltf(bones):
-        Bone.record_children(bones)
-        gltf_bones = [b.to_gltf_bone() for b in bones]
-        return gltf_bones
-
+    '''
     def copy(self):
         bone = Bone(self.name_id, self.instance, self.parent)
         bone.name = self.name
-        bone.pos = self.pos
+        bone.trans = self.trans
+        bone.rot = self.rot
+        bone.scale = self.scale
         bone.parent_name = self.parent_name
         return bone
+    '''
 
     def update_parent_id(self, bones):
         if self.parent_name=='None':
@@ -176,23 +153,21 @@ class Skeleton:
         Bone.name_bones(self.bones, name_list)
         Bone.record_children(self.bones)
 
-    def import_bones(self, bones, name_list, only_phy_bones=False):
+    def import_bones(self, bones, name_list):
         old_bone_num = len(self.bones)
         if len(self.bones)<len(bones):
-            self.bones += [Bone(-1, None, None) for i in range(len(bones)-len(self.bones))]
+            self.bones += [Bone(-1, 0, None) for i in range(len(bones)-len(self.bones))]
         for self_bone, new_bone in zip(self.bones, bones):
             #if self_bone.name!=new_bone.name:
             #    raise RuntimeError("")
             #print('{} -> {}'.format(self_bone.pos[4:7], new_bone.pos[4:7]))
-            if only_phy_bones and 'Phy' not in new_bone.name:
-                continue
+            #if only_phy_bones and 'Phy' not in new_bone.name:
+            #    continue
             self_bone.update(new_bone)
         self.bones = self.bones[:len(bones)]
-        if only_phy_bones:
-            #logger.log('Imported bones: {}'.format(bone_list))
-            logger.log('Phy bones have been imported.', ignore_verbose=True)
-        else:
-            logger.log('Skeleton has been imported. (bones:{}->{})'.format(old_bone_num, len(self.bones)), ignore_verbose=True)
+        #if only_phy_bones:
+        #    print('Phy bones have been imported.')
+        print('Updated skeleton (bones:{}->{})'.format(old_bone_num, len(self.bones)))
 
         for bone in self.bones:
             bone.update_name_id(name_list)
@@ -264,47 +239,34 @@ class SkeletonAsset:
         Bone.name_bones(self.bones, name_list)
         Bone.record_children(self.bones)
 
-    def import_bones(self, bones, name_list, only_phy_bones=False):
+    def import_bones(self, bones, name_list):
         old_bone_num = len(self.bones)
         new_bones = []
         for new_bone in bones:
             name = new_bone.name
-            if only_phy_bones and 'Phy' not in name:
-                continue
+            #if only_phy_bones and 'Phy' not in name:
+            #    continue
             updated=False
             for self_bone in self.bones:
                 if self_bone.name==name:
-                    self_bone.pos = new_bone.pos
-                    self_bone.parent_name = new_bone.parent_name
+                    self_bone.update(new_bone)
                     updated=True
                     break
             if not updated:
-                copied_bone = new_bone.copy()
-                copied_bone.name_id = -1
-                copied_bone.update_name_id(name_list)
-                new_bones.append(copied_bone)
+                bone = Bone(-1, 0, None)
+                bone.update(new_bone)
+                bone.update_name_id(name_list)
+                new_bones.append(bone)
         self.bones += new_bones
         for b in self.bones:
             b.update_parent_id(self.bones)
 
-        if only_phy_bones:
-            logger.log('Phy bones have been imported.', ignore_verbose=True)
-        else:
-            logger.log('Skeleton has been imported. (bones:{}->{})'.format(old_bone_num, len(self.bones)), ignore_verbose=True)
+        #if only_phy_bones:
+        #    print('Phy bones have been imported.')
+        print('Updated skeleton (bones:{}->{})'.format(old_bone_num, len(self.bones)))
 
     def print(self, padding=0):
         pad=' '*padding
         logger.log(pad+'Skeleton (offset: {})'.format(self.offset))
         logger.log(pad+'  bone_num: {}'.format(len(self.bones)))
         Bone.print_bones(self.bones, padding=2+padding)
-
-    def to_gltf_bones(self):
-        Bone.record_children(self.bones)
-        gltf_bones = [b.to_gltf_bone() for b in self.bones]
-        return gltf_bones
-
-    def save_as_gltf(self, name, save_folder):
-        bones = Bone.bones_to_gltf(self.bones)
-        #gltf = glTF(bones, None, None, None)
-        #gltf.save(name, save_folder)
-    

@@ -67,6 +67,13 @@ class PositionVertexBuffer(VertexBuffer):
         position = [parsed[i*3:i*3+3] for i in range(self.size)]
         return position
 
+    def import_from_blender(self, position):
+        self.stride = 12
+        self.size = len(position)
+        self.vertex_num = self.size
+        buf = flatten(position)
+        self.buf = struct.pack('<'+'f'*3*self.size, *buf)
+
 #Normals and UV maps for static mesh
 class StaticMeshVertexBuffer(VertexBuffer):
     def __init__(self, uv_num, use_float32, stride, size, buf, offset, name):
@@ -110,22 +117,44 @@ class StaticMeshVertexBuffer(VertexBuffer):
             texcoords.append(texcoord)
         return normal, texcoords
 
+    def import_from_blender(self, normal, texcoords, uv_num):
+        uv_type = 'f'*self.use_float32+'e'*(not self.use_float32)
+        self.uv_num = uv_num
+        self.stride = 8+(1+self.use_float32)*4*self.uv_num
+        self.size = len(normal)
+        self.vertex_num = self.size
+        buf = normal
+        for texcoord in texcoords:
+            buf = [b+t for b,t in zip(buf, texcoord)]
+        buf = flatten(buf)
+        self.buf = struct.pack('<'+('B'*8+uv_type*2*self.uv_num)*self.size, *buf)
+
 #Vertex colors
 class ColorVertexBuffer(VertexBuffer):
     def read(f, name=''):
         one = read_uint16(f)
         check(one, 1, f)
-        read_const_uint32(f, 4)
+        stride = read_uint32(f)
         vertex_num  = read_uint32(f)
-        buf = Buffer.read(f, name=name)
-        check(vertex_num, buf.size, f)
-        return ColorVertexBuffer(buf.stride, buf.size, buf.buf, buf.offset, name)
+        if stride>0:
+            buf = Buffer.read(f, name=name)
+            check(stride, buf.stride)
+            check(vertex_num, buf.size, f)
+            return ColorVertexBuffer(buf.stride, buf.size, buf.buf, buf.offset, name)
+        else:
+            return ColorVertexBuffer(stride, vertex_num, None, f.tell(), name)
 
     def write(f, vb):
         write_uint16(f, 1)
-        write_uint32(f, 4)
+        write_uint32(f, vb.stride)
         write_uint32(f, vb.vertex_num)
-        Buffer.write(f, vb)
+        if vb.buf is not None:
+            Buffer.write(f, vb)
+    
+    def disable(self):
+        self.buf = None
+        self.stride=0
+        self.vertex_num=0
 
 #Normals, positions, and UV maps for skeletal mesh
 class SkeletalMeshVertexBuffer(VertexBuffer):
@@ -173,24 +202,17 @@ class SkeletalMeshVertexBuffer(VertexBuffer):
         parsed = struct.unpack('<'+('B'*8+'fff'+uv_type*2*self.uv_num)*self.size, self.buf)
         stride = 11+2*self.uv_num
         position = [parsed[i*stride+8:i*stride+11] for i in range(self.size)]
-        position = [[p/100 for p in pos] for pos in position]
         x = [pos[0] for pos in position]
-        y = [pos[2] for pos in position]
-        z = [pos[1] for pos in position]
+        y = [pos[1] for pos in position]
+        z = [pos[2] for pos in position]
         return [max(x)-min(x), max(y)-min(y), max(z)-min(z)]
 
-    def import_gltf(self, normal, tangent, position, texcoords, uv_num):
+    def import_from_blender(self, normal, position, texcoords, uv_num):
         uv_type = 'f'*self.use_float32+'e'*(not self.use_float32)
         self.uv_num = uv_num
         self.stride = 20+(1+self.use_float32)*4*self.uv_num
         self.size = len(normal)
         self.vertex_num = self.size
-        normal = [[n[0], n[2], n[1], 1] for n, t in zip(normal, tangent)]
-        tangent = [[t[0], t[2], t[1], t[3]] for t in tangent]
-        normal = [tan+nor for tan, nor in zip(tangent, normal)]
-        normal = [[int((i+1)*255/2) for i in n] for n in normal]
-        position = [[pos[0], pos[2], pos[1]] for pos in position]
-        position = [[p*100 for p in pos] for pos in position]
         buf = [n+p for n, p in zip(normal, position)]
         for texcoord in texcoords:
             buf = [b+t for b,t in zip(buf, texcoord)]
@@ -228,15 +250,13 @@ class SkinWeightVertexBuffer(VertexBuffer):
         weight = [parsed[i*self.stride+self.stride//2:(i+1)*self.stride] for i in range(self.size)]
         return joint, weight
 
-    def import_gltf(self, joint, weight, extra_bone_flag):
+    def import_from_blender(self, joint, weight, extra_bone_flag):
         self.size = len(joint)
         self.vertex_num = self.size
         self.extra_bone_flag = extra_bone_flag
         self.stride = 8*(1+self.extra_bone_flag)
-        weight = [[int(i*255) for i in w] for w in weight]
         buf = [j+w for j, w in zip(joint, weight)]
         buf = flatten(buf)
-        #buf = [int(i) for i in buf]
         self.buf = struct.pack('<'+'B'*self.size*self.stride, *buf)
         pass
 
@@ -249,6 +269,8 @@ class StaticIndexBuffer(Buffer):
     def read(f, name=''):
         uint32_flag=read_uint32(f) #0: uint16 id, 1: uint32 id
         buf = Buffer.read(f, name=name)
+        #buf.stride==1
+        #buf.size==index_count*(2+2*uint32_flag)
         return StaticIndexBuffer(uint32_flag, buf.stride, buf.size, buf.buf, buf.offset, name)
 
     def write(f, ib):
@@ -265,6 +287,18 @@ class StaticIndexBuffer(Buffer):
         form = [None, None, 'H', None, 'I']
         indices = struct.unpack('<'+form[stride]*size, self.buf)
         return indices
+    
+    def update(self, new_ids, use_uint32=False):
+        form = [None, None, 'H', None, 'I']
+        self.uint32_flag = use_uint32
+        stride = 2+2*use_uint32
+        size = len(new_ids)
+        self.size = size*stride
+        self.stride = 1
+        self.buf = struct.pack('<'+form[stride]*size, *new_ids)
+
+    def disable(self):
+        self.update([])
 
 #Index buffer for skeletal mesh
 class SkeletalIndexBuffer(Buffer):

@@ -1,2 +1,23 @@
+v0.1.4
+- Added support for mesh injection
+- Added support for skeleton injection
+- Added some urls to url panel
+- Refine codes
+
+v0.1.3
+- Added support for texture assets
+- Added a parameter for UE version
+- Refine codes
+
+v0.1.2
+- Added UI panels
+- Added "Export as fbx" function
+- Added "Invert Nomral Maps" option
+
+v0.1.1
+- Added "Load Textures" option
+- Added meta data import (e.g. asset paths) as custom properties
+- Fixed a bug meshes won't be placed in the same collection as armatures
+
 v0.1.0
 - Initial release
