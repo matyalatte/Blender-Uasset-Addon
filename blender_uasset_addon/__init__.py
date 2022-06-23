@@ -1,7 +1,7 @@
 bl_info = {
     'name': 'Uasset format',
     'author': 'Matyalatte',
-    'version': (0, 1, 3),
+    'version': (0, 1, 4),
     'blender': (3, 0, 0),
     'location': 'File > Import-Export',
     'description': 'Import assets from .uasset',

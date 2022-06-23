@@ -1,3 +1,6 @@
+v0.1.5
+- Changed default unit scale to meters
+
 v0.1.4
 - Added support for mesh injection
 - Added support for skeleton injection

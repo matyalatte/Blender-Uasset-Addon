@@ -449,7 +449,7 @@ class ImportOptions(PropertyGroup):
         items=(('CENTIMETERS', 'Centimeters', 'UE standard'),
                ('METERS', 'Meters', 'Blender standard')),
         description='Change unit scale to',
-        default='CENTIMETERS'
+        default='METERS'
     )
 
     rescale : FloatProperty(
