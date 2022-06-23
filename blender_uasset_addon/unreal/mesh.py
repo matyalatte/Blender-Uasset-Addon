@@ -145,14 +145,6 @@ class StaticMesh(Mesh):
         f.write(staticmesh.unk)
         write_array(f, staticmesh.LODs, StaticLOD.write, with_length=True)
     
-    def save_as_gltf(self, name, save_folder):
-        material_names = [m.import_name for m in self.materials]
-        material_ids, uv_num = self.LODs[0].get_meta_for_gltf()
-        #gltf = glTF(None, material_names, material_ids, uv_num)
-        normals, tangents, positions, texcoords, indices= self.LODs[0].parse_buffers_for_gltf()
-        #gltf.set_parsed_buffers(normals, tangents, positions, texcoords, None, None, None, None, indices)
-        #gltf.save(name, save_folder)
-
     def import_LODs(self, mesh, imports, name_list, file_data_ids):
         if len(self.materials)<len(mesh.materials):
             raise RuntimeError('Can not add materials to static mesh.')
@@ -165,14 +157,14 @@ class SkeletalMesh(Mesh):
     #materials: material names
     #skeleton: skeleton data
     #LOD: LOD array
-    #phy_mesh: ?
-    def __init__(self, ff7r, unk, materials, skeleton, LODs, phy_mesh):
+    #extra_mesh: ?
+    def __init__(self, ff7r, unk, materials, skeleton, LODs, extra_mesh):
         self.ff7r=ff7r
         self.unk=unk
         self.materials=materials
         self.skeleton=skeleton
         self.LODs=LODs
-        self.phy_mesh=phy_mesh
+        self.extra_mesh=extra_mesh
         
     def read(f, ff7r, name_list, imports):
         offset=f.tell()
@@ -202,15 +194,10 @@ class SkeletalMesh(Mesh):
 
         #mesh data?
         if ff7r:
-            has_phy = read_uint32(f)
-            if has_phy:
-                phy_mesh=PhysicalMesh.read(f, skeleton.bones)
-                phy_mesh.print()
-            else:
-                phy_mesh=None
-        else:
-            phy_mesh=None
-        return SkeletalMesh(ff7r, unk, materials, skeleton, LODs, phy_mesh)
+            read_const_uint32(f, 1)
+            extra_mesh=ExtraMesh.read(f, skeleton.bones)
+            extra_mesh.print()
+        return SkeletalMesh(ff7r, unk, materials, skeleton, LODs, extra_mesh)
 
     def write(f, skeletalmesh):
         f.write(skeletalmesh.unk)
@@ -218,11 +205,8 @@ class SkeletalMesh(Mesh):
         Skeleton.write(f, skeletalmesh.skeleton)
         write_array(f, skeletalmesh.LODs, SkeletalLOD.write, with_length=True)
         if skeletalmesh.ff7r:
-            if skeletalmesh.phy_mesh is not None:
-                write_uint32(f, 1)
-                PhysicalMesh.write(f, skeletalmesh.phy_mesh)
-            else:
-                write_uint32(f, 0)
+            write_uint32(f, 1)
+            ExtraMesh.write(f, skeletalmesh.extra_mesh)
 
 
     def import_LODs(self, skeletalmesh, imports, name_list, file_data_ids, only_mesh=False, only_phy_bones=False,
@@ -240,8 +224,8 @@ class SkeletalMesh(Mesh):
         if not only_mesh:
             self.skeleton.import_bones(skeletalmesh.skeleton.bones, name_list, only_phy_bones=only_phy_bones)
             #print(len(name_list))
-            if self.phy_mesh is not None:
-                self.phy_mesh.update_bone_ids(self.skeleton.bones)
+            if self.extra_mesh is not None:
+                self.extra_mesh.update_bone_ids(self.skeleton.bones)
 
         ignore_material_names=False
         if len(self.materials)<len(skeletalmesh.materials):
@@ -265,50 +249,35 @@ class SkeletalMesh(Mesh):
 
         logger.log("KDI buffers have been removed.")
 
-    def save_as_gltf(self, name, save_folder):
-        bones = Bone.bones_to_gltf(self.skeleton.bones)
-        material_names = [m.import_name for m in self.materials]
-        material_ids, uv_num = self.LODs[0].get_meta_for_blender()
-        #gltf = glTF(bones, material_names, material_ids, uv_num)
-        normals, tangents, positions, texcoords, joints, weights, joints2, weights2, indices = self.LODs[0].parse_buffers_for_gltf()
-        #gltf.set_parsed_buffers(normals, tangents, positions, texcoords, joints, weights, joints2, weights2, indices)
-        #gltf.save(name, save_folder)
-
     def import_from_blender(self, primitives, imports, name_list, file_data_ids, only_mesh = True):
         bones = primitives['BONES']
         if only_mesh:
             if len(bones)!=len(self.skeleton.bones):
                 raise RuntimeError('The number of bones are not the same. (source file: {}, blender: {})'.format(len(self.skeleton.bones), len(bones)))
 
-        #self.phy_mesh=None
-        #if not only_mesh and self.phy_mesh is not None:
-            #self.phy_mesh.update_bone_ids(self.skeleton.bones)
+        if self.extra_mesh is not None and not only_mesh:
+            self.extra_mesh.disable()
         super().import_from_blender(primitives, imports, name_list, file_data_ids)
 
-#collider or something? low poly mesh.
-class PhysicalMesh:
-    #vertices
-    #bone_id: vertex group? each vertex has a bone id.
-    #faces
-
+#Skeletal meshes have an extra low poly mesh.
+#I removed buffers from this mesh, but it won't affect physics
+#(collision with other objects, and collision between body and cloth)
+class ExtraMesh:
     def __init__(self, f, bones):
         self.offset=f.tell()
         self.names = [b.name for b in bones]
         vertex_num=read_uint32(f)
         self.vb=f.read(vertex_num*12)
-
-        num = read_uint32(f)
-        check(num, vertex_num, f, 'Parse failed! (PhysicalMesh:vertex_num)')
-        
-        self.weight_buffer=list(struct.unpack('<'+'HHHHBBBB'*num, f.read(num*12)))
-        #for i in range(len(self.weight_buffer)//8):
-        #    id = self.weight_buffer[i*8]
-        #   if id>0:
-        #       print(id)
-        #       print(bones[id].name)
-
+        read_const_uint32(f, vertex_num)
+        self.weight_buffer=list(struct.unpack('<'+'HHHHBBBB'*vertex_num, f.read(vertex_num*12)))
         face_num=read_uint32(f)
         self.ib=f.read(face_num*6)
+        self.unk = f.read(8)
+
+    def disable(self):
+        self.vb=b''
+        self.weight_buffer=b''
+        self.ib=b''
 
     def update_bone_ids(self, new_bones):
         new_bone_names = [b.name for b in new_bones]
@@ -337,7 +306,7 @@ class PhysicalMesh:
         self.weight_buffer=[x for row in ids for x in row]
 
     def read(f, bones):
-        return PhysicalMesh(f, bones)
+        return ExtraMesh(f, bones)
 
     def write(f, mesh):
         vertex_num = len(mesh.vb)//12
@@ -349,6 +318,7 @@ class PhysicalMesh:
         #f.write(mesh.weight_buffer)
         write_uint32(f, len(mesh.ib)//6)
         f.write(mesh.ib)
+        f.write(mesh.unk)
 
     def print(self, padding=0):
         pad=' '*padding

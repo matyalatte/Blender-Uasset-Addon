@@ -168,6 +168,7 @@ class Uasset:
 
         logger.log('Loading '+file+'...', ignore_verbose=True)
 
+        self.actual_path = file
         self.file=os.path.basename(file)[:-7]
         self.name = os.path.splitext(os.path.basename(file))[0]
         self.version=version

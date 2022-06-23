@@ -142,11 +142,11 @@ def generate_materials(asset, version, load_textures=False, invert_normal_maps=F
                 progress+=1
                 name = os.path.basename(asset_path)
                 if name in texs:
-                    print('Texture is already loaded ({})'.format(asset_path))
+                    print('Texture is already loaded ({})'.format(tex_path))
                     names.append(name)
                     continue
                 if not os.path.exists(tex_path):
-                    print('Texture not found ({})'.format(asset_path))
+                    print('Texture not found ({})'.format(tex_path))
                     continue
                 tex, type = load_utexture(tex_path, os.path.basename(asset_path), version, invert_normals=invert_normal_maps)
                 if tex is not None:
@@ -264,9 +264,10 @@ def load_uasset(file, rename_armature=True, keep_sections=False,
         raise RuntimeError('Unsupported asset. ({})'.format(asset.asset_type))
     if asset.uexp.mesh is None and only_skeleton:
         raise RuntimeError('"Only Skeleton" option is checked, but the asset has no skeleton.')
+    
+    asset.uexp.load_material_asset()
 
-    bpy.context.view_layer.objects.active = bpy.context.view_layer.objects[0]
-    bpy.ops.object.mode_set(mode='OBJECT')
+    bpy_util.move_to_object_mode()
 
     #add a skeleton to scene
     if keep_sections or (not rename_armature) or asset_type=='Skeleton':
@@ -557,7 +558,7 @@ class ImportUasset(Operator, ImportHelper):
             context.scene.general_options.source_file=file
 
             elapsed_s = '{:.2f}s'.format(time.time() - start_time)
-            m = 'Imported {} in {}'.format(asset_type, elapsed_s)
+            m = 'Success! Imported {} in {}'.format(asset_type, elapsed_s)
             print(m)
             self.report({'INFO'}, m)
             ret = {'FINISHED'}

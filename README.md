@@ -24,14 +24,9 @@ Most of the source code is from [my mesh tool](https://github.com/matyalatte/FF7
 - Skeleton (*_Skeleton.uasset)
 - Texture (Blender will load assets as dds textures. But I don't know if it supports all dds formats.)
 
-## Installation
+## Getting Started
+[Getting Started · matyalatte/Blender-Uasset-Addon Wiki](https://github.com/matyalatte/Blender-Uasset-Addon/wiki/Getting-Started)
 
-1. Update Blender if you are using Blender 2.7x.
-1. Download `blender_uasset_addon_*.zip` from [the releases page](https://github.com/matyalatte/Blender-Uasset-Addon/releases).
-1. Open Blender.
-1. Open the `Preferences` window (Edit > Preferences).
-1. Select the `Add-ons` tab.
-1. Click `Install...`.
-1. Select the zip file you downloaded and click `Install Add-on`.
-1. You can select `Uasset (.uasset)` from File > Import.
+## FAQ
+[FAQ · matyalatte/Blender-Uasset-Addon Wiki](https://github.com/matyalatte/Blender-Uasset-Addon/wiki/FAQ)
 

@@ -57,8 +57,7 @@ def get_bones(armature, rescale=1.0):
 
     list(map(lambda x: set_parent(x, bone_names, edit_bones), edit_bones))
 
-    bpy.context.view_layer.objects.active = bpy.context.view_layer.objects[0]
-    bpy.ops.object.mode_set(mode='OBJECT')
+    bpy_util.move_to_object_mode()
     return edit_bones, bone_names
 
 def get_primitives(asset, armature, meshes, rescale = 1.0, only_mesh=False):
@@ -114,7 +113,8 @@ def get_primitives(asset, armature, meshes, rescale = 1.0, only_mesh=False):
                 if n not in asset_bone_names:
                     raise RuntimeError("Skeletons should be same when using 'Only Mesh' option")
             bone_names = asset_bone_names
-
+    t=0
+    import time
     for mesh in meshes:
         name = mesh.name
         data_name = mesh.data.name
@@ -123,34 +123,41 @@ def get_primitives(asset, armature, meshes, rescale = 1.0, only_mesh=False):
         except:
             raise RuntimeError('Failed to calculate tangents. Meshes should be triangulated.')
         splitted = bpy_util.split_mesh_by_materials(mesh)
+        err=False
         for m in splitted:
+            try:
+                m.data.calc_tangents()
+            except:
+                err=True
+                break
             primitives['MATERIAL_IDS'].append(material_names.index(m.data.materials[0].name))
             position = bpy_util.get_positions(m.data)
             position = bpy_util.flip_y_for_3d_vectors(position) * rescale_factor
-            primitives['POSITIONS'].append(position.tolist())
+            primitives['POSITIONS'].append(position)
+
             normal, tangent, signs = bpy_util.get_normals(m.data)
             normal = bpy_util.flip_y_for_3d_vectors(normal)
             tangent = bpy_util.flip_y_for_3d_vectors(tangent)
             zeros = np.zeros((len(m.data.loops), 1), dtype=np.float32)
             normal = np.concatenate([tangent, signs, normal, zeros], axis=1)
+
             vertex_indices = np.empty(len(m.data.loops), dtype=np.uint32)
             m.data.loops.foreach_get('vertex_index', vertex_indices)
             unique, indices = np.unique(vertex_indices, return_index=True)
             sort_ids = np.argsort(unique)
             normal = normal[indices][sort_ids]
             normal = ((normal + 1) * 127).astype(np.uint8)
-            primitives['NORMALS'].append(normal.tolist())
+            primitives['NORMALS'].append(normal)
             uv_maps = bpy_util.get_uv_maps(m.data)
             uv_maps = uv_maps[:, indices][:, sort_ids]
             uv_maps = bpy_util.flip_uv_maps(uv_maps)            
-            if primitives['UV_MAPS']==[]:
-                primitives['UV_MAPS'] = uv_maps
-            else:
-                primitives['UV_MAPS'] = np.concatenate([primitives['UV_MAPS'], uv_maps], axis=1)
+            primitives['UV_MAPS'].append(uv_maps)
             indices = bpy_util.get_triangle_indices(m.data)
             primitives['INDICES'].append(indices)
             if armature is not None:
+                st = time.time()
                 vertex_group, joint, weight, max_influence_count = bpy_util.get_weights(m, bone_names)
+                t += time.time() - st
                 influence_counts.append(max_influence_count)
                 primitives['VERTEX_GROUPS'].append(vertex_group)
                 primitives['JOINTS'].append(joint)
@@ -158,11 +165,17 @@ def get_primitives(asset, armature, meshes, rescale = 1.0, only_mesh=False):
                 if max_influence_count>8:
                     raise RuntimeError('Some vertices have more than 8 bone weights. UE can not handle the weight data.')
 
-        
+        elapsed_s = '{:.2f}s'.format(t)
+        #print('weight calculation in '+elapsed_s)
         joined = bpy_util.join_meshes(splitted)
         joined.name=name
         joined.data.name=data_name
-    primitives['UV_MAPS'] = primitives['UV_MAPS'].tolist()
+        if err:
+            raise RuntimeError('Failed to calculate tangents. Meshes should be triangulated.')
+    
+    primitives['VERTEX_COUNTS'] = [len(p) for p in primitives['POSITIONS']]
+    for axis, key in zip([0,0,1], ['POSITIONS', 'NORMALS', 'UV_MAPS']):
+        primitives[key] = np.concatenate(primitives[key], axis=axis).tolist()
 
     if armature is not None:
         def floor4(i):
@@ -170,17 +183,18 @@ def get_primitives(asset, armature, meshes, rescale = 1.0, only_mesh=False):
             return i + 4*(mod>0) - mod
 
         def lists_zero_fill(lists, length):
-            return [l+[0]*(length-len(l)) for l in lists]
+            return np.array([l+[0]*(length-len(l)) for l in lists], dtype=np.uint8)
 
         def f_to_i(w):
             w = np.array(w, dtype=np.float32) * 255.0
             w = np.rint(w).astype(np.uint8)
-            return w.tolist()
+            return w
 
         influence_count = max([floor4(i) for i in influence_counts])
         primitives['JOINTS'] = [lists_zero_fill(j, influence_count) for j in primitives['JOINTS']]
+        primitives['JOINTS'] = np.concatenate(primitives['JOINTS'], axis=0).tolist()
         primitives['WEIGHTS'] = [f_to_i(lists_zero_fill(w, influence_count)) for w in primitives['WEIGHTS']]
-        
+        primitives['WEIGHTS'] = np.concatenate(primitives['WEIGHTS'], axis=0).tolist()
     return primitives
 
 class InjectOptions(PropertyGroup):
@@ -224,7 +238,7 @@ class InjectToUasset(Operator):
     bl_label = 'Export .uasset here'
     bl_description = 'Inject a selected asset to .uasset file'
     bl_options = {'REGISTER'}
-
+    
     directory: StringProperty(
         name="target_dir",
         default=''
@@ -286,7 +300,10 @@ class InjectToUasset(Operator):
 
             rescale=1.0            
             primitives = get_primitives(asset, armature, meshes, rescale=rescale, only_mesh=inject_options.only_mesh)
+            bpy_util.deselect_all()
+            bpy_util.select_objects([armature]+meshes)
 
+            print('Editing asset data...')
             asset.uexp.import_from_blender(primitives, only_mesh=inject_options.only_mesh)
             if inject_options.duplicate_folder_structure:
                 dirs = asset.asset_path.split('/')
@@ -302,7 +319,7 @@ class InjectToUasset(Operator):
             asset.save(asset_path+'.uasset')
 
             elapsed_s = '{:.2f}s'.format(time.time() - start_time)
-            m = 'Injected {} in {}'.format(asset_type, elapsed_s)
+            m = 'Success! Injected {} in {}'.format(asset_type, elapsed_s)
             print(m)
             self.report({'INFO'}, m)
             ret = {'FINISHED'}
@@ -311,6 +328,29 @@ class InjectToUasset(Operator):
             self.report({'ERROR'}, e.args[0])
             ret = {'CANCELLED'}
         return ret
+
+class SelectUasset(Operator):
+    bl_idname = 'select.uasset'
+    bl_label = 'Select Uasset'
+    bl_description = 'Select .uasset file you want to mod'
+
+    filter_glob: StringProperty(default='*.uasset', options={'HIDDEN'})
+
+    filepath: StringProperty(
+        name='File Path'
+    )
+
+    def draw(self, context):
+        pass
+
+    def invoke(self, context, event):
+        context.window_manager.fileselect_add(self)
+        return {'RUNNING_MODAL'}
+
+    def execute(self, context):
+
+        context.scene.general_options.source_file = self.filepath
+        return {'FINISHED'}
 
 class UASSET_PT_inject_panel(bpy.types.Panel):
     bl_label = "Inject to Uasset"
@@ -331,10 +371,12 @@ class UASSET_PT_inject_panel(bpy.types.Panel):
         col.use_property_decorate = False
         col.prop(general_options, 'ue_version')
         col.prop(general_options, 'source_file')
+        layout.operator(SelectUasset.bl_idname, text='Select Source File', icon = 'FILE')
         
 classes = (
     InjectOptions,
     InjectToUasset,
+    SelectUasset,
     UASSET_PT_inject_panel,
 )
 

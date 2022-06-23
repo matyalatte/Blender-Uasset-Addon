@@ -153,8 +153,7 @@ class StaticLOD(LOD):
         self.uv_num = len(uv_maps)
         #pos_range = self.vb.get_range()
         positions = primitives['POSITIONS']
-        vertex_count = [len(pos) for pos in positions]
-        positions = flatten(positions)
+        positions = positions
         self.vb.import_from_blender(positions)
 
         #pos_range_gltf = [max(x)-min(x), max(y)-min(y), max(z)-min(z)]
@@ -163,7 +162,7 @@ class StaticLOD(LOD):
         #    c+=pos_range_gltf[i]>(pos_range[i]*10)
         #if c>=2:
         #    positions = [[p/100 for p in pos] for pos in positions]
-        normals = flatten(primitives['NORMALS'])
+        normals = primitives['NORMALS']
         
         material_ids = primitives['MATERIAL_IDS']
         indices = primitives['INDICES']
@@ -172,6 +171,7 @@ class StaticLOD(LOD):
             self.sections += [self.sections[-1].copy() for i in range(len(material_ids)-len(self.sections))]
         self.sections=self.sections[:len(material_ids)]
 
+        vertex_count = primitives['VERTEX_COUNTS']
         face_count = [len(ids)//3 for ids in indices]
         first_vertex_id = 0
         first_ids =[]
@@ -198,7 +198,7 @@ class StaticLOD(LOD):
         v_num2=self.vb.vertex_num
         uv_num2 = self.uv_num
 
-        print('Updated LOD0.')
+        print('Updated LOD0')
         print('  sections: {} -> {}'.format(s_num1, s_num2))
         print('  faces: {} -> {}'.format(f_num1, f_num2))
         print('  vertices: {} -> {}'.format(v_num1, v_num2))
@@ -367,28 +367,27 @@ class SkeletalLOD(LOD):
         uv_maps = primitives['UV_MAPS'] #(sction count, uv count, vertex count, 2)
         self.uv_num = len(uv_maps)
         #pos_range = self.vb.get_range()
-        positions = flatten(primitives['POSITIONS'])
+        positions = primitives['POSITIONS']
         #pos_range_gltf = [max(x)-min(x), max(y)-min(y), max(z)-min(z)]
         #c=0
         #for i in range(3):
         #    c+=pos_range_gltf[i]>(pos_range[i]*10)
         #if c>=2:
         #    positions = [[p/100 for p in pos] for pos in positions]
-        normals = flatten(primitives['NORMALS'])
+        normals = primitives['NORMALS']
         self.vb.import_from_blender(normals, positions, uv_maps, self.uv_num)
-        
+        vertex_count = primitives['VERTEX_COUNTS']
         vertex_groups = primitives['VERTEX_GROUPS']
         material_ids = primitives['MATERIAL_IDS']
         joints = primitives['JOINTS']
         weights = primitives['WEIGHTS']
         indices = primitives['INDICES']
 
-        if len(self.sections)<len(joints):
-            self.sections += [self.sections[-1].copy() for i in range(len(joints)-len(self.sections))]
-        self.sections=self.sections[:len(joints)]
+        if len(self.sections)<len(material_ids):
+            self.sections += [self.sections[-1].copy() for i in range(len(material_ids)-len(self.sections))]
+        self.sections=self.sections[:len(material_ids)]
 
-        max_bone_influences = len(joints[0][0])
-        vertex_count = [len(joint) for joint in joints]
+        max_bone_influences = len(joints[0])
         face_count = [len(ids)//3 for ids in indices]
         first_vertex_id = 0
         first_ids =[]
@@ -399,7 +398,7 @@ class SkeletalLOD(LOD):
             first_vertex_id += vert_num
             first_ib_id += face_num*3
 
-        self.vb2.import_from_blender(flatten(joints), flatten(weights), max_bone_influences>4)
+        self.vb2.import_from_blender(joints, weights, max_bone_influences>4)
         self.color_vb=None
 
         indices = [[i+first_id for i in ids] for ids, first_id in zip(indices, first_ids)]
@@ -414,7 +413,7 @@ class SkeletalLOD(LOD):
         v_num2=self.vb.vertex_num
         uv_num2 = self.uv_num
 
-        print('LOD0 has been updated.')
+        print('Updated LOD0')
         print('  sections: {} -> {}'.format(s_num1, s_num2))
         print('  faces: {} -> {}'.format(f_num1, f_num2))
         print('  vertices: {} -> {}'.format(v_num1, v_num2))

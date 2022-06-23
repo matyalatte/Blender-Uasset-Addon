@@ -81,10 +81,11 @@ class Uexp:
                 print('Author: {}'.format(self.author))
             self.foot=f.read()
             check(self.foot, Uexp.UNREAL_SIGNATURE, f, 'Parse failed. (foot)')
-                        
+
+    def load_material_asset(self):
         if self.mesh is not None:
             for m in self.mesh.materials:
-                m.load_asset(file, self.asset_path, version=self.version)
+                m.load_asset(self.uasset.actual_path, self.asset_path, version=self.version)
 
     def save(self, file):
         logger.log('Saving '+file+'...', ignore_verbose=True)

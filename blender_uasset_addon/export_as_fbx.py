@@ -1,43 +1,39 @@
 import bpy
 from bpy.props import BoolProperty, PointerProperty, StringProperty, FloatProperty, EnumProperty
+from bpy_extras.io_utils import ExportHelper
 
-def get_mesh(armature):
-    if armature.type!='ARMATURE':
-        raise RuntimeError('Not an armature.')
-    mesh=None
-    for child in armature.children:
-        if child.type=='MESH':
-            if mesh is not None:
-                raise RuntimeError('"The armature should have only 1 mesh."')
-            mesh=child
-    if mesh is None:
-        raise RuntimeError('Mesh Not Found')
-    return mesh
+from . import bpy_util
+if "bpy" in locals():
+    import importlib
+    if "bpy_util" in locals():
+        importlib.reload(bpy_util)
 
-def export_as_fbx(file, armature, global_scale, smooth_type, export_tangent, use_custom_props):
+def export_as_fbx(file, armature, meshes, export_options):
     
     mode = bpy.context.object.mode
     bpy.ops.object.mode_set(mode='OBJECT')
 
-    armature_name = armature.name
-    try:
-        true_armature = bpy.data.objects['Armature']
-    except Exception as e:
-        true_armature = None
+    if armature is not None:
+        armature_name = armature.name
+        try:
+            true_armature = bpy.data.objects['Armature']
+        except Exception as e:
+            true_armature = None
 
-    if true_armature is not None:
-        true_armature.name = '__temp__'
-    armature.name = 'Armature'
+        if true_armature is not None:
+            true_armature.name = '__temp_armature_name__'
+        armature.name = 'Armature'
         
     #deselect all
-    for obj in bpy.context.scene.objects:
-        obj.select_set(False)
-
-    mesh = get_mesh(armature)
+    bpy_util.deselect_all()
 
     #select objects
-    armature.select_set(True)
-    mesh.select_set(True)
+    bpy_util.select_objects([armature]+meshes)
+
+    global_scale = export_options.fGlobalScale
+    smooth_type = export_options.smooth_type
+    export_tangent = export_options.bExportTangent
+    use_custom_props = export_options.bUseCustomProps
 
     #export as fbx
     bpy.ops.export_scene.fbx( \
@@ -60,10 +56,11 @@ def export_as_fbx(file, armature, global_scale, smooth_type, export_tangent, use
         axis_forward='-Z',
         axis_up='Y'
         )
-
-    armature.name=armature_name
-    if true_armature is not None:
-        true_armature.name='Armature'
+    
+    if armature is not None:
+        armature.name=armature_name
+        if true_armature is not None:
+            true_armature.name='Armature'
 
     bpy.ops.object.mode_set(mode=mode)
 
@@ -93,36 +90,47 @@ class ExportFbxOptions(bpy.types.PropertyGroup):
         default = False
     )
 
-class EXPORT_OT_Run_Button(bpy.types.Operator):
-    '''Export an armature and its mesh as fbx.'''
+class EXPORT_OT_Run_Button(bpy.types.Operator, ExportHelper):
     bl_idname = "export_as_fbx.run_button"
     bl_label = "Export as fbx"
+    bl_description = (
+        'Export selected armature and meshes as fbx.\n'
+        "It'll use the same export function as the default one,\n"
+        "but it's customized to prevent some user errors"
+    )
     bl_options = {'REGISTER', 'UNDO'}
-    #--- properties ---#
-    success: StringProperty(default = "Success!", options = {'HIDDEN'})
-    #--- execute ---#
+
+    filename_ext = '.fbx'
+
+    filepath: StringProperty(
+        name='File Path'
+    )
+
+    def draw(self, context):
+        layout = self.layout
+        col = layout.column()
+        col.use_property_split = True
+        col.use_property_decorate = False
+        export_options = context.scene.uasset_addon_fbx_export_options
+        for key in ['fGlobalScale', 'smooth_type', 'bExportTangent', 'bUseCustomProps']:
+            col.prop(export_options, key)
+
+
+    def invoke(self, context, event):
+        return ExportHelper.invoke(self, context, event)
+
     def execute(self, context):
         try:
-            #check save status
-            if not bpy.data.is_saved:
-                raise RuntimeError('Save .blend first.')
-            base_file_name=".".join(bpy.data.filepath.split('.')[:-1])
+            armature, meshes = bpy_util.get_selected_armature_and_meshes()
+            if armature is None and meshes==[]:
+                raise RuntimeError('Select objects')
 
-            #get armature
-            selected = bpy.context.selected_objects
-            if len(selected)==0 or selected[0].type!='ARMATURE':
-                raise RuntimeError('Select an armature.')
-
-            armature=selected[0]
-            file = base_file_name + '_' + armature.name +'.fbx'
+            file = self.filepath
             export_options = context.scene.uasset_addon_fbx_export_options
-            global_scale = export_options.fGlobalScale
-            smooth_type = export_options.smooth_type
-            export_tangent = export_options.bExportTangent
-            use_custom_props = export_options.bUseCustomProps
+            
             #main
-            export_as_fbx(file, armature, global_scale, smooth_type, export_tangent, use_custom_props)
-            self.report({'INFO'}, 'Success! {} has been generated.'.format(file))
+            export_as_fbx(file, armature, meshes, export_options)
+            self.report({'INFO'}, 'Success! Saved {}.'.format(file))
 
         except Exception as e:
             self.report({'ERROR'}, str(e))
@@ -140,19 +148,13 @@ class EXPORT_PT_Panel(bpy.types.Panel):
     #--- draw ---#
     def draw(self, context):
         layout = self.layout
-        layout.label(text='How to Use')
-        layout.label(text='1. Save .blend')
-        layout.label(text='2. Select an armature')
-        layout.label(text='3. Click the button below')
         col = layout.column()
         col.use_property_split = True
         col.use_property_decorate = False
         col.operator(EXPORT_OT_Run_Button.bl_idname, icon='MESH_DATA')
         export_options = context.scene.uasset_addon_fbx_export_options
-        col.prop(export_options, 'fGlobalScale')
-        col.prop(export_options, 'smooth_type')
-        col.prop(export_options, 'bExportTangent')
-        col.prop(export_options, 'bUseCustomProps')
+        for key in ['fGlobalScale', 'smooth_type', 'bExportTangent', 'bUseCustomProps']:
+            col.prop(export_options, key)
 
 classes = (
         ExportFbxOptions,

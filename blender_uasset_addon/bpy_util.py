@@ -21,8 +21,19 @@ def os_is_windows():
 def update_window():
     bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP', iterations=1)
 
+def move_to_object_mode():
+    bpy.context.view_layer.objects.active = bpy.context.view_layer.objects[0]
+    bpy.ops.object.mode_set(mode='OBJECT')
+
 def deselect_all():
     bpy.ops.object.select_all(action='DESELECT')
+
+def select_objects(objs):
+    for obj in objs:
+        if obj is None:
+            continue
+        obj.select_set(True)
+    return
 
 def get_meshes(armature):
     if armature is None:
@@ -64,8 +75,11 @@ def get_selected_armature_and_meshes():
     return armature, meshes
 
 def split_mesh_by_materials(mesh):
-    bpy.context.view_layer.objects.active = bpy.context.view_layer.objects[0]
-    bpy.ops.object.mode_set(mode='OBJECT')
+    if len(mesh.data.materials)==0:
+        raise RuntimeError('Mesh have no materials.')
+    if len(mesh.data.materials)==1:
+        return [mesh]
+    move_to_object_mode()
     deselect_all()
     mesh.select_set(True)
     bpy.ops.mesh.separate(type='MATERIAL')
@@ -122,7 +136,7 @@ def get_triangle_indices(mesh_data):
     mesh_data.loops.foreach_get('vertex_index', indices)
     return indices
 
-def get_vertex_weight(vertex, bone_names, mesh_vgs):
+def get_vertex_weight(vertex, vg_id_to_bone_id):
     joint = []
     weight = []
     if not vertex.groups:
@@ -130,11 +144,7 @@ def get_vertex_weight(vertex, bone_names, mesh_vgs):
 
     def get_vg_info(group_element):
         w = group_element.weight
-        name = mesh_vgs[group_element.group].name
-        if name in bone_names:
-            j = bone_names.index(name)
-        else:
-            j = -1
+        j = vg_id_to_bone_id[group_element.group]
         if j==-1 or weight==0:
             return
         joint.append(j)
@@ -143,15 +153,23 @@ def get_vertex_weight(vertex, bone_names, mesh_vgs):
     list(map(lambda x: get_vg_info(x), vertex.groups))
     return [joint, weight]
 
+#todo: too slow (it will take 75% of runtime)
 def get_weights(mesh, bone_names):
     mesh_data = mesh.data
     mesh_vgs = mesh.vertex_groups
+    def f(n, list):
+        if n in list:
+            return list.index(n)
+        else:
+            return -1
+    vg_id_to_bone_id = [f(vg.name, bone_names) for vg in mesh_vgs]
 
-    influences = [get_vertex_weight(v, bone_names, mesh_vgs) for v in mesh_data.vertices]
+    influences = [get_vertex_weight(v, vg_id_to_bone_id) for v in mesh_data.vertices]
     joints = [i[0] for i in influences]
     weights = [i[1] for i in influences]
     vertex_groups = list(set(sum(joints,[])))
-    joints = [[vertex_groups.index(j) for j in joint] for joint in joints]
+    joint_to_vg = [f(i, vertex_groups) for i in range(max(vertex_groups)+1)]
+    joints = [[joint_to_vg[j] for j in joint] for joint in joints]
     max_influence_count = max([len(j) for j in joints])
     return vertex_groups, joints, weights, max_influence_count
 

@@ -9,7 +9,9 @@ class VIEW3D_PT_urls(bpy.types.Panel):
     bl_options = {'DEFAULT_CLOSED'}
 
     urls = {
-        "Readme (git repo)" : 'https://github.com/matyalatte/Blender-Uasset-Addon'
+        "Readme" : 'https://github.com/matyalatte/Blender-Uasset-Addon',
+        'Getting Started': 'https://github.com/matyalatte/Blender-Uasset-Addon/wiki/Getting-Started',
+        'FAQ': 'https://github.com/matyalatte/Blender-Uasset-Addon/wiki/FAQ'   
     }
     icons = ['INFO']
     
