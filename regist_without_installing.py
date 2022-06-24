@@ -8,16 +8,18 @@
 #5. Uninstall blender uasset addon if you installed
 #6. Go to Edit->Preferences->File Paths->Data->Scripts
 #7. Type the directory has the modules folder
-#8. Go to Scripting Tab
-#9. Open this python script from Text->Open
-#10. Check Text->Register
-#11. Save the scene as .blend
-#12. Done! Only the .blend file will load the addon when you open it.
+#8. Close the preferences window
+#9. Go to Scripting Tab
+#10. Open this python script from Text->Open
+#11. Check Text->Register
+#12. Save the scene as .blend
+#13. Done! Only the .blend file will load the addon when you open it.
 
 #Unregstration
 #1. Launch Blender
 #2. Go to Edit->Preferences->File Paths->Data->Scripts
 #3. Type '//' as the script folder
+#4. Close the preferences window
 #5. Go to Scripting Tab
 #6. Uncheck Text->Register
 #7. Remove 'modules' folder if you want to

@@ -1,4 +1,6 @@
-v0.1.5
+v0.1.4-hotfix
+- Fixed an error when there are no visible objects in the scene
+- Changed default blend mode to Opaque (It'll be Alpha Hashed when alpha texture is detected.)
 - Changed default unit scale to meters
 
 v0.1.4
