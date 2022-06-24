@@ -22,8 +22,12 @@ def update_window():
     bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP', iterations=1)
 
 def move_to_object_mode():
-    bpy.context.view_layer.objects.active = bpy.context.view_layer.objects[0]
-    bpy.ops.object.mode_set(mode='OBJECT')
+    if bpy.context.mode=='OBJECT':
+        return
+    objs = [obj for obj in bpy.context.view_layer.objects if obj.visible_get()]
+    if len(objs)>0:
+        bpy.context.view_layer.objects.active = objs[0]
+        bpy.ops.object.mode_set(mode='OBJECT')
 
 def deselect_all():
     bpy.ops.object.select_all(action='DESELECT')
@@ -322,9 +326,11 @@ def add_material(name, color_gen=None):
     bsdf = nodes.get('Principled BSDF')
     bsdf.inputs['Specular'].default_value =0.0
     m.use_backface_culling = True
-    m.blend_method='HASHED'
-    m.shadow_method='HASHED'
     return m
+
+def enable_alpha_for_material(material):
+    material.blend_method='HASHED'
+    material.shadow_method='HASHED'
 
 #types
 #COLOR: Color map
@@ -399,3 +405,4 @@ def assign_texture(texture, material, type='COLOR', location=[-800, 300], invert
             links.new(bsdf_node.inputs['Normal'], normal_node.outputs['Normal'])
     if 'ALPHA' in type:
         links.new(bsdf_node.inputs['Alpha'], tex_node.outputs['Color'])
+        enable_alpha_for_material(material)
