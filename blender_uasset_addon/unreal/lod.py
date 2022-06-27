@@ -1,5 +1,4 @@
 from ..util.io_util import *
-from ..util.logger import logger
 
 from .lod_section import StaticLODSection, SkeletalLODSection
 from .buffer import *
@@ -28,13 +27,11 @@ class LOD:
         self.ib2 = lod.ib2
         if self.color_vb is not None:
             self.color_vb = lod.color_vb
-            if lod.color_vb is None:
-                logger.warn('The original mesh has color VB. But your mesh doesn\'t. I don\'t know if the injection works.')
         self.uv_num = lod.uv_num
-        logger.log('LOD{} has been imported.'.format(name))
-        logger.log('  faces: {} -> {}'.format(f_num1, f_num2))
-        logger.log('  vertices: {} -> {}'.format(v_num1, v_num2))
-        logger.log('  uv maps: {} -> {}'.format(uv_num1, uv_num2))
+        print('LOD{} has been imported.'.format(name))
+        print('  faces: {} -> {}'.format(f_num1, f_num2))
+        print('  vertices: {} -> {}'.format(v_num1, v_num2))
+        print('  uv maps: {} -> {}'.format(uv_num1, uv_num2))
 
     #get all buffers LOD has
     def get_buffers(self):
@@ -94,8 +91,6 @@ class StaticLOD(LOD):
         reversed_ib2 = StaticIndexBuffer.read(f, name='Reversed_IB2') #ReversedDepthOnlyIndexBuffer
         adjacency_ib =StaticIndexBuffer.read(f, name='Adjacency_IB') #AdjacencyIndexBuffer
         unk = f.read(24)
-
-
         return StaticLOD(offset, sections, flags, vb, vb2, color_vb, ib, ib2, reversed_ib, reversed_ib2, adjacency_ib, unk)
 
     def write(f, lod):
@@ -116,12 +111,12 @@ class StaticLOD(LOD):
 
     def print(self, i, padding=0):
         pad=' '*padding
-        logger.log(pad+'LOD{} (offset: {})'.format(i, self.offset))
+        print(pad+'LOD{} (offset: {})'.format(i, self.offset))
         for j in range(len(self.sections)):
             self.sections[j].print(j, padding=padding+2)
-        logger.log(pad+'  face_num: {}'.format(self.face_num))
-        logger.log(pad+'  vertex_num: {}'.format(self.vb.vertex_num))
-        logger.log(pad+'  uv_num: {}'.format(self.uv_num))
+        print(pad+'  face_num: {}'.format(self.face_num))
+        print(pad+'  vertex_num: {}'.format(self.vb.vertex_num))
+        print(pad+'  uv_num: {}'.format(self.uv_num))
         for buf in self.get_buffers():
             buf.print(padding=padding+2)
 
@@ -165,6 +160,8 @@ class StaticLOD(LOD):
         self.sections=self.sections[:len(material_ids)]
 
         vertex_count = primitives['VERTEX_COUNTS']
+        if self.color_vb.buf is not None:
+            self.color_vb.update(sum(vertex_count))
         face_count = [len(ids)//3 for ids in indices]
         first_vertex_id = 0
         first_ids =[]
@@ -294,13 +291,13 @@ class SkeletalLOD(LOD):
 
     def print(self, name, bones, padding=0):
         pad=' '*padding
-        logger.log(pad+'LOD '+name+' (offset: {})'.format(self.offset))
+        print(pad+'LOD '+name+' (offset: {})'.format(self.offset))
         for i in range(len(self.sections)):
             self.sections[i].print(str(i),bones, padding=padding+2)
         pad+=' '*2
-        logger.log(pad+'  face num: {}'.format(self.ib.size//3))
-        logger.log(pad+'  vertex num: {}'.format(self.vb.vertex_num))
-        logger.log(pad+'  uv num: {}'.format(self.uv_num))
+        print(pad+'  face num: {}'.format(self.ib.size//3))
+        print(pad+'  vertex num: {}'.format(self.vb.vertex_num))
+        print(pad+'  uv num: {}'.format(self.uv_num))
         for buf in self.get_buffers():
             if buf is not None:
                 buf.print(padding=padding+2)
@@ -344,17 +341,12 @@ class SkeletalLOD(LOD):
         self.required_bone_ids = bone_ids
         uv_maps = primitives['UV_MAPS'] #(sction count, uv count, vertex count, 2)
         self.uv_num = len(uv_maps)
-        #pos_range = self.vb.get_range()
         positions = primitives['POSITIONS']
-        #pos_range_gltf = [max(x)-min(x), max(y)-min(y), max(z)-min(z)]
-        #c=0
-        #for i in range(3):
-        #    c+=pos_range_gltf[i]>(pos_range[i]*10)
-        #if c>=2:
-        #    positions = [[p/100 for p in pos] for pos in positions]
         normals = primitives['NORMALS']
         self.vb.import_from_blender(normals, positions, uv_maps, self.uv_num)
         vertex_count = primitives['VERTEX_COUNTS']
+        if self.color_vb is not None:
+            self.color_vb.update(sum(vertex_count))
         vertex_groups = primitives['VERTEX_GROUPS']
         material_ids = primitives['MATERIAL_IDS']
         joints = primitives['JOINTS']

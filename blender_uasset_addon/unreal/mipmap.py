@@ -59,6 +59,7 @@ class Mipmap(c.LittleEndianStructure):
         print(pad + 'height: {}'.format(self.height))
 
     def write(self, f):
+        self.offset_to_offset_data=f.tell()+16
         if self.uexp:
             if self.meta:
                 self.ubulk_flag=32
@@ -81,3 +82,9 @@ class Mipmap(c.LittleEndianStructure):
         write_uint32(f, self.height)
         if self.version in ['4.25', '4.27', '4.20']:
             write_uint32(f, 1)
+
+    def rewrite_offset(self, f):
+        current_offset = f.tell()
+        f.seek(self.offset_to_offset_data)
+        write_uint64(f, self.offset)
+        f.seek(current_offset)

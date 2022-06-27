@@ -20,8 +20,10 @@ if __name__=="__main__":
     file = args.file
     if file[-4:]=='uexp':
         file = file[:-4]+'uasset'
+    if file[-5:]=='ubulk':
+        file = file[:-5]+'uasset'
     version=args.version
-    uasset = unreal.uasset.Uasset(file, version=version)
+    uasset = unreal.uasset.Uasset(file, version=version, verbose=True)
     save_folder = '__temp__'
     if os.path.exists(save_folder):
         shutil.rmtree(save_folder)

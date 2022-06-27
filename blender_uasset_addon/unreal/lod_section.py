@@ -1,5 +1,4 @@
 from ..util.io_util import *
-from ..util.logger import logger
 
 #Base class for LOD sections
 class LODSection:
@@ -43,14 +42,14 @@ class StaticLODSection(LODSection):
 
     def print(self, i, padding=2):
         pad = ' '*padding
-        logger.log(pad+'section{}'.format(i))
-        logger.log(pad+'  material_id: {}'.format(self.material_id))
-        logger.log(pad+'  first_ib_id: {}'.format(self.first_ib_id))
-        logger.log(pad+'  face_num: {}'.format(self.face_num))
-        logger.log(pad+'  first_vertex_id: {}'.format(self.first_vertex_id))
-        logger.log(pad+'  last_vertex_id: {}'.format(self.last_vertex_id))
-        logger.log(pad+'  enable_collision: {}'.format(self.enable_collision>0))
-        logger.log(pad+'  cast_shadow: {}'.format(self.cast_shadow>0))
+        print(pad+'section{}'.format(i))
+        print(pad+'  material_id: {}'.format(self.material_id))
+        print(pad+'  first_ib_id: {}'.format(self.first_ib_id))
+        print(pad+'  face_num: {}'.format(self.face_num))
+        print(pad+'  first_vertex_id: {}'.format(self.first_vertex_id))
+        print(pad+'  last_vertex_id: {}'.format(self.last_vertex_id))
+        print(pad+'  enable_collision: {}'.format(self.enable_collision>0))
+        print(pad+'  cast_shadow: {}'.format(self.cast_shadow>0))
 
     def import_from_blender(self, material_id, first_vertex_id, vert_num, first_ib_id, face_num):
         self.material_id=material_id
@@ -173,18 +172,18 @@ class SkeletalLODSection(LODSection):
 
     def print(self, name, bones, padding=2):
         pad = ' '*padding
-        logger.log(pad+'section '+name)
-        logger.log(pad+'  material_id: {}'.format(self.material_id))
-        logger.log(pad+'  first_ib_id: {}'.format(self.first_ib_id))
-        logger.log(pad+'  face_num: {}'.format(self.face_num))
-        logger.log(pad+'  first_vertex_id: {}'.format(self.first_vertex_id))
+        print(pad+'section '+name)
+        print(pad+'  material_id: {}'.format(self.material_id))
+        print(pad+'  first_ib_id: {}'.format(self.first_ib_id))
+        print(pad+'  face_num: {}'.format(self.face_num))
+        print(pad+'  first_vertex_id: {}'.format(self.first_vertex_id))
         vg_name=SkeletalLODSection.bone_ids_to_name(self.vertex_group, bones)
-        logger.log(pad+'  vertex_group: {}'.format(vg_name))
-        logger.log(pad+'  vertex_num: {}'.format(self.vertex_num))
-        logger.log(pad+'  max bone influences: {}'.format(self.max_bone_influences))
+        print(pad+'  vertex_group: {}'.format(vg_name))
+        print(pad+'  vertex_num: {}'.format(self.vertex_num))
+        print(pad+'  max bone influences: {}'.format(self.max_bone_influences))
         if self.unk2 is not None:
-            logger.log(pad+'  KDI flag: {}'.format(self.unk1==True))
-            logger.log(pad+'  vertices influenced by KDI: {}'.format(len(self.unk2)//16))
+            print(pad+'  KDI flag: {}'.format(self.unk1==True))
+            print(pad+'  vertices influenced by KDI: {}'.format(len(self.unk2)//16))
 
     def import_from_blender(self, vertex_group, material_id, first_vertex_id, vertex_num, first_ib_id, face_num, max_bone_influences):
         self.material_id = material_id

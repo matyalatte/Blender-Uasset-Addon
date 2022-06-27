@@ -1,5 +1,4 @@
 from ..util.io_util import *
-from ..util.logger import logger
 #from ..gltf.bone import Bone as gltfBone
 #from ..gltf.gltf import glTF
 import struct
@@ -58,7 +57,7 @@ class Bone:
         pad=' '*padding
         i=0
         for b in bones:
-            logger.log(pad+'id: '+str(i)+', name: '+b.name+', parent: '+b.parent_name)
+            print(pad+'id: '+str(i)+', name: '+b.name+', parent: '+b.parent_name)
             i+=1
 
     def name_bones(bones, name_list):
@@ -176,8 +175,8 @@ class Skeleton:
 
     def print(self, padding=0):
         pad=' '*padding
-        logger.log(pad+'Skeleton (offset: {})'.format(self.offset))
-        logger.log(pad+'  bone_num: {}'.format(len(self.bones)))
+        print(pad+'Skeleton (offset: {})'.format(self.offset))
+        print(pad+'  bone_num: {}'.format(len(self.bones)))
         Bone.print_bones(self.bones, padding=2+padding)
 
 #Skeleton data for skeleton assets (*_Skeleton.uexp)
@@ -186,7 +185,7 @@ class SkeletonAsset:
     #bones2: there is more bone data. I don't known how it works.
 
     MAGIC = b'\x00\x02\x01\x02\x01\x03'
-    def __init__(self, f, name_list):
+    def __init__(self, f, name_list, verbose=False):
         self.offset=f.tell()
         magic = f.read(6)
         check(magic, SkeletonAsset.MAGIC, f, "Not FF7R's asset.")
@@ -214,10 +213,12 @@ class SkeletonAsset:
         #self.name_to_index_map=read_array(f, Bone.read)
 
         self.name_bones(name_list)
-        self.print()
 
-    def read(f, name_list):
-        return SkeletonAsset(f, name_list)
+        if verbose:
+            self.print()
+
+    def read(f, name_list, verbose=False):
+        return SkeletonAsset(f, name_list, verbose=verbose)
 
     def write(f, skeleton):
         f.write(SkeletonAsset.MAGIC)
@@ -267,6 +268,6 @@ class SkeletonAsset:
 
     def print(self, padding=0):
         pad=' '*padding
-        logger.log(pad+'Skeleton (offset: {})'.format(self.offset))
-        logger.log(pad+'  bone_num: {}'.format(len(self.bones)))
+        print(pad+'Skeleton (offset: {})'.format(self.offset))
+        print(pad+'  bone_num: {}'.format(len(self.bones)))
         Bone.print_bones(self.bones, padding=2+padding)

@@ -1,5 +1,4 @@
 from ..util.io_util import *
-from ..util.logger import logger
 
 #Base class for buffers
 class Buffer:
@@ -24,10 +23,10 @@ class Buffer:
 
     def print(self, padding=2):
         pad = ' '*padding
-        logger.log(pad+'{} (offset: {})'.format(self.name, self.offset))
+        print(pad+'{} (offset: {})'.format(self.name, self.offset))
         _, stride, size = self.get_meta()
-        logger.log(pad+'  stride: {}'.format(stride))
-        logger.log(pad+'  size: {}'.format(size))
+        print(pad+'  stride: {}'.format(stride))
+        print(pad+'  size: {}'.format(size))
 
     def dump(file, buffer):
         with open(file, 'wb') as f:
@@ -150,6 +149,11 @@ class ColorVertexBuffer(VertexBuffer):
         write_uint32(f, vb.vertex_num)
         if vb.buf is not None:
             Buffer.write(f, vb)
+
+    def update(self, vertex_count):
+        self.vertex_num=vertex_count
+        self.size=vertex_count
+        self.buf = b'ff'*self.size*self.stride
     
     def disable(self):
         self.buf = None

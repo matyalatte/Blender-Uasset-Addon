@@ -3,7 +3,6 @@ import os
 
 #my libs
 from ..util.io_util import *
-from ..util.logger import logger
 from ..util.cipher import Cipher
 from .mesh import StaticMesh, SkeletalMesh
 from .skeleton import SkeletonAsset
@@ -13,10 +12,10 @@ class Uexp:
 
     UNREAL_SIGNATURE=b'\xC1\x83\x2A\x9E'
     
-    def __init__(self, file, uasset):
-        self.load(file, uasset)
+    def __init__(self, file, uasset, verbose=False):
+        self.load(file, uasset, verbose=verbose)
 
-    def load(self, file, uasset):
+    def load(self, file, uasset, verbose=False):
         if file[-4:]!='uexp':
             raise RuntimeError('Not .uexp! ({})'.format(file))
         if not os.path.exists(file):
@@ -32,8 +31,10 @@ class Uexp:
         self.version=self.uasset.version
         self.ff7r = self.version=='ff7r'
         self.asset_type = self.uasset.asset_type
-        logger.log('FF7R: {}'.format(self.ff7r))
-        logger.log('Asset type: {}'.format(self.asset_type))
+
+        if verbose:
+            print('FF7R: {}'.format(self.ff7r))
+            print('Asset type: {}'.format(self.asset_type))
 
         #check materials
         if self.asset_type in ['SkeletalMesh', 'StaticMesh']:
@@ -44,7 +45,7 @@ class Uexp:
             if not has_material:
                 raise RuntimeError('Material slot is empty. Be sure materials are assigned correctly in UE4.')
 
-        #logger.log('Loading '+file+'...', ignore_verbose=True)
+        #print('Loading '+file+'...', ignore_verbose=True)
         #open .uexp
         self.mesh=None
         self.skeleton=None
@@ -54,21 +55,22 @@ class Uexp:
                     raise RuntimeError('Parse failed.')
 
                 if export.ignore:
-                    logger.log('{} (offset: {})'.format(export.name, f.tell()))
-                    logger.log('  size: {}'.format(export.size))
+                    if verbose:
+                        print('{} (offset: {})'.format(export.name, f.tell()))
+                        print('  size: {}'.format(export.size))
                     export.read_uexp(f)
                     
                 else:
                     #'SkeletalMesh', 'StaticMesh', 'Skeleton'
                     if self.asset_type=='SkeletalMesh':
-                        self.mesh=SkeletalMesh.read(f, self.ff7r, self.name_list, self.imports)
+                        self.mesh=SkeletalMesh.read(f, self.ff7r, self.name_list, self.imports, verbose=verbose)
                         self.skeleton = self.mesh.skeleton
                     elif self.asset_type=='StaticMesh':
-                        self.mesh=StaticMesh.read(f, self.ff7r, self.name_list, self.imports)
+                        self.mesh=StaticMesh.read(f, self.ff7r, self.name_list, self.imports, verbose=verbose)
                     elif self.asset_type=='Skeleton':
-                        self.skeleton = SkeletonAsset.read(f, self.name_list)
+                        self.skeleton = SkeletonAsset.read(f, self.name_list, verbose=verbose)
                     elif 'Texture' in self.asset_type:
-                        self.texture = Texture.read(f, self.uasset)
+                        self.texture = Texture.read(f, self.uasset, verbose=verbose)
                     self.unknown2=f.read(export.offset+export.size-f.tell()-self.uasset.size)
 
             #footer
@@ -77,7 +79,7 @@ class Uexp:
             self.meta=f.read(size-offset-4)
             self.author = Cipher.decrypt(self.meta)                
 
-            if self.author!='':
+            if self.author!='' and verbose:
                 print('Author: {}'.format(self.author))
             self.foot=f.read()
             check(self.foot, Uexp.UNREAL_SIGNATURE, f, 'Parse failed. (foot)')
@@ -88,7 +90,7 @@ class Uexp:
                 m.load_asset(self.uasset.actual_path, self.asset_path, version=self.version)
 
     def save(self, file):
-        logger.log('Saving '+file+'...', ignore_verbose=True)
+        print('Saving '+file+'...')
         with open(file, 'wb') as f:
             for export in self.exports:
                 offset=f.tell()
@@ -160,9 +162,9 @@ class Uexp:
     def embed_string(self, string):
         self.author=string
         self.meta=Cipher.encrypt(string)
-        logger.log('A string has been embedded into uexp.', ignore_verbose=True)
-        logger.log('  string: {}'.format(string))
-        logger.log('  size: {}'.format(len(self.meta)), ignore_verbose=True)
+        print('A string has been embedded into uexp.')
+        print('  string: {}'.format(string))
+        print('  size: {}'.format(len(self.meta)))
 
     def get_author(self):
         return self.author
@@ -171,5 +173,5 @@ class Uexp:
         if self.asset_type!='SkeletalMesh':
             raise RuntimeError('Unsupported feature for static mesh')
         self.mesh.add_material_slot(self.imports, self.name_list, self.uasset.file_data_ids)
-        logger.log('Added a new material slot', ignore_verbose=True)
+        print('Added a new material slot')
 

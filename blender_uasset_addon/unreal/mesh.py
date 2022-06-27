@@ -1,9 +1,8 @@
 import os, json, struct
 from ..util.io_util import *
-from ..util.logger import logger
 
 from .lod import StaticLOD, SkeletalLOD
-from .skeleton import Skeleton, Bone
+from .skeleton import Skeleton
 from .material import Material, StaticMaterial, SkeletalMaterial
 from .buffer import Buffer
 
@@ -19,7 +18,7 @@ class Mesh:
 
         self.LODs=[self.LODs[0]]
 
-        logger.log('Removed LOD1~{}'.format(num-1), ignore_verbose=True)
+        print('Removed LOD1~{}'.format(num-1))
 
     def dump_buffers(self, save_folder):
         logs={}
@@ -112,7 +111,7 @@ class StaticMesh(Mesh):
         self.materials = materials
         self.LODs = LODs
         
-    def read(f, ff7r, name_list, imports):
+    def read(f, ff7r, name_list, imports, verbose=False):
         offset=f.tell()
         Mesh.seek_materials(f, imports)
         f.seek(-10-(51+21)*(not ff7r),1)
@@ -126,8 +125,12 @@ class StaticMesh(Mesh):
                 Mesh.seek_materials(f, imports)
                 f.seek(-6, 1)
             materials.append(StaticMaterial.read(f))
-            
-        Material.print_materials(materials, name_list, imports, material_offset)
+        
+        Material.update_material_data(materials, name_list, imports)
+        if verbose:
+            print('Materials (offset: {})'.format(material_offset))
+            for material in materials:
+                material.print()
         
         buf=f.read(6)
         while (buf!=b'\x01\x00\x01\x00\x00\x00'):
@@ -137,8 +140,9 @@ class StaticMesh(Mesh):
         f.seek(offset)
         unk = f.read(unk_size)
         LODs = read_array(f, StaticLOD.read)
-        for i in range(len(LODs)):
-            LODs[i].print(i)
+        if verbose:
+            for i in range(len(LODs)):
+                LODs[i].print(i)
         return StaticMesh(unk, materials, LODs)
 
     def write(f, staticmesh):
@@ -166,7 +170,7 @@ class SkeletalMesh(Mesh):
         self.LODs=LODs
         self.extra_mesh=extra_mesh
         
-    def read(f, ff7r, name_list, imports):
+    def read(f, ff7r, name_list, imports, verbose=False):
         offset=f.tell()
 
         Mesh.seek_materials(f, imports)
@@ -177,26 +181,34 @@ class SkeletalMesh(Mesh):
 
         material_offset=f.tell()
         materials=read_array(f, SkeletalMaterial.read)
-        Material.print_materials(materials, name_list, imports, material_offset)
+        Material.update_material_data(materials, name_list, imports)
+        if verbose:
+            print('Materials (offset: {})'.format(material_offset))
+            for material in materials:
+                material.print()
 
         #skeleton data
         skeleton=Skeleton.read(f)
         skeleton.name_bones(name_list)
-        skeleton.print()
+
+        if verbose:
+            skeleton.print()
 
         #LOD data
         LOD_num=read_uint32(f)
         LODs=[]
         for i in range(LOD_num):
             lod=SkeletalLOD.read(f, ff7r=ff7r)
-            lod.print(str(i), skeleton.bones)
+            if verbose:
+                lod.print(str(i), skeleton.bones)
             LODs.append(lod)
 
         #mesh data?
         if ff7r:
             read_const_uint32(f, 1)
             extra_mesh=ExtraMesh.read(f, skeleton.bones)
-            extra_mesh.print()
+            if verbose:
+                extra_mesh.print()
         else:
             extra_mesh=None
         return SkeletalMesh(ff7r, unk, materials, skeleton, LODs, extra_mesh)
@@ -209,7 +221,6 @@ class SkeletalMesh(Mesh):
         if skeletalmesh.ff7r:
             write_uint32(f, 1)
             ExtraMesh.write(f, skeletalmesh.extra_mesh)
-
 
     def import_LODs(self, skeletalmesh, imports, name_list, file_data_ids, only_mesh=False, only_phy_bones=False,
                     dont_remove_KDI=False):
@@ -235,7 +246,6 @@ class SkeletalMesh(Mesh):
             added_num = len(skeletalmesh.materials)-len(self.materials)
             for i in range(added_num):
                 self.add_material_slot(imports, name_list, file_data_ids, skeletalmesh.materials[len(self.materials)])
-            logger.warn('Added {} materials. You may need to edit name table to use the new materials.'.format(added_num))
 
         super().import_LODs(skeletalmesh, imports, name_list, file_data_ids, ignore_material_names=ignore_material_names)
 
@@ -249,7 +259,7 @@ class SkeletalMesh(Mesh):
         for lod in self.LODs:
             lod.remove_KDI()
 
-        logger.log("KDI buffers have been removed.")
+        print("KDI buffers have been removed.")
 
     def import_from_blender(self, primitives, imports, name_list, file_data_ids, only_mesh = True):
         bones = primitives['BONES']
@@ -281,32 +291,6 @@ class ExtraMesh:
         self.weight_buffer=b''
         self.ib=b''
 
-    def update_bone_ids(self, new_bones):
-        new_bone_names = [b.name for b in new_bones]
-        id_map = [0]*len(self.names)
-        missing_bones = []
-        for name, i in zip(self.names, range(len(self.names))):
-            if name not in new_bone_names:
-                missing_bones.append(name)
-                continue
-            id_map[i]=new_bone_names.index(name)
-        if len(missing_bones)>0:
-            if len(missing_bones)>10:
-                logger.warn('Some existing bones are missing. It might corrupt animations. {}'.format(missing_bones[:10] + ['...']))
-            else:
-                logger.warn('Some existing bones are missing. It might corrupt animations. {}'.format(missing_bones))
-            return
-
-        ids = [self.weight_buffer[i*8:i*8+8] for i in range(len(self.vb)//12)]
-        def update(ids):
-            for i in range(4):
-                ids[i]=id_map[ids[i]]
-                if ids[i+4]==0:
-                    break
-            return ids
-        ids = [update(i) for i in ids]
-        self.weight_buffer=[x for row in ids for x in row]
-
     def read(f, bones):
         return ExtraMesh(f, bones)
 
@@ -324,6 +308,6 @@ class ExtraMesh:
 
     def print(self, padding=0):
         pad=' '*padding
-        logger.log(pad+'Mesh (offset: {})'.format(self.offset))
-        logger.log(pad+'  vertex_num: {}'.format(len(self.vb)//12))
-        logger.log(pad+'  face_num: {}'.format(len(self.ib)//6))
+        print(pad+'Mesh (offset: {})'.format(self.offset))
+        print(pad+'  vertex_num: {}'.format(len(self.vb)//12))
+        print(pad+'  face_num: {}'.format(len(self.ib)//6))

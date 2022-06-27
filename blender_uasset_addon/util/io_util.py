@@ -1,5 +1,4 @@
 import os, struct, tempfile
-from .logger import logger
 
 #make a temp file and return its path. you need to delete the file by your self
 def make_temp_file(suffix=None):
@@ -24,9 +23,9 @@ def get_size(file):
 def check(actual, expected, f=None, msg='Parse failed. This is unexpected error.'):
     if actual!=expected:
         if f is not None:
-            logger.log('offset: {}'.format(f.tell()), ignore_verbose=True)
-        logger.log('actual: {}'.format(actual), ignore_verbose=True)
-        logger.log('expected: {}'.format(expected), ignore_verbose=True)
+            print('offset: {}'.format(f.tell()))
+        print('actual: {}'.format(actual))
+        print('expected: {}'.format(expected))
         raise RuntimeError(msg)
 
 def read_uint32(file):

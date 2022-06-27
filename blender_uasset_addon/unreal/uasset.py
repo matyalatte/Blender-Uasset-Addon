@@ -1,5 +1,4 @@
 from ..util.io_util import *
-from ..util.logger import logger
 from .uexp import Uexp
 import ctypes as c
 
@@ -44,19 +43,19 @@ class UassetHeader(c.LittleEndianStructure):
         check(-self.version-1, 6)
 
     def print(self):
-        logger.log('Header info')
-        logger.log('  file size: {}'.format(self.uasset_size))
-        logger.log('  number of names: {}'.format(self.name_count))
-        logger.log('  name directory offset: 193')
-        logger.log('  number of exports: {}'.format(self.export_count))
-        logger.log('  export directory offset: {}'.format(self.export_offset))
-        logger.log('  number of imports: {}'.format(self.import_count))
-        logger.log('  import directory offset: {}'.format(self.import_offset))
-        logger.log('  end offset of export: {}'.format(self.end_to_export))
-        logger.log('  padding offset: {}'.format(self.padding_offset))
-        logger.log('  file length (uasset+uexp-4): {}'.format(self.file_length))
-        logger.log('  file data count: {}'.format(self.file_data_count))
-        logger.log('  file data offset: {}'.format(self.file_data_offset))
+        print('Header info')
+        print('  file size: {}'.format(self.uasset_size))
+        print('  number of names: {}'.format(self.name_count))
+        print('  name directory offset: 193')
+        print('  number of exports: {}'.format(self.export_count))
+        print('  export directory offset: {}'.format(self.export_offset))
+        print('  number of imports: {}'.format(self.import_count))
+        print('  import directory offset: {}'.format(self.import_offset))
+        print('  end offset of export: {}'.format(self.end_to_export))
+        print('  padding offset: {}'.format(self.padding_offset))
+        print('  file length (uasset+uexp-4): {}'.format(self.file_length))
+        print('  file data count: {}'.format(self.file_data_count))
+        print('  file data offset: {}'.format(self.file_data_offset))
 
 #import data of .uasset
 class UassetImport(c.LittleEndianStructure): 
@@ -81,10 +80,10 @@ class UassetImport(c.LittleEndianStructure):
 
     def print(self, str = '', padding=2):
         pad = ' '*padding
-        logger.log(pad+str+': ' + self.name)
-        logger.log(pad+'  class: '+self.class_name)
-        logger.log(pad+'  parent dir: '+self.parent_dir)
-        logger.log(pad+'  parent import: ' + self.parent_name)
+        print(pad+str+': ' + self.name)
+        print(pad+'  class: '+self.class_name)
+        print(pad+'  parent dir: '+self.parent_dir)
+        print(pad+'  parent import: ' + self.parent_name)
 
     def copy(self):
         copied = UassetImport()
@@ -149,15 +148,15 @@ class UassetExport(c.LittleEndianStructure):
 
     def print(self, padding=2):
         pad=' '*padding
-        logger.log(pad+self.name)
-        logger.log(pad+'  class: {}'.format(self.class_name))
-        logger.log(pad+'  import: {}'.format(self.import_name))
-        logger.log(pad+'  size: {}'.format(self.size))
-        logger.log(pad+'  offset: {}'.format(self.offset))
+        print(pad+self.name)
+        print(pad+'  class: {}'.format(self.class_name))
+        print(pad+'  import: {}'.format(self.import_name))
+        print(pad+'  size: {}'.format(self.size))
+        print(pad+'  offset: {}'.format(self.offset))
 
 class Uasset:
 
-    def __init__(self, file, version='ff7r', ignore_uexp=False, asset_type=''):
+    def __init__(self, file, version='ff7r', ignore_uexp=False, asset_type='', verbose=False):
         ext = get_ext(file)
         base = file[:-len(ext)]
         if ext!='uasset':
@@ -166,7 +165,7 @@ class Uasset:
             else:
                 file = base+'uasset'
 
-        logger.log('Loading '+file+'...', ignore_verbose=True)
+        print('Loading '+file+'...')
 
         self.actual_path = file
         self.file=os.path.basename(file)[:-7]
@@ -179,16 +178,18 @@ class Uasset:
             f.readinto(self.header)
             self.header.check()
 
-            logger.log('size: {}'.format(self.size))
-            self.header.print()
+            if verbose:
+                print('size: {}'.format(self.size))
+                self.header.print()
             
-            logger.log('Name list')
+                print('Name list')
             
             #read name table
             def read_names(f, i):
                 name = read_str(f)
                 hash = f.read(4)
-                logger.log('  {}: {}'.format(i, name))
+                if verbose:
+                    print('  {}: {}'.format(i, name))
                 return name, hash
             names = [read_names(f, i) for i in range(self.header.name_count)]
             self.name_list = [x[0] for x in names]
@@ -198,8 +199,9 @@ class Uasset:
             check(self.header.import_offset, f.tell(), f)
             self.imports=read_struct_array(f, UassetImport, len=self.header.import_count)
             name_imports(self.imports, self.name_list)
-            logger.log('Import')
-            [x.print(str(i)) for x,i in zip(self.imports, range(len(self.imports)))]
+            if verbose:
+                print('Import')
+                [x.print(str(i)) for x,i in zip(self.imports, range(len(self.imports)))]
 
             paths = [n for n in self.name_list if n[0]=='/']
             import_names = list(set([imp.name for imp in self.imports] + [imp.parent_dir for imp in self.imports]))
@@ -207,7 +209,7 @@ class Uasset:
                 if imp in paths:
                     paths.remove(imp)
             if len(paths)!=1:
-                logger.log(paths)
+                print(paths)
                 raise RuntimeError('Failed to get asset path.')
             self.asset_path = paths[0]
 
@@ -218,8 +220,9 @@ class Uasset:
             if asset_type not in self.asset_type:
                 raise RuntimeError('Not {}.'.format(asset_type))
 
-            logger.log('Export')
-            list(map(lambda x: x.print(), self.exports))
+            if verbose:
+                print('Export')
+                list(map(lambda x: x.print(), self.exports))
             check(self.header.end_to_export, f.tell())
 
             read_null_array(f, self.header.padding_count)
@@ -232,9 +235,9 @@ class Uasset:
             for i in self.file_data_ids:
                 if i<0:
                     i = -i-1
-                    logger.log(self.imports[i].name)
+                    print(self.imports[i].name)
                 else:
-                    logger.log(i)
+                    print(i)
             '''
 
             check(f.tell(), self.size)
@@ -243,7 +246,7 @@ class Uasset:
         if ignore_uexp:
             return
         
-        self.uexp = Uexp(base+'uexp', self)
+        self.uexp = Uexp(base+'uexp', self, verbose=verbose)
     
     def save(self, file):
         ext = get_ext(file)
@@ -261,7 +264,7 @@ class Uasset:
         uexp_file = base+'uexp'
         uexp_size = self.uexp.save(uexp_file)
         
-        logger.log('Saving '+file+'...', ignore_verbose=True)
+        print('Saving '+file+'...')
         with open(file, 'wb') as f:
             #skip header part
             f.seek(193)
