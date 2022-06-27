@@ -1,5 +1,6 @@
 v0.1.5
-- Fiexed a bug it won't work for Blender 2.8x
+- Fixed a bug it won't work for Blender 2.8x
+- Fixed an error when importing some skeleton assets.
 - Refine codes
 
 v0.1.4-hotfix

@@ -13,17 +13,19 @@ if __name__=="__main__":
         parser = argparse.ArgumentParser()
         parser.add_argument('file', help='.uasset')
         parser.add_argument('--version', default='5.0', help='UE version')
+        parser.add_argument('--verbose', action='store_true')
         args = parser.parse_args()
         return args
 
     args = get_args()
     file = args.file
+    verbose = args.verbose
     if file[-4:]=='uexp':
         file = file[:-4]+'uasset'
     if file[-5:]=='ubulk':
         file = file[:-5]+'uasset'
     version=args.version
-    uasset = unreal.uasset.Uasset(file, version=version, verbose=True)
+    uasset = unreal.uasset.Uasset(file, version=version, verbose=verbose)
     save_folder = '__temp__'
     if os.path.exists(save_folder):
         shutil.rmtree(save_folder)

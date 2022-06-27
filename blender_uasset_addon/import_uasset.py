@@ -270,17 +270,16 @@ def load_uasset(file, rename_armature=True, keep_sections=False,
     bpy_util.move_to_object_mode()
 
     #add a skeleton to scene
-    if keep_sections or (not rename_armature) or asset_type=='Skeleton':
-        name = asset.name
-    else:
-        name = 'Armature'
+    
 
     if asset.uexp.skeleton is not None:
         bones = asset.uexp.skeleton.bones
-        amt = generate_armature(name, bones, normalize_bones, rotate_bones, minimal_bone_length, rescale=rescale)
+        amt = generate_armature(asset.name, bones, normalize_bones, rotate_bones, minimal_bone_length, rescale=rescale)
         amt.data.show_axes = show_axes
         amt.data.display_type = bone_display_type
-        bpy.ops.object.mode_set(mode='OBJECT')
+        if rename_armature:
+            amt.name = 'Armature'
+        bpy.ops.object.mode_set(mode='OBJECT')        
     else:
         amt = None
 

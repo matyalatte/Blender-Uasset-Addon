@@ -184,17 +184,19 @@ class SkeletonAsset:
     #bones: bone data
     #bones2: there is more bone data. I don't known how it works.
 
-    MAGIC = b'\x00\x02\x01\x02\x01\x03'
     def __init__(self, f, name_list, verbose=False):
         self.offset=f.tell()
-        magic = f.read(6)
-        check(magic, SkeletonAsset.MAGIC, f, "Not FF7R's asset.")
-        bone_num = read_uint32(f)
-        unk = f.read(bone_num*3)
-        check(unk, b'\x82\x03\x01'*bone_num, f)
-        self.guid = f.read(16)
-        self.unk_ids = read_uint32_array(f)
-        read_null(f)
+        b=f.read(4)
+        while (b!=b'\xff'*4):
+            if b'\xff' not in b:
+                b=f.read(4)
+            else:
+                b=b''.join([b[1:], f.read(1)])
+            if f.tell()>500000:
+                raise RuntimeError('failed to parse')
+        offset = f.tell() - 16 - self.offset
+        f.seek(self.offset)
+        self.unk = f.read(offset)
         
         self.bones = read_array(f, Bone.read)
 
@@ -221,13 +223,7 @@ class SkeletonAsset:
         return SkeletonAsset(f, name_list, verbose=verbose)
 
     def write(f, skeleton):
-        f.write(SkeletonAsset.MAGIC)
-        bone_num = len(skeleton.bones)
-        write_uint32(f, bone_num)
-        f.write(b'\x82\x03\x01'*bone_num)
-        f.write(skeleton.guid)
-        write_uint32_array(f, skeleton.unk_ids, with_length=True)
-        write_null(f)
+        f.write(skeleton.unk)
         write_array(f, skeleton.bones, Bone.write, with_length=True)
         write_array(f, skeleton.bones, Bone.write_pos, with_length=True)
         write_uint32(f, len(skeleton.bones))
