@@ -35,7 +35,7 @@ def generate_armature(name, bones, normalize_bones=True, rotate_bones=False, min
         trans = Vector((bone.trans[0], -bone.trans[1], bone.trans[2])) * rescale_factor
         rot = Quaternion((-bone.rot[3], bone.rot[0], -bone.rot[1], bone.rot[2]))
         scale = Vector((bone.scale[0], bone.scale[1], bone.scale[2]))
-        bone.trs = Matrix.LocRotScale(trans, rot, scale)
+        bone.trs = bpy_util.make_trs(trans, rot, scale)
         bone.trans = trans
     list(map(lambda b: cal_trs(b), bones))
             
@@ -72,7 +72,7 @@ def generate_armature(name, bones, normalize_bones=True, rotate_bones=False, min
         if normalize_bones or (root.tail - root.head).length < minimal_bone_length:
             trans, rot, scale = root.global_matrix.decompose()
             trans = mult_vec(trans, scale)
-            trs = Matrix.LocRotScale(trans, rot, Vector((1,1,1)))
+            trs = bpy_util.make_trs(trans, rot, Vector((1,1,1)))
             root.tail = trs @ (local_bone_vec * minimal_bone_length)
             root.z_axis_tail = trs @ (z_axis * minimal_bone_length)
 

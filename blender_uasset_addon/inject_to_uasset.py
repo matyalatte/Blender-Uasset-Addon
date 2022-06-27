@@ -296,9 +296,9 @@ class InjectToUasset(Operator):
             asset_type = asset.asset_type
 
             if armature is None and 'Skelet' in asset_type:
-                raise RuntimeError('Armature not found.')
+                raise RuntimeError('Select an armature.')
             if meshes==[] and 'Mesh' in asset_type:
-                raise RuntimeError('Mesh not found.')
+                raise RuntimeError('Select meshes.')
             if 'Mesh' not in asset_type and asset_type!='Skeleton':
                 raise RuntimeError('Unsupported asset. ({})'.format(asset_type))
 

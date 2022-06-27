@@ -83,7 +83,6 @@ class StaticLOD(LOD):
         sections = read_array(f, StaticLODSection.read)
 
         flags = f.read(4)
-        print(flags)
 
         vb = PositionVertexBuffer.read(f, name='VB0') #xyz
         vb2 = StaticMeshVertexBuffer.read(f, name='VB2') #normals+uv_maps
@@ -156,12 +155,6 @@ class StaticLOD(LOD):
         positions = positions
         self.vb.import_from_blender(positions)
 
-        #pos_range_gltf = [max(x)-min(x), max(y)-min(y), max(z)-min(z)]
-        #c=0
-        #for i in range(3):
-        #    c+=pos_range_gltf[i]>(pos_range[i]*10)
-        #if c>=2:
-        #    positions = [[p/100 for p in pos] for pos in positions]
         normals = primitives['NORMALS']
         
         material_ids = primitives['MATERIAL_IDS']
@@ -236,21 +229,9 @@ class SkeletalLOD(LOD):
 
         num=read_uint32(f)
         self.required_bone_ids=f.read(num*2)
-        
-        i=read_uint32(f)
-        if i==0:
-            self.null8=True
-            read_null(f, 'Parse failed! (LOD:null2)')
-        else:
-            self.null8=False
-            f.seek(-4,1)
 
-        chk=read_uint32(f)
-        if chk==vertex_num:
-            self.unk_ids=read_uint32_array(f, len=vertex_num+1)
-        else:
-            self.unk_ids=None
-            f.seek(-4,1)
+        self.vertex_map = read_uint32_array(f)
+        self.max_vertex_map_id = read_uint32(f)
 
         self.uv_num=read_uint32(f)
         self.vb = SkeletalMeshVertexBuffer.read(f, name='VB0')
@@ -288,12 +269,9 @@ class SkeletalLOD(LOD):
         write_uint32(f, len(lod.required_bone_ids)//2)
         f.write(lod.required_bone_ids)
         
-        if lod.null8:
-            write_null(f)
-            write_null(f)
-        if lod.unk_ids is not None:
-            write_uint32(f, lod.vb.vertex_num)
-            write_uint32_array(f, lod.unk_ids)
+        write_uint32_array(f, lod.vertex_map, with_length=True)
+        write_uint32(f, lod.max_vertex_map_id)
+
         write_uint32(f, lod.uv_num)
         SkeletalMeshVertexBuffer.write(f, lod.vb)
         SkinWeightVertexBuffer.write(f, lod.vb2)

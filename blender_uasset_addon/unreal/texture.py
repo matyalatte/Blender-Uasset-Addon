@@ -78,12 +78,7 @@ class Texture:
         self.texture_type = '2D' if self.uasset.asset_type=='Texture2D' else 'Cube'
         
         #read .uexp
-
         self.read_uexp(f)
-        if self.version in ['4.25', '4.27']:
-            read_null(f, msg='Not NULL! ' + VERSION_ERR_MSG)
-        #check(self.end_offset, f.tell()+self.uasset_size)
-        self.none_name_id = read_uint64(f)
         
         #read .ubulk
         if self.has_ubulk:
@@ -189,6 +184,11 @@ class Texture:
                     i+=size
             check(i, len(self.uexp_mip_bulk.data))
 
+        if self.version in ['4.25', '4.27']:
+            read_null(f, msg='Not NULL! ' + VERSION_ERR_MSG)
+        #check(self.end_offset, f.tell()+self.uasset_size)
+        self.none_name_id = read_uint64(f)
+
     #get max size of uexp mips
     def get_max_uexp_size(self):
         for mip in self.mipmaps:
@@ -221,16 +221,7 @@ class Texture:
             ubulk_name = None
         
         #write .uexp
-            
         self.write_uexp(f)
-        if self.version in ['4.25', '4.27']:
-            write_null(f)
-        new_end_offset = f.tell() + self.uasset_size
-        write_uint64(f, self.none_name_id)
-        
-        f.seek(self.offset_to_end_offset)
-        write_uint32(f, new_end_offset)
-        f.seek(0, 2)
 
         #write .ubulk if exist
         if self.has_ubulk:
@@ -293,12 +284,12 @@ class Texture:
             self.uexp_mip_bulk=Mipmap('ff7r')
             self.uexp_mip_bulk.update(uexp_bulk, size, True)
             self.uexp_mip_bulk.offset=self.uasset_size+f.tell()+24
-            self.uexp_mip_bulk.write(f, self.uasset_size)
+            self.uexp_mip_bulk.write(f)
 
             write_uint32(f, self.cube_flag)
             write_uint32(f, uexp_map_num)
         
-        if self.version in ['4.27', '4.15', '4.14', '4.13', 'ff7r']:
+        if self.version in ['4.27', 'ff7r']:
             offset = 0
         else:
             new_end_offset = \
@@ -316,7 +307,16 @@ class Texture:
             else:
                 mip.offset=offset
                 offset+=mip.data_size
-            mip.write(f, self.uasset_size)
+            mip.write(f)
+
+        if self.version in ['4.25', '4.27']:
+            write_null(f)
+        new_end_offset = f.tell() + self.uasset_size
+        write_uint64(f, self.none_name_id)
+        
+        f.seek(self.offset_to_end_offset)
+        write_uint32(f, new_end_offset)
+        f.seek(0, 2)
 
     #remove mipmaps except the largest one
     def remove_mipmaps(self):

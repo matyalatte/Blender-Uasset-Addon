@@ -197,6 +197,8 @@ class SkeletalMesh(Mesh):
             read_const_uint32(f, 1)
             extra_mesh=ExtraMesh.read(f, skeleton.bones)
             extra_mesh.print()
+        else:
+            extra_mesh=None
         return SkeletalMesh(ff7r, unk, materials, skeleton, LODs, extra_mesh)
 
     def write(f, skeletalmesh):
