@@ -1,5 +1,6 @@
 import bpy
 
+
 class VIEW3D_PT_urls(bpy.types.Panel):
     bl_label = "URLs"
     bl_idname = "VIEW3D_PT_urls"
@@ -9,12 +10,12 @@ class VIEW3D_PT_urls(bpy.types.Panel):
     bl_options = {'DEFAULT_CLOSED'}
 
     urls = {
-        "Readme" : 'https://github.com/matyalatte/Blender-Uasset-Addon',
+        'Readme': 'https://github.com/matyalatte/Blender-Uasset-Addon',
         'Getting Started': 'https://github.com/matyalatte/Blender-Uasset-Addon/wiki/Getting-Started',
         'FAQ': 'https://github.com/matyalatte/Blender-Uasset-Addon/wiki/FAQ'
     }
     icons = ['TEXT', 'INFO', 'QUESTION']
-    
+
     def draw(self, context):
         layout = self.layout
         col = layout.column()
@@ -22,9 +23,11 @@ class VIEW3D_PT_urls(bpy.types.Panel):
             op = col.operator('wm.url_open', text=name, icon=icon)
             op.url = url
 
+
 classes = (
-        VIEW3D_PT_urls,
-        )
+    VIEW3D_PT_urls,
+)
+
 
 def register():
     for cls in classes:

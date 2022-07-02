@@ -21,16 +21,19 @@ if "bpy" in locals():
     if "util" in locals():
         importlib.reload(util)
 
+
 def get_rescale_factor(rescale):
     return 0.01 * rescale / bpy.context.scene.unit_settings.scale_length
 
-#add a skeleton to scene
-def generate_armature(name, bones, normalize_bones=True, rotate_bones=False, minimal_bone_length=0.025, rescale=1.0):
+
+# add a skeleton to scene
+def generate_armature(name, bones, normalize_bones=True, rotate_bones=False,
+                      minimal_bone_length=0.025, rescale=1.0):
     print('Generating an armature...')
 
-    amt = bpy_util.add_armature(name = name)
+    amt = bpy_util.add_armature(name=name)
     rescale_factor = get_rescale_factor(rescale)
-    
+
     def cal_trs(bone):
         trans = Vector((bone.trans[0], -bone.trans[1], bone.trans[2])) * rescale_factor
         rot = Quaternion((-bone.rot[3], bone.rot[0], -bone.rot[1], bone.rot[2]))
@@ -38,9 +41,9 @@ def generate_armature(name, bones, normalize_bones=True, rotate_bones=False, min
         bone.trs = bpy_util.make_trs(trans, rot, scale)
         bone.trans = trans
     list(map(lambda b: cal_trs(b), bones))
-            
+
     def cal_length(bone, bones):
-        if len(bone.children)==0:
+        if len(bone.children) == 0:
             bone.length = rescale_factor
             return
         length = 0
@@ -51,18 +54,19 @@ def generate_armature(name, bones, normalize_bones=True, rotate_bones=False, min
         bone.length = length
     list(map(lambda b: cal_length(b, bones), bones))
 
-    if rotate_bones: #looks fine in blender, but bad in UE4
+    if rotate_bones:  # looks fine in blender, but bad in UE4
         local_bone_vec = Vector((1, 0, 0))
         z_axis = Vector((0, 1, 0))
-    else: #looks fine in UE4, but bad in blender
+    else:  # looks fine in UE4, but bad in blender
         local_bone_vec = Vector((0, 1, 0))
         z_axis = Vector((0, 0, 1))
 
     def mult_vec(vec1, vec2):
-        return Vector((x1*x2 for x1, x2 in zip(vec1, vec2)))   
+        return Vector((x1 * x2 for x1, x2 in zip(vec1, vec2)))
 
     minimal_bone_length *= rescale / bpy.context.scene.unit_settings.scale_length
     minimal_bone_length *= (1 + normalize_bones)
+
     def cal_global_matrix(root, global_matrix, bones):
         root.global_matrix = global_matrix @ root.trs
         root.head = global_matrix @ root.trans
@@ -72,7 +76,7 @@ def generate_armature(name, bones, normalize_bones=True, rotate_bones=False, min
         if normalize_bones or (root.tail - root.head).length < minimal_bone_length:
             trans, rot, scale = root.global_matrix.decompose()
             trans = mult_vec(trans, scale)
-            trs = bpy_util.make_trs(trans, rot, Vector((1,1,1)))
+            trs = bpy_util.make_trs(trans, rot, Vector((1, 1, 1)))
             root.tail = trs @ (local_bone_vec * minimal_bone_length)
             root.z_axis_tail = trs @ (z_axis * minimal_bone_length)
 
@@ -82,13 +86,14 @@ def generate_armature(name, bones, normalize_bones=True, rotate_bones=False, min
 
     cal_global_matrix(bones[0], Matrix.Identity(4), bones)
 
-    def generate_bones(amt, root, bones, parent = None):
-        b = bpy_util.add_bone(amt, root.name, root.head, root.tail, root.z_axis_tail, parent = parent)
+    def generate_bones(amt, root, bones, parent=None):
+        b = bpy_util.add_bone(amt, root.name, root.head, root.tail, root.z_axis_tail, parent=parent)
         for c in root.children:
             child = bones[c]
-            generate_bones(amt, child, bones, parent = b)
+            generate_bones(amt, child, bones, parent=b)
     generate_bones(amt, bones[0], bones)
     return amt
+
 
 def load_utexture(file, name, version, asset=None, invert_normals=False):
     temp = util.io_util.make_temp_file(suffix='.dds')
@@ -101,27 +106,29 @@ def load_utexture(file, name, version, asset=None, invert_normals=False):
         utex = asset.uexp.texture
         utex.remove_mipmaps()
         if 'BC5' in utex.type:
-            type='NORMAL'
+            tex_type = 'NORMAL'
         elif 'BC4' in utex.type:
-            type='GRAY'
+            tex_type = 'GRAY'
         else:
-            type='COLOR'
+            tex_type = 'COLOR'
         dds = unreal.dds.DDS.asset_to_DDS(utex)
         dds.save(temp)
-        tex = bpy_util.load_dds(temp, name=name, type=type, invert_normals=invert_normals)
-    except:
+        tex = bpy_util.load_dds(temp, name=name, type=tex_type, invert_normals=invert_normals)
+    except Exception:
         print('Failed to load {}'.format(file))
         tex = None
-        type = None
-    
+        tex_type = None
+
     if os.path.exists(temp):
         os.remove(temp)
-    return tex, type
+    return tex, tex_type
 
-def generate_materials(asset, version, load_textures=False, invert_normal_maps=False, suffix_list=[['_C', '_D'], ['_N'], ['_A']]):
+
+def generate_materials(asset, version, load_textures=False,
+                       invert_normal_maps=False, suffix_list=[['_C', '_D'], ['_N'], ['_A']]):
     if load_textures:
         print('Loading textures...')
-    #add materials to mesh
+    # add materials to mesh
     material_names = [m.import_name for m in asset.uexp.mesh.materials]
     color_gen = bpy_util.ColorGenerator()
     materials = [bpy_util.add_material(name, color_gen) for name in material_names]
@@ -133,13 +140,13 @@ def generate_materials(asset, version, load_textures=False, invert_normal_maps=F
         m['asset_path'] = ue_m.asset_path
         m['slot_name'] = ue_m.slot_name
         for i, p in zip(range(len(ue_m.texture_asset_paths)), ue_m.texture_asset_paths):
-            m['texture_path_'+str(i)]=p
+            m['texture_path_' + str(i)] = p
         if load_textures:
             names = []
             material_name = os.path.basename(ue_m.asset_path)
             for tex_path, asset_path in zip(ue_m.texture_actual_paths, ue_m.texture_asset_paths):
                 print('[{}/{}]'.format(progress, texture_num), end='')
-                progress+=1
+                progress += 1
                 name = os.path.basename(asset_path)
                 if name in texs:
                     print('Texture is already loaded ({})'.format(tex_path))
@@ -148,62 +155,68 @@ def generate_materials(asset, version, load_textures=False, invert_normal_maps=F
                 if not os.path.exists(tex_path):
                     print('Texture not found ({})'.format(tex_path))
                     continue
-                tex, type = load_utexture(tex_path, os.path.basename(asset_path), version, invert_normals=invert_normal_maps)
+                tex, tex_type = load_utexture(tex_path, os.path.basename(asset_path),
+                                              version, invert_normals=invert_normal_maps)
                 if tex is not None:
-                    texs[name]=(tex, type)
+                    texs[name] = (tex, tex_type)
                     names.append(name)
 
             types = [texs[n][1] for n in names]
+
             def contain_suffix(base_name, names, suffix_list):
                 for suf in suffix_list:
-                    if base_name+suf in names:
-                        return names.index(base_name+suf)
+                    if base_name + suf in names:
+                        return names.index(base_name + suf)
                 return -1
 
             def has_suffix(n, suffix_list):
                 for suf in suffix_list:
-                    if n[-len(suf):]==suf:
+                    if n[-len(suf):] == suf:
                         return True
                 return False
 
-            def search_suffix(suffix, type, new_type_suffix, need_suffix=False):
-                if type not in types:
+            def search_suffix(suffix, tex_type, new_type_suffix, need_suffix=False):
+                if tex_type not in types:
                     return
                 id = None
-                type_names = [n for n,t in zip(names, types) if t==type]
+                type_names = [n for n, t in zip(names, types) if t == tex_type]
                 new_id = contain_suffix(material_name, type_names, suffix)
-                if new_id!=-1:
+                if new_id != -1:
                     id = new_id
                 if id is None:
                     ns = [n for n in type_names if has_suffix(n, suffix)]
-                    if len(ns)>0:
+                    if len(ns) > 0:
                         id = names.index(ns[0])
                     elif need_suffix:
                         return
                 if id is None:
                     id = names.index(type_names[0])
                 if id is not None:
-                    types[id]+=new_type_suffix
+                    types[id] += new_type_suffix
                     print('{}: {}'.format(types[id], names[id]))
             search_suffix(suffix_list[0], 'COLOR', '_MAIN')
             search_suffix(suffix_list[1], 'NORMAL', '_MAIN')
             search_suffix(suffix_list[2], 'GRAY', '_ALPHA', need_suffix=True)
-        
-            y=300
-            for name, type in zip(names, types):
+
+            y = 300
+            for name, tex_type in zip(names, types):
                 tex, _ = texs[name]
-                #no need to invert normals if it is already inverted.
-                bpy_util.assign_texture(tex, m, type=type, location=[-800, y], invert_normals=not invert_normal_maps)
+                # no need to invert normals if it is already inverted.
+                bpy_util.assign_texture(tex, m, tex_type=tex_type, location=[-800, y],
+                                        invert_normals=not invert_normal_maps)
                 y -= 300
     return materials, material_names
 
-#add meshes to scene
-def generate_mesh(amt, asset, materials, material_names, rescale=1.0, keep_sections=False, smoothing=True):
+
+# add meshes to scene
+def generate_mesh(amt, asset, materials, material_names, rescale=1.0,
+                  keep_sections=False, smoothing=True):
 
     print('Generating meshes...')
-    #get mesh data from asset
+    # get mesh data from asset
     material_ids, _ = asset.uexp.mesh.LODs[0].get_meta_for_blender()
-    normals, positions, texcoords, vertex_groups, joints, weights, indices = asset.uexp.mesh.LODs[0].parse_buffers_for_blender()
+    normals, positions, texcoords, vertex_groups, joints, weights, indices = \
+        asset.uexp.mesh.LODs[0].parse_buffers_for_blender()
 
     rescale_factor = get_rescale_factor(rescale)
 
@@ -232,38 +245,39 @@ def generate_mesh(amt, asset, materials, material_names, rescale=1.0, keep_secti
         bpy_util.construct_mesh(mesh_data, pos, indice, uv_maps)
 
         if amt is not None:
-            #skinning
+            # skinning
             vg_names = [bone_names[vg] for vg in vertex_groups[i]]
             joint = np.array(joints[i], dtype=np.uint32)
             weight = np.array(weights[i], dtype=np.float32) / 255
             bpy_util.skinning(section, vg_names, joint, weight)
-        
-        #smoothing
-        norm = ((np.array(normals[i], dtype=np.float32))-127) /127
+
+        # smoothing
+        norm = (np.array(normals[i], dtype=np.float32)) / 127 - 1
         norm = norm / np.linalg.norm(norm, axis=1)[:, np.newaxis]
 
         norm = bpy_util.flip_y_for_3d_vectors(norm)
-        bpy_util.smoothing(mesh_data, len(indice)//3, norm, smoothing=smoothing)
-        
+        bpy_util.smoothing(mesh_data, len(indice) // 3, norm, smoothing=smoothing)
+
     if not keep_sections:
-        #join meshes
-        sections[0].name=asset.name
-        sections[0].data.name=asset.name
+        # join meshes
+        sections[0].name = asset.name
+        sections[0].data.name = asset.name
         bpy_util.join_meshes(sections)
 
     return sections[0]
 
-#add mesh asset to scene
-def load_uasset(file, rename_armature=True, keep_sections=False,
-    normalize_bones=True, rotate_bones=False,
-    minimal_bone_length=0.025, rescale=1.0,
-    smoothing=True, only_skeleton=False,
-    show_axes=False, bone_display_type='OCTAHEDRAL', show_in_front=True,
-    load_textures=False, invert_normal_maps=False, ue_version='4.18', \
-    suffix_list=[['_C', '_D'], ['_N'], ['_A']]):
 
-    #load .uasset
-    asset=unreal.uasset.Uasset(file, version=ue_version)
+# add mesh asset to scene
+def load_uasset(file, rename_armature=True, keep_sections=False,
+                normalize_bones=True, rotate_bones=False,
+                minimal_bone_length=0.025, rescale=1.0,
+                smoothing=True, only_skeleton=False,
+                show_axes=False, bone_display_type='OCTAHEDRAL', show_in_front=True,
+                load_textures=False, invert_normal_maps=False, ue_version='4.18',
+                suffix_list=[['_C', '_D'], ['_N'], ['_A']]):
+
+    # load .uasset
+    asset = unreal.uasset.Uasset(file, version=ue_version)
     asset_type = asset.asset_type
     print('Asset type: {}'.format(asset_type))
 
@@ -277,32 +291,35 @@ def load_uasset(file, rename_armature=True, keep_sections=False,
         raise RuntimeError('Unsupported asset. ({})'.format(asset.asset_type))
     if asset.uexp.mesh is None and only_skeleton:
         raise RuntimeError('"Only Skeleton" option is checked, but the asset has no skeleton.')
-    
+
     asset.uexp.load_material_asset()
 
     bpy_util.move_to_object_mode()
 
-    #add a skeleton to scene
-    
-
+    # add a skeleton to scene
     if asset.uexp.skeleton is not None:
         bones = asset.uexp.skeleton.bones
-        amt = generate_armature(asset.name, bones, normalize_bones, rotate_bones, minimal_bone_length, rescale=rescale)
+        amt = generate_armature(asset.name, bones, normalize_bones,
+                                rotate_bones, minimal_bone_length, rescale=rescale)
         amt.data.show_axes = show_axes
         amt.data.display_type = bone_display_type
         amt.show_in_front = show_in_front
         if rename_armature:
             amt.name = 'Armature'
-        bpy.ops.object.mode_set(mode='OBJECT')        
+        bpy.ops.object.mode_set(mode='OBJECT')
     else:
         amt = None
 
-    #add a mesh to scene
+    # add a mesh to scene
     if asset.uexp.mesh is not None and not only_skeleton:
-        materials, material_names = generate_materials(asset, ue_version, load_textures=load_textures, invert_normal_maps=invert_normal_maps, suffix_list=suffix_list)
-        mesh = generate_mesh(amt, asset, materials, material_names, rescale=rescale, keep_sections=keep_sections, smoothing=smoothing)
-    
-    #return root object
+        materials, material_names = generate_materials(asset, ue_version,
+                                                       load_textures=load_textures,
+                                                       invert_normal_maps=invert_normal_maps,
+                                                       suffix_list=suffix_list)
+        mesh = generate_mesh(amt, asset, materials, material_names, rescale=rescale,
+                             keep_sections=keep_sections, smoothing=smoothing)
+
+    # return root object
     if amt is None:
         root = mesh
     else:
@@ -311,20 +328,22 @@ def load_uasset(file, rename_armature=True, keep_sections=False,
     root['asset_path'] = asset.asset_path
     return root, asset.asset_type
 
+
 class TABFLAGS_WindowManager(PropertyGroup):
-    ui_general : BoolProperty(name='General', default=True)
-    ui_mesh : BoolProperty(name='Mesh', default=True)
-    ui_texture : BoolProperty(name='Texture', default=False)
-    ui_armature : BoolProperty(name='Armature', default=False)
-    ui_scale : BoolProperty(name='Scale', default=False)
+    ui_general: BoolProperty(name='General', default=True)
+    ui_mesh: BoolProperty(name='Mesh', default=True)
+    ui_texture: BoolProperty(name='Texture', default=False)
+    ui_armature: BoolProperty(name='Armature', default=False)
+    ui_scale: BoolProperty(name='Scale', default=False)
+
 
 class GeneralOptions(PropertyGroup):
     ue_version: EnumProperty(
         name='UE version',
         items=(('ff7r', 'FF7R', ''),
-            ('4.18', '4.18 (Experimental!)', 'Not Recommended'),
-            ('4.27', '4.27 (Experimental!)', 'Not Recommended'),
-            ('5.0', '5.0 (Experimental!)', 'Not Recommended')),
+               ('4.18', '4.18 (Experimental!)', 'Not Recommended'),
+               ('4.27', '4.27 (Experimental!)', 'Not Recommended'),
+               ('5.0', '5.0 (Experimental!)', 'Not Recommended')),
         description='UE version of assets',
         default='ff7r'
     )
@@ -336,6 +355,7 @@ class GeneralOptions(PropertyGroup):
         ),
         default='',
     )
+
 
 class ImportOptions(PropertyGroup):
     rename_armature: BoolProperty(
@@ -408,10 +428,10 @@ class ImportOptions(PropertyGroup):
         default='_A',
     )
 
-    minimal_bone_length : FloatProperty(
-        name = 'Minimal Bone Length',
-        description = 'Force all bones to be longer than this value',
-        default = 0.025, min = 0.01, max = 1, step = 0.005, precision = 3,
+    minimal_bone_length: FloatProperty(
+        name='Minimal Bone Length',
+        description='Force all bones to be longer than this value',
+        default=0.025, min=0.01, max=1, step=0.005, precision=3,
     )
 
     normalize_bones: BoolProperty(
@@ -458,11 +478,11 @@ class ImportOptions(PropertyGroup):
     bone_display_type: EnumProperty(
         name='Bone Display Type',
         items=(('OCTAHEDRAL', 'Octahedral', ' Display bones as octahedral shape'),
-            ('STICK', 'Stick', 'Display bones as simple 2D lines with dots'),
-            ('BBONE', 'B-Bone', 'Display bones as boxes, showing subdivision and B-Splines'),
-            ('ENVELOPE', 'Envelope', 'Display bones as extruded spheres, showing deformation influence volume'),
-            ('WIRE', 'Wire', 'Display bones as thin wires, showing subdivision and B-Splines')
-            ),
+               ('STICK', 'Stick', 'Display bones as simple 2D lines with dots'),
+               ('BBONE', 'B-Bone', 'Display bones as boxes, showing subdivision and B-Splines'),
+               ('ENVELOPE', 'Envelope',
+                'Display bones as extruded spheres, showing deformation influence volume'),
+               ('WIRE', 'Wire', 'Display bones as thin wires, showing subdivision and B-Splines')),
         description='Appearance of bones',
         default='STICK'
     )
@@ -475,11 +495,12 @@ class ImportOptions(PropertyGroup):
         default='METERS'
     )
 
-    rescale : FloatProperty(
-        name = 'Rescale',
-        description = 'Rescale mesh and skeleton',
-        default = 1, min = 0.01, max = 100, step = 0.01, precision = 2,
+    rescale: FloatProperty(
+        name='Rescale',
+        description='Rescale mesh and skeleton',
+        default=1, min=0.01, max=100, step=0.01, precision=2,
     )
+
 
 class ImportUasset(Operator, ImportHelper):
     bl_idname = 'import.uasset'
@@ -494,8 +515,6 @@ class ImportUasset(Operator, ImportHelper):
         type=bpy.types.OperatorFileListElement,
     )
 
-    
-
     def draw(self, context):
         layout = self.layout
 
@@ -505,20 +524,21 @@ class ImportUasset(Operator, ImportHelper):
         wm = bpy.context.window_manager.tabflags
         goption = context.scene.general_options
         ioption = context.scene.import_options
-        options = [goption] + [ioption]*4
+        options = [goption] + [ioption] * 4
         show_flags = [wm.ui_general, wm.ui_mesh, wm.ui_texture, wm.ui_armature, wm.ui_scale]
         labels = ['ui_general', 'ui_mesh', 'ui_texture', 'ui_armature', 'ui_scale']
         props = [
             ['ue_version'],
             ['load_textures', 'keep_sections', 'smoothing'],
             ['invert_normal_maps', 'suffix_for_color', 'suffix_for_normal', 'suffix_for_alpha'],
-            ['rotate_bones', 'minimal_bone_length', 'normalize_bones', 'rename_armature', 'only_skeleton','show_axes', 'bone_display_type', 'show_in_front'],
+            ['rotate_bones', 'minimal_bone_length', 'normalize_bones',
+             'rename_armature', 'only_skeleton', 'show_axes', 'bone_display_type', 'show_in_front'],
             ['unit_scale', 'rescale']
         ]
-        
+
         for option, show_flag, label, prop_list in zip(options, show_flags, labels, props):
             box = layout.box()
-            row = box.row(align = True)
+            row = box.row(align=True)
             row.alignment = 'LEFT'
             row.prop(wm, label, icon='DOWNARROW_HLT' if show_flag else 'RIGHTARROW', emboss=False)
             if show_flag:
@@ -566,25 +586,29 @@ class ImportUasset(Operator, ImportHelper):
                 list_as_str = list_as_str.replace('　', '')
                 return list_as_str.split(',')
 
-            root_obj, asset_type = load_uasset(file,
+            suffix_list = [str_to_list(import_options.suffix_for_color),
+                           str_to_list(import_options.suffix_for_normal),
+                           str_to_list(import_options.suffix_for_alpha)]
+            root_obj, asset_type = load_uasset(
+                file,
                 rename_armature=import_options.rename_armature,
                 keep_sections=import_options.keep_sections,
                 normalize_bones=import_options.normalize_bones,
                 rotate_bones=import_options.rotate_bones,
-                minimal_bone_length = import_options.minimal_bone_length,
-                rescale = import_options.rescale,
-                smoothing = import_options.smoothing,
-                only_skeleton = import_options.only_skeleton,
+                minimal_bone_length=import_options.minimal_bone_length,
+                rescale=import_options.rescale,
+                smoothing=import_options.smoothing,
+                only_skeleton=import_options.only_skeleton,
                 show_axes=import_options.show_axes,
                 show_in_front=import_options.show_in_front,
                 bone_display_type=import_options.bone_display_type,
                 load_textures=import_options.load_textures,
                 invert_normal_maps=import_options.invert_normal_maps,
                 ue_version=general_options.ue_version,
-                suffix_list=[str_to_list(import_options.suffix_for_color), str_to_list(import_options.suffix_for_normal), str_to_list(import_options.suffix_for_alpha)]
+                suffix_list=suffix_list
             )
 
-            context.scene.general_options.source_file=file
+            context.scene.general_options.source_file = file
 
             elapsed_s = '{:.2f}s'.format(time.time() - start_time)
             m = 'Success! Imported {} in {}'.format(asset_type, elapsed_s)
@@ -601,7 +625,8 @@ class ImportUasset(Operator, ImportHelper):
 class ToggleConsole(Operator):
     bl_idname = 'import.toggle_console'
     bl_label = 'Toggle Console'
-    bl_description = 'Toggle the system console.\nI recommend enabling the system console to see the progress'
+    bl_description = ('Toggle the system console.\n'
+                      'I recommend enabling the system console to see the progress')
 
     def execute(self, context):
         if bpy_util.os_is_windows():
@@ -618,7 +643,7 @@ class UASSET_PT_import_panel(bpy.types.Panel):
 
     def draw(self, context):
         layout = self.layout
-        layout.operator(ImportUasset.bl_idname, icon = 'MESH_DATA')
+        layout.operator(ImportUasset.bl_idname, icon='MESH_DATA')
         general_options = context.scene.general_options
         import_options = context.scene.import_options
         col = layout.column()
@@ -630,11 +655,12 @@ class UASSET_PT_import_panel(bpy.types.Panel):
 
         layout.separator()
         if bpy_util.os_is_windows():
-            layout.operator(ToggleConsole.bl_idname, icon = 'CONSOLE')
+            layout.operator(ToggleConsole.bl_idname, icon='CONSOLE')
 
 
 def menu_func_import(self, context):
     self.layout.operator(ImportUasset.bl_idname, text='Uasset (.uasset)')
+
 
 classes = (
     TABFLAGS_WindowManager,
@@ -645,6 +671,7 @@ classes = (
     UASSET_PT_import_panel,
 )
 
+
 def register():
     for c in classes:
         bpy.utils.register_class(c)
@@ -652,6 +679,7 @@ def register():
     bpy.types.WindowManager.tabflags = PointerProperty(type=TABFLAGS_WindowManager)
     bpy.types.Scene.general_options = PointerProperty(type=GeneralOptions)
     bpy.types.Scene.import_options = PointerProperty(type=ImportOptions)
+
 
 def unregister():
     for c in classes:

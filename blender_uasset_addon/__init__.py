@@ -12,7 +12,6 @@ bl_info = {
 }
 
 try:
-    import bpy
     from . import import_uasset, export_as_fbx, open_urls, inject_to_uasset
     if "bpy" in locals():
         import importlib
@@ -36,5 +35,5 @@ try:
         inject_to_uasset.unregister()
         export_as_fbx.unregister()
         open_urls.unregister()
-except:
+except Exception:
     print('bpy not found.')

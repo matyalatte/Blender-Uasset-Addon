@@ -1,14 +1,13 @@
-from ..util.io_util import *
-#from ..gltf.bone import Bone as gltfBone
-#from ..gltf.gltf import glTF
-import struct
+from ..util import io_util as io
+# import struct
+
 
 class Bone:
-    #name_id: id of name list
-    #parent: parent bone's id
-    #rot: quaternion
-    #pos: position
-    #size: size
+    # name_id: id of name list
+    # parent: parent bone's id
+    # rot: quaternion
+    # pos: position
+    # size: size
 
     def __init__(self, name_id, instance, parent):
         self.name_id = name_id
@@ -19,30 +18,30 @@ class Bone:
         self.children = []
 
     def read(f):
-        name_id=read_uint32(f)
-        instance = read_int32(f) #null?
-        parent = read_int32(f)
+        name_id = io.read_uint32(f)
+        instance = io.read_int32(f)  # null?
+        parent = io.read_int32(f)
         return Bone(name_id, instance, parent)
 
     def read_pos(self, f, version):
-        if version=='5.0':
-            ary = read_float64_array(f, 10)
+        if version >= '5.0':
+            ary = io.read_float64_array(f, 10)
         else:
-            ary = read_float32_array(f, 10)
+            ary = io.read_float32_array(f, 10)
         self.rot = ary[0:4]
         self.trans = ary[4:7]
         self.scale = ary[7:]
 
     def write(f, bone):
-        write_uint32(f, bone.name_id)
-        write_int32(f, bone.instance)
-        write_int32(f, bone.parent)
+        io.write_uint32(f, bone.name_id)
+        io.write_int32(f, bone.instance)
+        io.write_int32(f, bone.parent)
 
     def write_pos(f, bone, version):
-        if version=='5.0':
-            write_float64_array(f, bone.rot+bone.trans+bone.scale)
+        if version >= '5.0':
+            io.write_float64_array(f, bone.rot + bone.trans + bone.scale)
         else:
-            write_float32_array(f, bone.rot+bone.trans+bone.scale)
+            io.write_float32_array(f, bone.rot + bone.trans + bone.scale)
 
     def update(self, bone):
         self.trans = bone.trans
@@ -52,19 +51,19 @@ class Bone:
         self.parent_name = bone.parent_name
 
     def update_name_id(self, name_list):
-        if self.name_id>=0:
-            name_list[self.name_id]=self.name
+        if self.name_id >= 0:
+            name_list[self.name_id] = self.name
         else:
-            self.name_id=len(name_list)
-            #print("added name {}: {}".format(len(name_list), self.name))
+            self.name_id = len(name_list)
+            # print("added name {}: {}".format(len(name_list), self.name))
             name_list.append(self.name)
 
     def print_bones(bones, padding=2):
-        pad=' '*padding
-        i=0
+        pad = ' ' * padding
+        i = 0
         for b in bones:
-            print(pad+'id: '+str(i)+', name: '+b.name+', parent: '+b.parent_name)
-            i+=1
+            print(pad + 'id: ' + str(i) + ', name: ' + b.name + ', parent: ' + b.parent_name)
+            i += 1
 
     def name_bones(bones, name_list):
         def name(bone):
@@ -72,31 +71,31 @@ class Bone:
         [name(b) for b in bones]
         for b in bones:
             parent_id = b.parent
-            if parent_id!=-1:
-                parent_name=bones[parent_id].name
+            if parent_id != -1:
+                parent_name = bones[parent_id].name
             else:
-                parent_name='None'
+                parent_name = 'None'
             b.parent_name = parent_name
 
     def get_bone_id(bones, bone_name):
-        id=-1
-        i=0
+        id = -1
+        i = 0
         for b in bones:
-            if b.name==bone_name:
-                id=i
+            if b.name == bone_name:
+                id = i
                 break
-            i+=1
+            i += 1
         return id
 
     def record_children(bones):
-        children=[[] for i in range(len(bones))]
+        children = [[] for i in range(len(bones))]
         bone_names = [b.name for b in bones]
         for b in bones:
-            if b.parent_name=='None':
+            if b.parent_name == 'None':
                 continue
             children[bone_names.index(b.parent_name)].append(bone_names.index(b.name))
         for b, c in zip(bones, children):
-            b.children=c
+            b.children = c
 
     '''
     def copy(self):
@@ -110,7 +109,7 @@ class Bone:
     '''
 
     def update_parent_id(self, bones):
-        if self.parent_name=='None':
+        if self.parent_name == 'None':
             self.parent = -1
             return
         for b, i in zip(bones, range(len(bones))):
@@ -118,42 +117,43 @@ class Bone:
                 self.parent = i
                 break
 
-#Skeleton data for skeletal mesh assets
+
+# Skeleton data for skeletal mesh assets
 class Skeleton:
-    #bones: bone data
-    #bones2: there is more bone data. I don't known how it works.
+    # bones: bone data
+    # bones2: there is more bone data. I don't known how it works.
 
     def __init__(self, f, version):
-        self.offset=f.tell()
-        self.version=version
-        self.bones = read_array(f, Bone.read)
-        #read position
-        bone_num=read_uint32(f)
-        check(bone_num, len(self.bones), f, 'Parse failed! Invalid bone number detected. Have you named the armature "Armature"?')
+        self.offset = f.tell()
+        self.version = version
+        self.bones = io.read_array(f, Bone.read)
+        # read position
+        bone_num = io.read_uint32(f)
+        io.check(bone_num, len(self.bones), f)
         for b in self.bones:
             b.read_pos(f, version)
 
-        read_const_uint32(f, len(self.bones))
+        io.read_const_uint32(f, len(self.bones))
         for b, i in zip(self.bones, range(len(self.bones))):
-            read_const_uint32(f, b.name_id)
-            read_null(f)
-            read_const_uint32(f, i)
+            io.read_const_uint32(f, b.name_id)
+            io.read_null(f)
+            io.read_const_uint32(f, i)
 
-        #self.name_to_index_map=read_array(f, Bone.read)
+        # self.name_to_index_map=read_array(f, Bone.read)
 
     def read(f, version):
         return Skeleton(f, version)
 
     def write(f, skeleton):
-        write_array(f, skeleton.bones, Bone.write, with_length=True)
-        write_uint32(f, len(skeleton.bones))
+        io.write_array(f, skeleton.bones, Bone.write, with_length=True)
+        io.write_uint32(f, len(skeleton.bones))
         for b in skeleton.bones:
             Bone.write_pos(f, b, skeleton.version)
-        write_uint32(f, len(skeleton.bones))
+        io.write_uint32(f, len(skeleton.bones))
         for b, i in zip(skeleton.bones, range(len(skeleton.bones))):
-            write_uint32(f, b.name_id)
-            write_null(f)
-            write_uint32(f, i)
+            io.write_uint32(f, b.name_id)
+            io.write_null(f)
+            io.write_uint32(f, i)
 
     def name_bones(self, name_list):
         Bone.name_bones(self.bones, name_list)
@@ -161,18 +161,18 @@ class Skeleton:
 
     def import_bones(self, bones, name_list):
         old_bone_num = len(self.bones)
-        if len(self.bones)<len(bones):
-            self.bones += [Bone(-1, 0, None) for i in range(len(bones)-len(self.bones))]
+        if len(self.bones) < len(bones):
+            self.bones += [Bone(-1, 0, None) for i in range(len(bones) - len(self.bones))]
         for self_bone, new_bone in zip(self.bones, bones):
-            #if self_bone.name!=new_bone.name:
-            #    raise RuntimeError("")
-            #print('{} -> {}'.format(self_bone.pos[4:7], new_bone.pos[4:7]))
-            #if only_phy_bones and 'Phy' not in new_bone.name:
-            #    continue
+            # if self_bone.name!=new_bone.name:
+            #     raise RuntimeError("")
+            # print('{} -> {}'.format(self_bone.pos[4:7], new_bone.pos[4:7]))
+            # if only_phy_bones and 'Phy' not in new_bone.name:
+            #     continue
             self_bone.update(new_bone)
         self.bones = self.bones[:len(bones)]
-        #if only_phy_bones:
-        #    print('Phy bones have been imported.')
+        # if only_phy_bones:
+        #     print('Phy bones have been imported.')
         print('Updated skeleton (bones:{}->{})'.format(old_bone_num, len(self.bones)))
 
         for bone in self.bones:
@@ -181,46 +181,45 @@ class Skeleton:
             bone.update_parent_id(bones)
 
     def print(self, padding=0):
-        pad=' '*padding
-        print(pad+'Skeleton (offset: {})'.format(self.offset))
-        print(pad+'  bone_num: {}'.format(len(self.bones)))
-        Bone.print_bones(self.bones, padding=2+padding)
+        pad = ' ' * padding
+        print(pad + 'Skeleton (offset: {})'.format(self.offset))
+        print(pad + '  bone_num: {}'.format(len(self.bones)))
+        Bone.print_bones(self.bones, padding=2 + padding)
 
-#Skeleton data for skeleton assets (*_Skeleton.uexp)
+
+# Skeleton data for skeleton assets (*_Skeleton.uexp)
 class SkeletonAsset:
-    #bones: bone data
-    #bones2: there is more bone data. I don't known how it works.
 
     def __init__(self, f, version, name_list, verbose=False):
-        self.offset=f.tell()
+        self.offset = f.tell()
         self.version = version
-        b=f.read(4)
-        while (b!=b'\xff'*4):
+        b = f.read(4)
+        while (b != b'\xff' * 4):
             if b'\xff' not in b:
-                b=f.read(4)
+                b = f.read(4)
             else:
-                b=b''.join([b[1:], f.read(1)])
-            if f.tell()>500000:
+                b = b''.join([b[1:], f.read(1)])
+            if f.tell() > 500000:
                 raise RuntimeError('failed to parse')
         offset = f.tell() - 16 - self.offset
         f.seek(self.offset)
         self.unk = f.read(offset)
-        
-        self.bones = read_array(f, Bone.read)
 
-        #read position
-        bone_num=read_uint32(f)
-        check(bone_num, len(self.bones), f, 'Parse failed! Invalid bone number detected. Have you named the armature "Armature"?')
+        self.bones = io.read_array(f, Bone.read)
+
+        # read position
+        bone_num = io.read_uint32(f)
+        io.check(bone_num, len(self.bones), f)
         for b in self.bones:
             b.read_pos(f, version)
-        
-        read_const_uint32(f, len(self.bones))
-        for b, i in zip(self.bones, range(len(self.bones))):
-            read_const_uint32(f, b.name_id)
-            read_null(f)
-            read_const_uint32(f, i)
 
-        #self.name_to_index_map=read_array(f, Bone.read)
+        io.read_const_uint32(f, len(self.bones))
+        for b, i in zip(self.bones, range(len(self.bones))):
+            io.read_const_uint32(f, b.name_id)
+            io.read_null(f)
+            io.read_const_uint32(f, i)
+
+        # self.name_to_index_map=read_array(f, Bone.read)
 
         self.name_bones(name_list)
 
@@ -232,15 +231,15 @@ class SkeletonAsset:
 
     def write(f, skeleton):
         f.write(skeleton.unk)
-        write_array(f, skeleton.bones, Bone.write, with_length=True)
-        write_uint32(f, len(skeleton.bones))
+        io.write_array(f, skeleton.bones, Bone.write, with_length=True)
+        io.write_uint32(f, len(skeleton.bones))
         for b in skeleton.bones:
             Bone.write_pos(f, b, skeleton.version)
-        write_uint32(f, len(skeleton.bones))
+        io.write_uint32(f, len(skeleton.bones))
         for b, i in zip(skeleton.bones, range(len(skeleton.bones))):
-            write_uint32(f, b.name_id)
-            write_null(f)
-            write_uint32(f, i)
+            io.write_uint32(f, b.name_id)
+            io.write_null(f)
+            io.write_uint32(f, i)
 
     def name_bones(self, name_list):
         Bone.name_bones(self.bones, name_list)
@@ -251,13 +250,13 @@ class SkeletonAsset:
         new_bones = []
         for new_bone in bones:
             name = new_bone.name
-            #if only_phy_bones and 'Phy' not in name:
-            #    continue
-            updated=False
+            # if only_phy_bones and 'Phy' not in name:
+            #     continue
+            updated = False
             for self_bone in self.bones:
-                if self_bone.name==name:
+                if self_bone.name == name:
                     self_bone.update(new_bone)
-                    updated=True
+                    updated = True
                     break
             if not updated:
                 bone = Bone(-1, 0, None)
@@ -268,12 +267,12 @@ class SkeletonAsset:
         for b in self.bones:
             b.update_parent_id(self.bones)
 
-        #if only_phy_bones:
-        #    print('Phy bones have been imported.')
+        # if only_phy_bones:
+        #     print('Phy bones have been imported.')
         print('Updated skeleton (bones:{}->{})'.format(old_bone_num, len(self.bones)))
 
     def print(self, padding=0):
-        pad=' '*padding
-        print(pad+'Skeleton (offset: {})'.format(self.offset))
-        print(pad+'  bone_num: {}'.format(len(self.bones)))
-        Bone.print_bones(self.bones, padding=2+padding)
+        pad = ' ' * padding
+        print(pad + 'Skeleton (offset: {})'.format(self.offset))
+        print(pad + '  bone_num: {}'.format(len(self.bones)))
+        Bone.print_bones(self.bones, padding=2 + padding)
