@@ -292,13 +292,16 @@ class InjectToUasset(Operator):
             #load source file
             general_options = context.scene.general_options
             inject_options = context.scene.inject_options
-            asset = unreal.uasset.Uasset(general_options.source_file, version=general_options.ue_version)
+            version = general_options.ue_version
+            if version not in ['ff7r', '4.18']:
+                raise RuntimeError('Injection is unsupported for {}'.format())
+            asset = unreal.uasset.Uasset(general_options.source_file, version=version)
             asset_type = asset.asset_type
 
             if armature is None and 'Skelet' in asset_type:
-                raise RuntimeError('Armature not found.')
+                raise RuntimeError('Select an armature.')
             if meshes==[] and 'Mesh' in asset_type:
-                raise RuntimeError('Mesh not found.')
+                raise RuntimeError('Select meshes.')
             if 'Mesh' not in asset_type and asset_type!='Skeleton':
                 raise RuntimeError('Unsupported asset. ({})'.format(asset_type))
 

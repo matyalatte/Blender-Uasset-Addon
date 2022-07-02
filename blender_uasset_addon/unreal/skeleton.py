@@ -1,5 +1,4 @@
 from ..util.io_util import *
-from ..util.logger import logger
 #from ..gltf.bone import Bone as gltfBone
 #from ..gltf.gltf import glTF
 import struct
@@ -25,8 +24,11 @@ class Bone:
         parent = read_int32(f)
         return Bone(name_id, instance, parent)
 
-    def read_pos(self, f):
-        ary = read_float32_array(f, 10)
+    def read_pos(self, f, version):
+        if version=='5.0':
+            ary = read_float64_array(f, 10)
+        else:
+            ary = read_float32_array(f, 10)
         self.rot = ary[0:4]
         self.trans = ary[4:7]
         self.scale = ary[7:]
@@ -36,8 +38,11 @@ class Bone:
         write_int32(f, bone.instance)
         write_int32(f, bone.parent)
 
-    def write_pos(f, bone):
-        write_float32_array(f, bone.rot+bone.trans+bone.scale)
+    def write_pos(f, bone, version):
+        if version=='5.0':
+            write_float64_array(f, bone.rot+bone.trans+bone.scale)
+        else:
+            write_float32_array(f, bone.rot+bone.trans+bone.scale)
 
     def update(self, bone):
         self.trans = bone.trans
@@ -58,7 +63,7 @@ class Bone:
         pad=' '*padding
         i=0
         for b in bones:
-            logger.log(pad+'id: '+str(i)+', name: '+b.name+', parent: '+b.parent_name)
+            print(pad+'id: '+str(i)+', name: '+b.name+', parent: '+b.parent_name)
             i+=1
 
     def name_bones(bones, name_list):
@@ -118,16 +123,15 @@ class Skeleton:
     #bones: bone data
     #bones2: there is more bone data. I don't known how it works.
 
-    def __init__(self, f):
+    def __init__(self, f, version):
         self.offset=f.tell()
+        self.version=version
         self.bones = read_array(f, Bone.read)
-
         #read position
         bone_num=read_uint32(f)
         check(bone_num, len(self.bones), f, 'Parse failed! Invalid bone number detected. Have you named the armature "Armature"?')
         for b in self.bones:
-            b.read_pos(f)
-
+            b.read_pos(f, version)
 
         read_const_uint32(f, len(self.bones))
         for b, i in zip(self.bones, range(len(self.bones))):
@@ -137,12 +141,14 @@ class Skeleton:
 
         #self.name_to_index_map=read_array(f, Bone.read)
 
-    def read(f):
-        return Skeleton(f)
+    def read(f, version):
+        return Skeleton(f, version)
 
     def write(f, skeleton):
         write_array(f, skeleton.bones, Bone.write, with_length=True)
-        write_array(f, skeleton.bones, Bone.write_pos, with_length=True)
+        write_uint32(f, len(skeleton.bones))
+        for b in skeleton.bones:
+            Bone.write_pos(f, b, skeleton.version)
         write_uint32(f, len(skeleton.bones))
         for b, i in zip(skeleton.bones, range(len(skeleton.bones))):
             write_uint32(f, b.name_id)
@@ -176,8 +182,8 @@ class Skeleton:
 
     def print(self, padding=0):
         pad=' '*padding
-        logger.log(pad+'Skeleton (offset: {})'.format(self.offset))
-        logger.log(pad+'  bone_num: {}'.format(len(self.bones)))
+        print(pad+'Skeleton (offset: {})'.format(self.offset))
+        print(pad+'  bone_num: {}'.format(len(self.bones)))
         Bone.print_bones(self.bones, padding=2+padding)
 
 #Skeleton data for skeleton assets (*_Skeleton.uexp)
@@ -185,17 +191,20 @@ class SkeletonAsset:
     #bones: bone data
     #bones2: there is more bone data. I don't known how it works.
 
-    MAGIC = b'\x00\x02\x01\x02\x01\x03'
-    def __init__(self, f, name_list):
+    def __init__(self, f, version, name_list, verbose=False):
         self.offset=f.tell()
-        magic = f.read(6)
-        check(magic, SkeletonAsset.MAGIC, f, "Not FF7R's asset.")
-        bone_num = read_uint32(f)
-        unk = f.read(bone_num*3)
-        check(unk, b'\x82\x03\x01'*bone_num, f)
-        self.guid = f.read(16)
-        self.unk_ids = read_uint32_array(f)
-        read_null(f)
+        self.version = version
+        b=f.read(4)
+        while (b!=b'\xff'*4):
+            if b'\xff' not in b:
+                b=f.read(4)
+            else:
+                b=b''.join([b[1:], f.read(1)])
+            if f.tell()>500000:
+                raise RuntimeError('failed to parse')
+        offset = f.tell() - 16 - self.offset
+        f.seek(self.offset)
+        self.unk = f.read(offset)
         
         self.bones = read_array(f, Bone.read)
 
@@ -203,7 +212,7 @@ class SkeletonAsset:
         bone_num=read_uint32(f)
         check(bone_num, len(self.bones), f, 'Parse failed! Invalid bone number detected. Have you named the armature "Armature"?')
         for b in self.bones:
-            b.read_pos(f)
+            b.read_pos(f, version)
         
         read_const_uint32(f, len(self.bones))
         for b, i in zip(self.bones, range(len(self.bones))):
@@ -214,21 +223,19 @@ class SkeletonAsset:
         #self.name_to_index_map=read_array(f, Bone.read)
 
         self.name_bones(name_list)
-        self.print()
 
-    def read(f, name_list):
-        return SkeletonAsset(f, name_list)
+        if verbose:
+            self.print()
+
+    def read(f, version, name_list, verbose=False):
+        return SkeletonAsset(f, version, name_list, verbose=verbose)
 
     def write(f, skeleton):
-        f.write(SkeletonAsset.MAGIC)
-        bone_num = len(skeleton.bones)
-        write_uint32(f, bone_num)
-        f.write(b'\x82\x03\x01'*bone_num)
-        f.write(skeleton.guid)
-        write_uint32_array(f, skeleton.unk_ids, with_length=True)
-        write_null(f)
+        f.write(skeleton.unk)
         write_array(f, skeleton.bones, Bone.write, with_length=True)
-        write_array(f, skeleton.bones, Bone.write_pos, with_length=True)
+        write_uint32(f, len(skeleton.bones))
+        for b in skeleton.bones:
+            Bone.write_pos(f, b, skeleton.version)
         write_uint32(f, len(skeleton.bones))
         for b, i in zip(skeleton.bones, range(len(skeleton.bones))):
             write_uint32(f, b.name_id)
@@ -267,6 +274,6 @@ class SkeletonAsset:
 
     def print(self, padding=0):
         pad=' '*padding
-        logger.log(pad+'Skeleton (offset: {})'.format(self.offset))
-        logger.log(pad+'  bone_num: {}'.format(len(self.bones)))
+        print(pad+'Skeleton (offset: {})'.format(self.offset))
+        print(pad+'  bone_num: {}'.format(len(self.bones)))
         Bone.print_bones(self.bones, padding=2+padding)

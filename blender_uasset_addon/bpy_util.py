@@ -406,3 +406,11 @@ def assign_texture(texture, material, type='COLOR', location=[-800, 300], invert
     if 'ALPHA' in type:
         links.new(bsdf_node.inputs['Alpha'], tex_node.outputs['Color'])
         enable_alpha_for_material(material)
+
+from mathutils import Matrix
+# Same as Matrix.LocRotScale. but 2.8x doesn't support it.
+def make_trs(trans, rot, scale):
+    mat_trans = Matrix.Translation(trans)
+    mat_rot = rot.to_matrix().to_4x4()
+    mat_sca = Matrix.Diagonal(scale).to_4x4()
+    return mat_trans @ mat_rot @ mat_sca

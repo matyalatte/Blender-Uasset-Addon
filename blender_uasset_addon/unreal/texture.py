@@ -51,18 +51,12 @@ class Texture:
     UNREAL_SIGNATURE = b'\xC1\x83\x2A\x9E'
     UBULK_FLAG = [0, 16384]
     
-    def read(f, uasset):
-        return Texture(f, uasset)
+    def read(f, uasset, verbose=False):
+        return Texture(f, uasset, verbose=verbose)
 
     def __init__(self, f, uasset, verbose=False):
         self.uasset = uasset
         version = self.uasset.version
-        if version=='4.26':
-            version='4.27'
-        if version in ['4.23', '4.24']:
-            version='4.25'
-        if version in ['4.21', '4.22']:
-            version='4.20'
 
         file_path = f.name
         
@@ -78,12 +72,7 @@ class Texture:
         self.texture_type = '2D' if self.uasset.asset_type=='Texture2D' else 'Cube'
         
         #read .uexp
-
         self.read_uexp(f)
-        if self.version in ['4.25', '4.27']:
-            read_null(f, msg='Not NULL! ' + VERSION_ERR_MSG)
-        #check(self.end_offset, f.tell()+self.uasset_size)
-        self.none_name_id = read_uint64(f)
         
         #read .ubulk
         if self.has_ubulk:
@@ -95,36 +84,42 @@ class Texture:
                     mip.data = bulk_f.read(mip.data_size)
                 check(size, bulk_f.tell())
 
-        self.print(verbose)
+        if verbose:
+            self.print()
     
     #read uexp
     def read_uexp(self, f):
         #read cooked size if exist
-        if self.version=='ff7r':
-            f.read(1)
-            b = f.read(1)
-            while (b not in [b'\x03', b'\x05']):
-                f.read(1)
-                b = f.read(1)
-                if f.tell()>1000:
+        self.bin1=None
+        self.imported_width=None
+        self.imported_height=None
+        if self.uasset.unversioned:
+            uh = read_uint8_array(f, 2)
+            is_last=uh[1]%2==0
+            while (is_last):
+                uh = read_uint8_array(f, 2)
+                is_last=uh[1]%2==0
+                if f.tell()>100:
                     raise RuntimeError('Parse Failed. ' + VERSION_ERR_MSG)
             s = f.tell()
             f.seek(0)
             self.bin1=f.read(s)
-            self.original_width = read_uint32(f)
-            self.original_height = read_uint32(f)
+            chk = read_uint8_array(f, 8)
+            chk = [i for i in chk if i==0]
+            f.seek(-8, 1)            
+            if len(chk)>2:
+                self.imported_width = read_uint32(f)
+                self.imported_height = read_uint32(f)
         else:
-            first_property_id = read_uint32(f)
+            first_property_id = read_uint64(f)
             if first_property_id>=len(self.name_list):
                 raise RuntimeError('list index out of range. ' + VERSION_ERR_MSG)
             first_property = self.name_list[first_property_id]
             f.seek(0)
             if first_property=='ImportedSize':
                 self.bin1 = f.read(49)
-                self.original_width = read_uint32(f)
-                self.original_height = read_uint32(f)
-            else:
-                self.bin1 = None
+                self.imported_width = read_uint32(f)
+                self.imported_height = read_uint32(f)
 
         #skip property part        
         offset=f.tell()
@@ -136,14 +131,16 @@ class Texture:
         s=f.tell()-offset
         f.seek(offset)        
         self.unk = f.read(s)
-
         #read meta data
         self.type_name_id = read_uint64(f)
         self.offset_to_end_offset = f.tell()
         self.end_offset = read_uint32(f) #Offset to end of uexp?
-        if self.version in ['4.25', '4.27', '4.20']:
+        if self.version>='4.20':
             read_null(f, msg='Not NULL! ' + VERSION_ERR_MSG)
-        f.seek(8, 1) #original width and height
+        if self.version=='5.0':
+            read_null_array(f, 4)
+        self.original_width = read_uint32(f)
+        self.original_height = read_uint32(f)
         self.cube_flag = read_uint16(f)
         self.unk_int = read_uint16(f)
         if self.cube_flag==1:
@@ -161,10 +158,9 @@ class Texture:
             ubulk_map_num = read_uint32(f) #bulk map num + unk_map_num
         self.unk_map_num=read_uint32(f) #number of some mipmaps in uexp
         map_num = read_uint32(f) #map num ?
-
         if self.version=='ff7r':
-            #ff7r have all mipmap data in a mipmap object
-            self.uexp_mip_bulk = Mipmap.read(f, 'ff7r')
+            #ff7r has all mipmap data in a mipmap object
+            self.uexp_mip_bulk = Mipmap.read(f, self.version)
             read_const_uint32(f, self.cube_flag)
             f.seek(4, 1) #uexp mip map num
 
@@ -188,6 +184,11 @@ class Texture:
                     mip.data = self.uexp_mip_bulk.data[i:i+size]
                     i+=size
             check(i, len(self.uexp_mip_bulk.data))
+
+        if self.version>='4.23':
+            read_null(f, msg='Not NULL! ' + VERSION_ERR_MSG)
+        #check(self.end_offset, f.tell()+self.uasset_size)
+        self.none_name_id = read_uint64(f)
 
     #get max size of uexp mips
     def get_max_uexp_size(self):
@@ -221,16 +222,7 @@ class Texture:
             ubulk_name = None
         
         #write .uexp
-            
         self.write_uexp(f)
-        if self.version in ['4.25', '4.27']:
-            write_null(f)
-        new_end_offset = f.tell() + self.uasset_size
-        write_uint64(f, self.none_name_id)
-        
-        f.seek(self.offset_to_end_offset)
-        write_uint32(f, new_end_offset)
-        f.seek(0, 2)
 
         #write .ubulk if exist
         if self.has_ubulk:
@@ -239,9 +231,9 @@ class Texture:
                     if not mip.uexp:
                         bulk_f.write(mip.data)
 
-    def write_uexp(self, f):
+    def write_uexp(self, f, valid=False):
         #get mipmap info
-        max_width, max_height = self.get_max_uexp_size()
+        max_width, max_height = self.get_max_size()
         uexp_map_num, ubulk_map_num = self.get_mipmap_num()
         uexp_map_data_size = 0
         for mip in self.mipmaps:
@@ -250,12 +242,16 @@ class Texture:
         
         #write cooked size if exist
         if self.bin1 is not None:
-            self.original_height=max(self.original_height, max_height)
-            self.original_width=max(self.original_width, max_width)
             f.write(self.bin1)
-            write_uint32(f, self.original_width)
-            write_uint32(f, self.original_height)
-        else:
+
+        if self.imported_height is not None:
+            if not valid:
+                self.imported_height=max(self.imported_height, self.original_height, max_height)
+                self.imported_width=max(self.imported_width, self.original_width, max_width)
+            write_uint32(f, self.imported_width)
+            write_uint32(f, self.imported_height)
+
+        if not valid:
             self.original_height=max_height
             self.original_width =max_width
 
@@ -264,9 +260,11 @@ class Texture:
         #write meta data
         write_uint64(f, self.type_name_id)
         write_uint32(f, 0) #write dummy offset. (rewrite it later)
-        if self.version in ['4.25', '4.27', '4.20']:
+        if self.version>='4.20':
             write_null(f)
-        
+        if self.version=='5.0':
+            write_null_array(f, 4)
+
         write_uint32(f, self.original_width)
         write_uint32(f, self.original_height)
         write_uint16(f, self.cube_flag)
@@ -290,33 +288,43 @@ class Texture:
                 if mip.uexp:
                     uexp_bulk = b''.join([uexp_bulk, mip.data])
             size = self.get_max_uexp_size()
-            self.uexp_mip_bulk=Mipmap('ff7r')
+            self.uexp_mip_bulk=Mipmap(self.version)
             self.uexp_mip_bulk.update(uexp_bulk, size, True)
             self.uexp_mip_bulk.offset=self.uasset_size+f.tell()+24
-            self.uexp_mip_bulk.write(f, self.uasset_size)
+            self.uexp_mip_bulk.write(f)
 
             write_uint32(f, self.cube_flag)
             write_uint32(f, uexp_map_num)
         
-        if self.version in ['4.27', '4.15', '4.14', '4.13', 'ff7r']:
-            offset = 0
-        else:
-            new_end_offset = \
-                self.uasset_size + \
-                f.tell() + \
-                uexp_map_data_size + \
-                ubulk_map_num*32 + \
-                (len(self.mipmaps))*(self.version in ['4.25', '4.20'])*4 + \
-                (self.version=='4.25')*4
-            offset = -new_end_offset-8
         #write mipmaps
+        ubulk_offset = 0
         for mip in self.mipmaps:
             if mip.uexp:
-                mip.offset=self.uasset_size+f.tell()+24
+                mip.offset=self.uasset_size+f.tell()+24 -4 *(self.version=='5.0')
             else:
-                mip.offset=offset
-                offset+=mip.data_size
-            mip.write(f, self.uasset_size)
+                mip.offset=ubulk_offset
+                ubulk_offset+=mip.data_size
+            mip.write(f)
+
+        if self.version>='4.25':
+            write_null(f)
+
+        if self.version=='5.0':
+            new_end_offset = f.tell() - self.offset_to_end_offset
+        else:
+            new_end_offset = f.tell() + self.uasset_size
+        write_uint64(f, self.none_name_id)
+
+        if self.version<'4.26' and self.version!='ff7r':
+            base_offset = - self.uasset_size - f.tell()
+            for mip in self.mipmaps:
+                if not mip.uexp:
+                    mip.offset += base_offset
+                    mip.rewrite_offset(f)
+        
+        f.seek(self.offset_to_end_offset)
+        write_uint32(f, new_end_offset)
+        f.seek(0, 2)
 
     #remove mipmaps except the largest one
     def remove_mipmaps(self):
@@ -341,22 +349,6 @@ class Texture:
         if dds.header.texture_type!=self.texture_type:
             raise RuntimeError('Texture type does not match. ({}, {})'.format(self.texture_type, dds.header.texture_type))
         
-        '''
-        def get_key_from_value(d, val):
-            keys = [k for k, v in d.items() if v == val]
-            if keys:
-                return keys[0]
-            return None
-
-        if force:
-            self.format_name = dds.header.format_name
-            new_type = get_key_from_value(self.format_name)
-            self.uasset_size+=len(new_type)-len(self.type)
-            self.type = new_type
-            self.name_list[self.type_name_id]=self.type
-            self.byte_per_pixel = BYTE_PER_PIXEL[self.format_name]
-        '''
-            
         max_width, max_height = self.get_max_size()
         old_size = (max_width, max_height)
         old_mipmap_num = len(self.mipmaps)
@@ -392,21 +384,9 @@ class Texture:
             print('Warning: Mipmaps should have power of 2 as its width and height. ({}, {})'.format(max_width, max_height))
         if new_mipmap_num>1 and old_mipmap_num==1:
             print('Warning: The original texture has only 1 mipmap. But your dds has multiple mipmaps.')
-            
 
-    def print(self, verbose=False):
+    def print(self):
+        for mip, i in zip(self.mipmaps, range(len(self.mipmaps))):
+            print('Mipmap{}'.format(i))
+            mip.print()
         return
-        '''
-        if verbose:
-            i=0
-            for mip in self.mipmaps:
-                print('  Mipmap {}'.format(i))
-                mip.print(padding=4)
-                i+=1
-        max_width, max_height = self.get_max_size()
-        print('  max width: {}'.format(max_width))
-        print('  max height: {}'.format(max_height))
-        print('  format: {}'.format(self.type))
-        print('  texture type: {}'.format(self.texture_type))
-        print('  mipmap num: {}'.format(len(self.mipmaps)))
-        '''

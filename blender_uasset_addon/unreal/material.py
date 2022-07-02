@@ -1,5 +1,4 @@
 from ..util.io_util import *
-from ..util.logger import logger
 from . import uasset
 
 #Base class for material
@@ -15,21 +14,19 @@ class Material:
     def write(f, material):
         pass
 
-    def print_materials(materials, name_list, imports, offset):
-        logger.log('Materials (offset: {})'.format(offset))
+    def update_material_data(materials, name_list, imports):
         for material in materials:
             material.slot_name=name_list[material.slot_name_id]
             material_import = imports[-material.import_id-1]
             material.import_name=material_import.name
             material.class_name=material_import.class_name
             material.asset_path = material_import.parent_name
-            material.print()
 
     def print(self, padding=2):
         pad=' '*padding
-        logger.log(pad+self.import_name)
-        logger.log(pad+'  slot name: {}'.format(self.slot_name))
-        logger.log(pad+'  asset path: {}'.format(self.asset_path))
+        print(pad+self.import_name)
+        print(pad+'  slot name: {}'.format(self.slot_name))
+        print(pad+'  asset path: {}'.format(self.asset_path))
 
     def assign_materials(materials1, materials2):
         #if len(materials1)!=len(materials2):
@@ -104,15 +101,17 @@ class Material:
         file_path = get_actual_path(self.asset_path)
         if os.path.exists(file_path):
             try:
-                material_asset = uasset.Uasset(file_path, ignore_uexp=True, version=version, asset_type='Material')
+                material_asset = uasset.Uasset(file_path, ignore_uexp=True, version=str(version), asset_type='Material')
                 self.texture_asset_paths = [imp.parent_name for imp in material_asset.imports if 'Texture' in imp.class_name]
                 self.texture_actual_paths = [get_actual_path(p) for p in self.texture_asset_paths]
                 m = None
-            except:
+            except Exception as e:
+                #print(e)
                 m = 'Failed to load the material asset. This is unexpected. ({})'.format(file_path)
         else:
             m = 'File not found. ({})'.format(file_path)
         if m is not None:
+            print(m)
             self.texture_asset_paths = [m]
             self.texture_actual_paths = []
 
@@ -137,10 +136,10 @@ class StaticMaterial(Material):
 
 #material for skeletal mesh
 class SkeletalMaterial(Material):
-    def read(f):
+    def read(f, version):
         import_id=read_int32(f)
         slot_name_id=read_uint32(f)
-        bin=f.read(28) #cast shadow, uv density?
+        bin=f.read(28 + 4*(version>='4.27')) #cast shadow, uv density?
         return SkeletalMaterial(import_id, slot_name_id, bin)
 
     def write(f, material):
