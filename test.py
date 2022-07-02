@@ -1,6 +1,6 @@
 #Script to check if the addon can reconstract files.
 #Put test.py in the same directory as blender_uasset_addon, and run the command below.
-#python test.py file --version=version
+#python test.py file --version=version --verbose
 
 if __name__=="__main__":
     from blender_uasset_addon import unreal, util
@@ -13,7 +13,7 @@ if __name__=="__main__":
         parser = argparse.ArgumentParser()
         parser.add_argument('file', help='.uasset')
         parser.add_argument('--version', default='5.0', help='UE version')
-        parser.add_argument('--verbose', action='store_true')
+        parser.add_argument('--verbose', action='store_true', help='Show logs')
         args = parser.parse_args()
         return args
 

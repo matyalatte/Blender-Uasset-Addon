@@ -101,15 +101,17 @@ class Material:
         file_path = get_actual_path(self.asset_path)
         if os.path.exists(file_path):
             try:
-                material_asset = uasset.Uasset(file_path, ignore_uexp=True, version=version, asset_type='Material')
+                material_asset = uasset.Uasset(file_path, ignore_uexp=True, version=str(version), asset_type='Material')
                 self.texture_asset_paths = [imp.parent_name for imp in material_asset.imports if 'Texture' in imp.class_name]
                 self.texture_actual_paths = [get_actual_path(p) for p in self.texture_asset_paths]
                 m = None
-            except:
+            except Exception as e:
+                #print(e)
                 m = 'Failed to load the material asset. This is unexpected. ({})'.format(file_path)
         else:
             m = 'File not found. ({})'.format(file_path)
         if m is not None:
+            print(m)
             self.texture_asset_paths = [m]
             self.texture_actual_paths = []
 
@@ -134,10 +136,10 @@ class StaticMaterial(Material):
 
 #material for skeletal mesh
 class SkeletalMaterial(Material):
-    def read(f):
+    def read(f, version):
         import_id=read_int32(f)
         slot_name_id=read_uint32(f)
-        bin=f.read(28) #cast shadow, uv density?
+        bin=f.read(28 + 4*(version>='4.27')) #cast shadow, uv density?
         return SkeletalMaterial(import_id, slot_name_id, bin)
 
     def write(f, material):

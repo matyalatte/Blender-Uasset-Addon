@@ -118,7 +118,7 @@ def load_utexture(file, name, version, asset=None, invert_normals=False):
         os.remove(temp)
     return tex, type
 
-def generate_materials(asset, version, load_textures=False, invert_normal_maps=False, suffix_list=['_C', '_N', '_A']):
+def generate_materials(asset, version, load_textures=False, invert_normal_maps=False, suffix_list=[['_C', '_D'], ['_N'], ['_A']]):
     if load_textures:
         print('Loading textures...')
     #add materials to mesh
@@ -154,16 +154,28 @@ def generate_materials(asset, version, load_textures=False, invert_normal_maps=F
                     names.append(name)
 
             types = [texs[n][1] for n in names]
+            def contain_suffix(base_name, names, suffix_list):
+                for suf in suffix_list:
+                    if base_name+suf in names:
+                        return names.index(base_name+suf)
+                return -1
+
+            def has_suffix(n, suffix_list):
+                for suf in suffix_list:
+                    if n[-len(suf):]==suf:
+                        return True
+                return False
 
             def search_suffix(suffix, type, new_type_suffix, need_suffix=False):
                 if type not in types:
                     return
                 id = None
                 type_names = [n for n,t in zip(names, types) if t==type]
-                if material_name+suffix in type_names:
-                    id = names.index(material_name+suffix)
+                new_id = contain_suffix(material_name, type_names, suffix)
+                if new_id!=-1:
+                    id = new_id
                 if id is None:
-                    ns = [n for n in type_names if n[-len(suffix):]==suffix]
+                    ns = [n for n in type_names if has_suffix(n, suffix)]
                     if len(ns)>0:
                         id = names.index(ns[0])
                     elif need_suffix:
@@ -200,7 +212,6 @@ def generate_mesh(amt, asset, materials, material_names, rescale=1.0, keep_secti
 
     sections = []
     collection = bpy.context.view_layer.active_layer_collection.collection
-
     for i in range(len(material_ids)):
         material_id = material_ids[i]
         name = material_names[material_id]
@@ -228,7 +239,9 @@ def generate_mesh(amt, asset, materials, material_names, rescale=1.0, keep_secti
             bpy_util.skinning(section, vg_names, joint, weight)
         
         #smoothing
-        norm = np.array(normals[i], dtype=np.float32) / 127 - 1
+        norm = ((np.array(normals[i], dtype=np.float32))-127) /127
+        norm = norm / np.linalg.norm(norm, axis=1)[:, np.newaxis]
+
         norm = bpy_util.flip_y_for_3d_vectors(norm)
         bpy_util.smoothing(mesh_data, len(indice)//3, norm, smoothing=smoothing)
         
@@ -245,9 +258,9 @@ def load_uasset(file, rename_armature=True, keep_sections=False,
     normalize_bones=True, rotate_bones=False,
     minimal_bone_length=0.025, rescale=1.0,
     smoothing=True, only_skeleton=False,
-    show_axes=False, bone_display_type='OCTAHEDRAL',
+    show_axes=False, bone_display_type='OCTAHEDRAL', show_in_front=True,
     load_textures=False, invert_normal_maps=False, ue_version='4.18', \
-    suffix_list=['_C', '_N', '_A']):
+    suffix_list=[['_C', '_D'], ['_N'], ['_A']]):
 
     #load .uasset
     asset=unreal.uasset.Uasset(file, version=ue_version)
@@ -277,6 +290,7 @@ def load_uasset(file, rename_armature=True, keep_sections=False,
         amt = generate_armature(asset.name, bones, normalize_bones, rotate_bones, minimal_bone_length, rescale=rescale)
         amt.data.show_axes = show_axes
         amt.data.display_type = bone_display_type
+        amt.show_in_front = show_in_front
         if rename_armature:
             amt.name = 'Armature'
         bpy.ops.object.mode_set(mode='OBJECT')        
@@ -308,7 +322,9 @@ class GeneralOptions(PropertyGroup):
     ue_version: EnumProperty(
         name='UE version',
         items=(('ff7r', 'FF7R', ''),
-            ('4.18', '4.18', '')),
+            ('4.18', '4.18 (Experimental!)', 'Not Recommended'),
+            ('4.27', '4.27 (Experimental!)', 'Not Recommended'),
+            ('5.0', '5.0 (Experimental!)', 'Not Recommended')),
         description='UE version of assets',
         default='ff7r'
     )
@@ -373,7 +389,7 @@ class ImportOptions(PropertyGroup):
         description=(
             'The suffix will be used to determine which 3ch texture is the main color map'
         ),
-        default='_C',
+        default='_C, _D',
     )
 
     suffix_for_normal: StringProperty(
@@ -429,6 +445,14 @@ class ImportOptions(PropertyGroup):
             'Display bone axes'
         ),
         default=False,
+    )
+
+    show_in_front: BoolProperty(
+        name='Show In Front',
+        description=(
+            'Display bones in front of other objects'
+        ),
+        default=True,
     )
 
     bone_display_type: EnumProperty(
@@ -488,7 +512,7 @@ class ImportUasset(Operator, ImportHelper):
             ['ue_version'],
             ['load_textures', 'keep_sections', 'smoothing'],
             ['invert_normal_maps', 'suffix_for_color', 'suffix_for_normal', 'suffix_for_alpha'],
-            ['rotate_bones', 'minimal_bone_length', 'normalize_bones', 'rename_armature', 'only_skeleton','show_axes', 'bone_display_type'],
+            ['rotate_bones', 'minimal_bone_length', 'normalize_bones', 'rename_armature', 'only_skeleton','show_axes', 'bone_display_type', 'show_in_front'],
             ['unit_scale', 'rescale']
         ]
         
@@ -537,6 +561,11 @@ class ImportUasset(Operator, ImportHelper):
 
             bpy_util.set_unit_scale(import_options.unit_scale)
 
+            def str_to_list(list_as_str):
+                list_as_str = list_as_str.replace(' ', '')
+                list_as_str = list_as_str.replace('　', '')
+                return list_as_str.split(',')
+
             root_obj, asset_type = load_uasset(file,
                 rename_armature=import_options.rename_armature,
                 keep_sections=import_options.keep_sections,
@@ -547,11 +576,12 @@ class ImportUasset(Operator, ImportHelper):
                 smoothing = import_options.smoothing,
                 only_skeleton = import_options.only_skeleton,
                 show_axes=import_options.show_axes,
+                show_in_front=import_options.show_in_front,
                 bone_display_type=import_options.bone_display_type,
                 load_textures=import_options.load_textures,
                 invert_normal_maps=import_options.invert_normal_maps,
                 ue_version=general_options.ue_version,
-                suffix_list=[import_options.suffix_for_color, import_options.suffix_for_normal, import_options.suffix_for_alpha]
+                suffix_list=[str_to_list(import_options.suffix_for_color), str_to_list(import_options.suffix_for_normal), str_to_list(import_options.suffix_for_alpha)]
             )
 
             context.scene.general_options.source_file=file

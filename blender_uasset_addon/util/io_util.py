@@ -84,6 +84,9 @@ def read_uint8_array(file, len=None):
 def read_int32_array(file, len=None):
     return read_num_array(file, 'i', len=len)
 
+def read_float64_array(file, len=None):
+    return read_num_array(file, 'd', len=len)
+
 def read_float32_array(file, len=None):
     return read_num_array(file, 'f', len=len)
 
@@ -150,6 +153,10 @@ def write_int32(file, n):
     bin = n.to_bytes(4, byteorder="little", signed=True)
     file.write(bin)
 
+def write_float64(file, x):
+    bin = struct.pack('<d', x)
+    file.write(bin)
+
 def write_float32(file, x):
     bin = struct.pack('<f', x)
     file.write(bin)
@@ -175,6 +182,9 @@ def write_uint8_array(file, ary, with_length=False):
 
 def write_int32_array(file, ary, with_length=False):
     write_array(file, ary, write_int32, with_length=with_length)
+
+def write_float64_array(file, ary, with_length=False):
+    write_array(file, ary, write_float64, with_length=with_length)
 
 def write_float32_array(file, ary, with_length=False):
     write_array(file, ary, write_float32, with_length=with_length)

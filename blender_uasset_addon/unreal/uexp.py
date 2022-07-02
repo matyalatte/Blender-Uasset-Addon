@@ -29,11 +29,9 @@ class Uexp:
         self.asset_path = self.uasset.asset_path
 
         self.version=self.uasset.version
-        self.ff7r = self.version=='ff7r'
         self.asset_type = self.uasset.asset_type
 
         if verbose:
-            print('FF7R: {}'.format(self.ff7r))
             print('Asset type: {}'.format(self.asset_type))
 
         #check materials
@@ -63,12 +61,12 @@ class Uexp:
                 else:
                     #'SkeletalMesh', 'StaticMesh', 'Skeleton'
                     if self.asset_type=='SkeletalMesh':
-                        self.mesh=SkeletalMesh.read(f, self.ff7r, self.name_list, self.imports, verbose=verbose)
+                        self.mesh=SkeletalMesh.read(f, self.uasset, verbose=verbose)
                         self.skeleton = self.mesh.skeleton
                     elif self.asset_type=='StaticMesh':
-                        self.mesh=StaticMesh.read(f, self.ff7r, self.name_list, self.imports, verbose=verbose)
+                        self.mesh=StaticMesh.read(f, self.uasset, verbose=verbose)
                     elif self.asset_type=='Skeleton':
-                        self.skeleton = SkeletonAsset.read(f, self.name_list, verbose=verbose)
+                        self.skeleton = SkeletonAsset.read(f, self.version, self.name_list, verbose=verbose)
                     elif 'Texture' in self.asset_type:
                         self.texture = Texture.read(f, self.uasset, verbose=verbose)
                     self.unknown2=f.read(export.offset+export.size-f.tell()-self.uasset.size)

@@ -1,7 +1,7 @@
 import os, json, struct
 from ..util.io_util import *
 
-from .lod import StaticLOD, SkeletalLOD
+from .lod import StaticLOD, SkeletalLOD4, SkeletalLOD5
 from .skeleton import Skeleton
 from .material import Material, StaticMaterial, SkeletalMaterial
 from .buffer import Buffer
@@ -40,10 +40,14 @@ class Mesh:
     def seek_materials(f, imports, seek_import=False):
         offset=f.tell()
         buf=f.read(3)
+        size = get_size(f)
         while (True):
-            while (buf!=b'\xFF\xFF\xFF'):
-                buf=b''.join([buf[1:], f.read(1)])
-                if f.tell()-offset>100000:
+            while (buf!=b'\xff'*3):
+                if b'\xff' not in buf:
+                    buf = f.read(3)
+                else:
+                    buf=b''.join([buf[1:], f.read(1)])
+                if f.tell()==size:
                     raise RuntimeError('Material properties not found. This is an unexpected error.')
             f.seek(-4,1)
             import_id=-read_int32(f)-1
@@ -111,13 +115,16 @@ class StaticMesh(Mesh):
         self.materials = materials
         self.LODs = LODs
         
-    def read(f, ff7r, name_list, imports, verbose=False):
+    def read(f, uasset, verbose=False):
+        imports = uasset.imports
+        name_list = uasset.name_list
+        version = uasset.version
         offset=f.tell()
         Mesh.seek_materials(f, imports)
-        f.seek(-10-(51+21)*(not ff7r),1)
+        f.seek(-10-(51+21)*(version!='ff7r'),1)
         material_offset=f.tell()
         num = read_uint32(f)
-        f.seek((not ff7r)*(51+21), 1)
+        f.seek((version!='ff7r')*(51+21), 1)
 
         materials=[]
         for i in range(num):
@@ -162,15 +169,18 @@ class SkeletalMesh(Mesh):
     #skeleton: skeleton data
     #LOD: LOD array
     #extra_mesh: ?
-    def __init__(self, ff7r, unk, materials, skeleton, LODs, extra_mesh):
-        self.ff7r=ff7r
+    def __init__(self, version, unk, materials, skeleton, LODs, extra_mesh):
+        self.version=version
         self.unk=unk
         self.materials=materials
         self.skeleton=skeleton
         self.LODs=LODs
         self.extra_mesh=extra_mesh
         
-    def read(f, ff7r, name_list, imports, verbose=False):
+    def read(f, uasset, verbose=False):
+        imports = uasset.imports
+        name_list = uasset.name_list
+        version = uasset.version
         offset=f.tell()
 
         Mesh.seek_materials(f, imports)
@@ -180,7 +190,7 @@ class SkeletalMesh(Mesh):
         unk=f.read(unk_size)
 
         material_offset=f.tell()
-        materials=read_array(f, SkeletalMaterial.read)
+        materials=[SkeletalMaterial.read(f, version) for i in range(read_uint32(f))]
         Material.update_material_data(materials, name_list, imports)
         if verbose:
             print('Materials (offset: {})'.format(material_offset))
@@ -188,43 +198,50 @@ class SkeletalMesh(Mesh):
                 material.print()
 
         #skeleton data
-        skeleton=Skeleton.read(f)
+        skeleton=Skeleton.read(f, version)
         skeleton.name_bones(name_list)
-
         if verbose:
             skeleton.print()
 
+        if version>='4.27':
+            read_const_uint32(f, 1)
+
         #LOD data
-        LOD_num=read_uint32(f)
-        LODs=[]
-        for i in range(LOD_num):
-            lod=SkeletalLOD.read(f, ff7r=ff7r)
-            if verbose:
+        if version<'4.27':
+            LODs=[SkeletalLOD4.read(f, version) for i in range(read_uint32(f))]
+        else:
+            LODs=[SkeletalLOD5.read(f, version) for i in range(read_uint32(f))]
+        if verbose:
+            for lod, i in zip(LODs,range(len(LODs))):
                 lod.print(str(i), skeleton.bones)
-            LODs.append(lod)
 
         #mesh data?
-        if ff7r:
+        if version=='ff7r':
             read_const_uint32(f, 1)
             extra_mesh=ExtraMesh.read(f, skeleton.bones)
             if verbose:
                 extra_mesh.print()
         else:
             extra_mesh=None
-        return SkeletalMesh(ff7r, unk, materials, skeleton, LODs, extra_mesh)
+        return SkeletalMesh(version, unk, materials, skeleton, LODs, extra_mesh)
 
     def write(f, skeletalmesh):
         f.write(skeletalmesh.unk)
         write_array(f, skeletalmesh.materials, SkeletalMaterial.write, with_length=True)
         Skeleton.write(f, skeletalmesh.skeleton)
-        write_array(f, skeletalmesh.LODs, SkeletalLOD.write, with_length=True)
-        if skeletalmesh.ff7r:
+        if skeletalmesh.version>='4.27':
+            write_uint32(f, 1)
+        if skeletalmesh.version<'4.27':
+            write_array(f, skeletalmesh.LODs, SkeletalLOD4.write, with_length=True)
+        else:
+            write_array(f, skeletalmesh.LODs, SkeletalLOD5.write, with_length=True)
+        if skeletalmesh.version=='ff7r':
             write_uint32(f, 1)
             ExtraMesh.write(f, skeletalmesh.extra_mesh)
 
     def import_LODs(self, skeletalmesh, imports, name_list, file_data_ids, only_mesh=False, only_phy_bones=False,
                     dont_remove_KDI=False):
-        if not self.ff7r:
+        if self.version!='ff7r':
             raise RuntimeError("The file should be an FF7R's asset!")
 
         bone_diff=len(self.skeleton.bones)-len(skeletalmesh.skeleton.bones)
@@ -253,7 +270,7 @@ class SkeletalMesh(Mesh):
             self.remove_KDI()
 
     def remove_KDI(self):
-        if not self.ff7r:
+        if self.version!='ff7r':
             raise RuntimeError("The file should be an FF7R's asset!")
         
         for lod in self.LODs:

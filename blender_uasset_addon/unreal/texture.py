@@ -57,12 +57,6 @@ class Texture:
     def __init__(self, f, uasset, verbose=False):
         self.uasset = uasset
         version = self.uasset.version
-        if version=='4.26':
-            version='4.27'
-        if version in ['4.23', '4.24']:
-            version='4.25'
-        if version in ['4.21', '4.22']:
-            version='4.20'
 
         file_path = f.name
         
@@ -99,8 +93,7 @@ class Texture:
         self.bin1=None
         self.imported_width=None
         self.imported_height=None
-        if self.version=='ff7r':
-        #if self.unversioned:
+        if self.uasset.unversioned:
             uh = read_uint8_array(f, 2)
             is_last=uh[1]%2==0
             while (is_last):
@@ -138,13 +131,14 @@ class Texture:
         s=f.tell()-offset
         f.seek(offset)        
         self.unk = f.read(s)
-
         #read meta data
         self.type_name_id = read_uint64(f)
         self.offset_to_end_offset = f.tell()
         self.end_offset = read_uint32(f) #Offset to end of uexp?
-        if self.version in ['4.25', '4.27', '4.20']:
+        if self.version>='4.20':
             read_null(f, msg='Not NULL! ' + VERSION_ERR_MSG)
+        if self.version=='5.0':
+            read_null_array(f, 4)
         self.original_width = read_uint32(f)
         self.original_height = read_uint32(f)
         self.cube_flag = read_uint16(f)
@@ -164,10 +158,9 @@ class Texture:
             ubulk_map_num = read_uint32(f) #bulk map num + unk_map_num
         self.unk_map_num=read_uint32(f) #number of some mipmaps in uexp
         map_num = read_uint32(f) #map num ?
-
         if self.version=='ff7r':
             #ff7r has all mipmap data in a mipmap object
-            self.uexp_mip_bulk = Mipmap.read(f, 'ff7r')
+            self.uexp_mip_bulk = Mipmap.read(f, self.version)
             read_const_uint32(f, self.cube_flag)
             f.seek(4, 1) #uexp mip map num
 
@@ -192,7 +185,7 @@ class Texture:
                     i+=size
             check(i, len(self.uexp_mip_bulk.data))
 
-        if self.version in ['4.25', '4.27']:
+        if self.version>='4.23':
             read_null(f, msg='Not NULL! ' + VERSION_ERR_MSG)
         #check(self.end_offset, f.tell()+self.uasset_size)
         self.none_name_id = read_uint64(f)
@@ -253,8 +246,8 @@ class Texture:
 
         if self.imported_height is not None:
             if not valid:
-                self.imported_height=max(self.original_height, max_height)
-                self.imported_width=max(self.original_width, max_width)
+                self.imported_height=max(self.imported_height, self.original_height, max_height)
+                self.imported_width=max(self.imported_width, self.original_width, max_width)
             write_uint32(f, self.imported_width)
             write_uint32(f, self.imported_height)
 
@@ -267,9 +260,11 @@ class Texture:
         #write meta data
         write_uint64(f, self.type_name_id)
         write_uint32(f, 0) #write dummy offset. (rewrite it later)
-        if self.version in ['4.25', '4.27', '4.20']:
+        if self.version>='4.20':
             write_null(f)
-        
+        if self.version=='5.0':
+            write_null_array(f, 4)
+
         write_uint32(f, self.original_width)
         write_uint32(f, self.original_height)
         write_uint16(f, self.cube_flag)
@@ -293,7 +288,7 @@ class Texture:
                 if mip.uexp:
                     uexp_bulk = b''.join([uexp_bulk, mip.data])
             size = self.get_max_uexp_size()
-            self.uexp_mip_bulk=Mipmap('ff7r')
+            self.uexp_mip_bulk=Mipmap(self.version)
             self.uexp_mip_bulk.update(uexp_bulk, size, True)
             self.uexp_mip_bulk.offset=self.uasset_size+f.tell()+24
             self.uexp_mip_bulk.write(f)
@@ -305,18 +300,22 @@ class Texture:
         ubulk_offset = 0
         for mip in self.mipmaps:
             if mip.uexp:
-                mip.offset=self.uasset_size+f.tell()+24
+                mip.offset=self.uasset_size+f.tell()+24 -4 *(self.version=='5.0')
             else:
                 mip.offset=ubulk_offset
                 ubulk_offset+=mip.data_size
             mip.write(f)
 
-        if self.version in ['4.25', '4.27']:
+        if self.version>='4.25':
             write_null(f)
-        new_end_offset = f.tell() + self.uasset_size
+
+        if self.version=='5.0':
+            new_end_offset = f.tell() - self.offset_to_end_offset
+        else:
+            new_end_offset = f.tell() + self.uasset_size
         write_uint64(f, self.none_name_id)
 
-        if self.version not in ['4.27', 'ff7r']:
+        if self.version<'4.26' and self.version!='ff7r':
             base_offset = - self.uasset_size - f.tell()
             for mip in self.mipmaps:
                 if not mip.uexp:
@@ -350,22 +349,6 @@ class Texture:
         if dds.header.texture_type!=self.texture_type:
             raise RuntimeError('Texture type does not match. ({}, {})'.format(self.texture_type, dds.header.texture_type))
         
-        '''
-        def get_key_from_value(d, val):
-            keys = [k for k, v in d.items() if v == val]
-            if keys:
-                return keys[0]
-            return None
-
-        if force:
-            self.format_name = dds.header.format_name
-            new_type = get_key_from_value(self.format_name)
-            self.uasset_size+=len(new_type)-len(self.type)
-            self.type = new_type
-            self.name_list[self.type_name_id]=self.type
-            self.byte_per_pixel = BYTE_PER_PIXEL[self.format_name]
-        '''
-            
         max_width, max_height = self.get_max_size()
         old_size = (max_width, max_height)
         old_mipmap_num = len(self.mipmaps)
@@ -401,7 +384,6 @@ class Texture:
             print('Warning: Mipmaps should have power of 2 as its width and height. ({}, {})'.format(max_width, max_height))
         if new_mipmap_num>1 and old_mipmap_num==1:
             print('Warning: The original texture has only 1 mipmap. But your dds has multiple mipmaps.')
-            
 
     def print(self):
         for mip, i in zip(self.mipmaps, range(len(self.mipmaps))):

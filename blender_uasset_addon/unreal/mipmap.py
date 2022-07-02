@@ -34,16 +34,18 @@ class Mipmap(c.LittleEndianStructure):
         self.one=1
 
     def read(f, version):
-        read_const_uint32(f, 1)
         mip = Mipmap(version)
+        if version!='5.0':
+            read_const_uint32(f, 1)
         f.readinto(mip)
         mip.uexp = mip.ubulk_flag not in [1025, 1281, 1]
         mip.meta = mip.ubulk_flag==32
         if mip.uexp:
             mip.data = f.read(mip.data_size)
+        
         mip.width = read_uint32(f)
         mip.height = read_uint32(f)
-        if version in ['4.25', '4.27', '4.20']:
+        if version>='4.20':
             read_const_uint32(f, 1)
 
         check(mip.data_size, mip.data_size2)
@@ -59,7 +61,6 @@ class Mipmap(c.LittleEndianStructure):
         print(pad + 'height: {}'.format(self.height))
 
     def write(self, f):
-        self.offset_to_offset_data=f.tell()+16
         if self.uexp:
             if self.meta:
                 self.ubulk_flag=32
@@ -68,19 +69,20 @@ class Mipmap(c.LittleEndianStructure):
             self.unk_flag = 0
         else:
             self.ubulk_flag=1281
-            self.unk_flag = self.version in ['4.27', 'ff7r']
+            self.unk_flag = self.version>'4.26' or self.version=='ff7r'
         if self.uexp and self.meta:
             self.data_size=0
             self.data_size2=0
 
-        write_uint32(f, 1)
+        if self.version!='5.0':
+            write_uint32(f, 1)
+        self.offset_to_offset_data=f.tell()+12
         f.write(self)
         if self.uexp and not self.meta:
             f.write(self.data)
-
         write_uint32(f, self.width)
         write_uint32(f, self.height)
-        if self.version in ['4.25', '4.27', '4.20']:
+        if self.version>='4.20':
             write_uint32(f, 1)
 
     def rewrite_offset(self, f):

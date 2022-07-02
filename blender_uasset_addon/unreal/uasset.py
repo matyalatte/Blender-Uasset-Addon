@@ -1,4 +1,5 @@
 from ..util.io_util import *
+from ..util.version import VersionInfo
 from .uexp import Uexp
 import ctypes as c
 
@@ -9,13 +10,13 @@ class UassetHeader(c.LittleEndianStructure):
     HEAD = b'\xC1\x83\x2A\x9E'
     _pack_=1
     _fields_ = [ #193 bytes
-        ("head", c.c_char*4), #Unreal Header (193,131,42,158)
-        ("version", c.c_int32), #-version-1=6
-        ("null", c.c_ubyte*16),
+        #("head", c.c_char*4), #Unreal Header (193,131,42,158)
+        #("version", c.c_int32), #-version-1=6 or 7
+        #("null", c.c_ubyte*16),
         ("uasset_size", c.c_uint32), #size of .uasset
         ("str_length", c.c_uint32), #5
         ("none", c.c_char*5), #'None '
-        ("unk", c.c_char*4),
+        ("pkg_flags", c.c_uint32), # 00 20 00 00: unversioned header flag
         ("name_count", c.c_uint32),
         ("name_offset", c.c_uint32),
         ("null2", c.c_ubyte*8),
@@ -38,9 +39,30 @@ class UassetHeader(c.LittleEndianStructure):
         ("file_data_offset", c.c_uint32)
     ]
 
-    def check(self):
-        check(self.head, UassetHeader.HEAD)
-        check(-self.version-1, 6)
+    def read(f):
+        header = UassetHeader()
+        check(f.read(4), UassetHeader.HEAD)
+        header.version = -read_int32(f)-1
+        if header.version not in [6, 7]:
+            raise RuntimeError('Unsupported header version. ({})'.format(header.version))
+        header.null = f.read(16+4*(header.version>=7))
+        f.readinto(header)
+        header.unversioned = (header.pkg_flags & 8192)!=0
+        if header.version>=7:
+            header.unk_count = read_uint32(f)
+            check(read_int32(f), -1)
+            check(read_int32(f), -1)
+        return header
+
+    def write(f, header):
+        f.write(UassetHeader.HEAD)
+        write_int32(f, -header.version-1)
+        f.write(header.null)
+        f.write(header)
+        if header.version>=7:
+            write_uint32(f, header.unk_count)
+            write_int32(f, -1)
+            write_int32(f, -1)
 
     def print(self):
         print('Header info')
@@ -70,6 +92,18 @@ class UassetImport(c.LittleEndianStructure):
 
     def __init__(self):
         self.material=False
+
+    def read(f, version):
+        imp = UassetImport()
+        f.readinto(imp)
+        if version=='5.0':
+            imp.unk2 = read_uint32(f)
+        return imp
+
+    def write(self, f, version):
+        f.write(self)
+        if version=='5.0':
+            write_uint32(f, self.unk2)
 
     def name_import(self, name_list):
         self.name = name_list[self.name_id]
@@ -120,7 +154,19 @@ class UassetExport(c.LittleEndianStructure):
         ("unk", c.c_ubyte*64),
     ]
 
-    MAIN_EXPORTS=['SkeletalMesh', 'StaticMesh', 'Skeleton', 'Texture2D', 'Material', 'MaterialInstanceConstant']
+    MAIN_EXPORTS=['SkeletalMesh', 'StaticMesh', 'Skeleton', 'Texture2D', 'TextureCube', 'Material', 'MaterialInstanceConstant']
+
+    def read(f, version):
+        exp = UassetExport()
+        f.readinto(exp)
+        if version=='5.0':
+            exp.unk2 = read_uint32(f)
+        return exp
+
+    def write(self, f, version):
+        f.write(self)
+        if version=='5.0':
+            write_uint32(f, self.unk2)
 
     def update(self, size, offset):
         self.size=size
@@ -170,18 +216,23 @@ class Uasset:
         self.actual_path = file
         self.file=os.path.basename(file)[:-7]
         self.name = os.path.splitext(os.path.basename(file))[0]
-        self.version=version
+        if version=='ff7r':
+            base_version='4.18'
+            custom_version=version
+        else:
+            base_version=version
+            custom_version=None
+        self.version=VersionInfo(base_version, customized_version=custom_version)
+
         with open(file, 'rb') as f:
             self.size=get_size(f)
             #read header
-            self.header=UassetHeader()
-            f.readinto(self.header)
-            self.header.check()
+            self.header=UassetHeader.read(f)
+            self.unversioned=self.header.unversioned
 
             if verbose:
                 print('size: {}'.format(self.size))
                 self.header.print()
-            
                 print('Name list')
             
             #read name table
@@ -197,7 +248,7 @@ class Uasset:
 
             #read imports
             check(self.header.import_offset, f.tell(), f)
-            self.imports=read_struct_array(f, UassetImport, len=self.header.import_count)
+            self.imports=[UassetImport.read(f, self.version) for i in range(self.header.import_count)]
             name_imports(self.imports, self.name_list)
             if verbose:
                 print('Import')
@@ -215,8 +266,10 @@ class Uasset:
 
             #read exports
             check(self.header.export_offset, f.tell(), f)
-            self.exports=read_struct_array(f, UassetExport, len=self.header.export_count)
+            self.exports=[UassetExport.read(f, self.version) for i in range(self.header.export_count)]
             self.asset_type = UassetExport.name_exports(self.exports, self.imports, self.name_list)
+            if self.asset_type is None:
+                raise RuntimeError('Unsupported asset')
             if asset_type not in self.asset_type:
                 raise RuntimeError('Not {}.'.format(asset_type))
 
@@ -267,9 +320,9 @@ class Uasset:
         print('Saving '+file+'...')
         with open(file, 'wb') as f:
             #skip header part
-            f.seek(193)
+            f.seek(self.header.name_offset)
 
-            self.header.name_offset = f.tell()
+            #self.header.name_offset = f.tell()
             self.header.name_count = len(self.name_list)
             self.header.name_count2 = len(self.name_list)
             #write name table
@@ -282,12 +335,12 @@ class Uasset:
             #write imports
             self.header.import_offset = f.tell()
             self.header.import_count = len(self.imports)
-            list(map(lambda x: f.write(x), self.imports))
+            list(map(lambda x: x.write(f, self.version), self.imports))
 
             #skip exports part
             self.header.export_offset = f.tell()
             self.header.export_count = len(self.exports)
-            f.seek(len(self.exports)*104, 1)
+            list(map(lambda x: x.write(f, self.version), self.exports))
             self.header.end_to_export = f.tell()
 
             #file data ids
@@ -301,7 +354,7 @@ class Uasset:
             
             #write header
             f.seek(0)
-            f.write(self.header)
+            UassetHeader.write(f, self.header)
 
             #write exports
             f.seek(self.header.export_offset)
@@ -309,4 +362,4 @@ class Uasset:
             for export in self.exports:
                 export.update(export.size, offset)
                 offset+=export.size
-            list(map(lambda x: f.write(x), self.exports))
+            list(map(lambda x: x.write(f, self.version), self.exports))

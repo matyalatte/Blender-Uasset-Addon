@@ -1,6 +1,6 @@
 from ..util.io_util import *
 
-from .lod_section import StaticLODSection, SkeletalLODSection
+from .lod_section import StaticLODSection, SkeletalLODSection, SkeletalLODSection5
 from .buffer import *
 
 #Base class for LOD
@@ -114,9 +114,9 @@ class StaticLOD(LOD):
         print(pad+'LOD{} (offset: {})'.format(i, self.offset))
         for j in range(len(self.sections)):
             self.sections[j].print(j, padding=padding+2)
-        print(pad+'  face_num: {}'.format(self.face_num))
-        print(pad+'  vertex_num: {}'.format(self.vb.vertex_num))
-        print(pad+'  uv_num: {}'.format(self.uv_num))
+        print(pad+'face_count: {}'.format(self.face_num))
+        print(pad+'vertex_count: {}'.format(self.vb.vertex_num))
+        print(pad+'uv_count: {}'.format(self.uv_num))
         for buf in self.get_buffers():
             buf.print(padding=padding+2)
 
@@ -197,18 +197,43 @@ class StaticLOD(LOD):
 
 #LOD for skeletal mesh
 class SkeletalLOD(LOD):
+
+    def get_buffers(self):
+        buffers = super().get_buffers()
+        if self.KDI_buffer_size>0:
+            buffers += [self.KDI_buffer, self.KDI_VB]
+        return buffers
+
+    def print(self, name, bones, padding=0):
+        pad=' '*padding
+        print(pad+'LOD '+name+' (offset: {})'.format(self.offset))
+        for i in range(len(self.sections)):
+            self.sections[i].print(str(i),bones, padding=padding+2)
+        pad+=' '*padding
+        print(pad+'face count: {}'.format(self.ib.size//3))
+        print(pad+'vertex count: {}'.format(self.vb.vertex_num))
+        print(pad+'uv count: {}'.format(self.uv_num))
+        for buf in self.get_buffers():
+            if buf is not None:
+                buf.print(padding=padding+2)
+
+class SkeletalLOD4(SkeletalLOD):
     #sections: mesh data is separeted into some sections.
     #              each section has material id and vertex group.
     #active_bone_ids: maybe bone ids. but I don't know how it works.
     #bone_ids: active bone ids?
     #uv_num: the number of uv maps
 
-    def __init__(self, f, ff7r=True):
+    def read(f, version):
+        return SkeletalLOD4(f, version)
+
+    def __init__(self, f, version):
         self.offset=f.tell()
+        self.version=version
         one = read_uint8(f)
         check(one, 1, f, 'Parse failed! (LOD:one)')
         no_tessellation = read_uint8(f)
-        self.sections=[SkeletalLODSection.read(f, ff7r=ff7r) for i in range(read_uint32(f))]
+        self.sections=[SkeletalLODSection.read(f, self.version) for i in range(read_uint32(f))]
 
         self.KDI_buffer_size=0
         for section in self.sections:
@@ -233,7 +258,7 @@ class SkeletalLOD(LOD):
         self.uv_num=read_uint32(f)
         self.vb = SkeletalMeshVertexBuffer.read(f, name='VB0')
         check(self.uv_num, self.vb.uv_num)
-        self.vb2 = SkinWeightVertexBuffer.read(f, name='VB2')
+        self.vb2 = SkinWeightVertexBuffer4.read(f, name='VB2')
         u=read_uint8(f)
         f.seek(-1,1)
         if u==1 and not no_tessellation:#HasVertexColors
@@ -250,9 +275,6 @@ class SkeletalLOD(LOD):
             self.KDI_buffer=KDIBuffer.read(f, name='KDI_buffer')
             check(self.KDI_buffer.size, self.KDI_buffer_size, f)
             self.KDI_VB=KDIBuffer.read(f, name='KDI_VB')
-
-    def read(f, ff7r):
-        return SkeletalLOD(f, ff7r=ff7r)
     
     def write(f, lod):
         write_uint8(f, 1)
@@ -271,7 +293,7 @@ class SkeletalLOD(LOD):
 
         write_uint32(f, lod.uv_num)
         SkeletalMeshVertexBuffer.write(f, lod.vb)
-        SkinWeightVertexBuffer.write(f, lod.vb2)
+        SkinWeightVertexBuffer4.write(f, lod.vb2)
 
         if lod.color_vb is not None:
             ColorVertexBuffer.write(f, lod.color_vb)
@@ -282,25 +304,6 @@ class SkeletalLOD(LOD):
         if lod.KDI_buffer_size>0:
             KDIBuffer.write(f, lod.KDI_buffer)
             KDIBuffer.write(f, lod.KDI_VB)
-
-    def get_buffers(self):
-        buffers = super().get_buffers()
-        if self.KDI_buffer_size>0:
-            buffers += [self.KDI_buffer, self.KDI_VB]
-        return buffers
-
-    def print(self, name, bones, padding=0):
-        pad=' '*padding
-        print(pad+'LOD '+name+' (offset: {})'.format(self.offset))
-        for i in range(len(self.sections)):
-            self.sections[i].print(str(i),bones, padding=padding+2)
-        pad+=' '*2
-        print(pad+'  face num: {}'.format(self.ib.size//3))
-        print(pad+'  vertex num: {}'.format(self.vb.vertex_num))
-        print(pad+'  uv num: {}'.format(self.uv_num))
-        for buf in self.get_buffers():
-            if buf is not None:
-                buf.print(padding=padding+2)
 
     def remove_KDI(self):
         self.KDI_buffer_size=0
@@ -388,3 +391,110 @@ class SkeletalLOD(LOD):
         print('  faces: {} -> {}'.format(f_num1, f_num2))
         print('  vertices: {} -> {}'.format(v_num1, v_num2))
         print('  uv maps: {} -> {}'.format(uv_num1, uv_num2))
+
+class SkeletalLOD5(SkeletalLOD):
+
+    def read(f, version):
+        return SkeletalLOD5(f, version)
+
+    def __init__(self, f, version):
+        self.offset=f.tell()
+        self.version=version
+        one = read_uint16(f)
+        check(one, 1, f, 'Parse failed! (LOD:one)')
+        read_const_uint32(f, 0)
+        read_const_uint32(f, 1)
+        self.active_bone_ids=read_uint16_array(f)
+        self.sections=[SkeletalLODSection5.read(f, self.version) for i in range(read_uint32(f))]
+        self.required_bone_ids=read_uint16_array(f)
+        buffer_block_size=read_uint32(f)
+        buffer_block_start_offset = f.tell()
+
+        check(read_uint16(f), 1)
+        self.ib = SkeletalIndexBuffer.read(f, name='IB')
+        self.vb = PositionVertexBuffer.read(f, name='Position_VB')
+        check(read_uint16(f), 1)
+        self.uv_num = read_uint32(f)
+        vertex_num=read_uint32(f)
+        use_float32UV = read_uint32(f)
+        read_null(f) #use high precision tangent basis?
+
+        self.normal_vb = NormalVertexBuffer.read(f, name='Normal_VB')
+        self.uv_vb = UVVertexBuffer.read(f, self.uv_num, use_float32UV, name='UV_VB')
+
+        self.weight_vb = SkinWeightVertexBuffer5.read(f, name='Weight_VB')
+        check(read_uint16(f), 1)
+        read_null(f)
+        read_const_uint32(f, 4)
+        if version>='5.0':
+            read_null_array(f, 4)
+        else:
+            read_null(f)
+            self.adjacency_vb = SkeletalIndexBuffer.read(f, name='Adjacency_VB')
+            read_null(f)
+            read_null(f)
+        check(f.tell()-buffer_block_start_offset, buffer_block_size)
+
+    def write(f, lod):
+        write_uint16(f, 1)
+        write_uint32(f, 0)
+        write_uint32(f, 1)
+        write_uint16_array(f, lod.active_bone_ids, with_length=True)
+        write_array(f, lod.sections, SkeletalLODSection5.write, with_length=True)
+        write_uint16_array(f, lod.required_bone_ids, with_length=True)
+        f.seek(4,1)
+        buffer_block_start_offset = f.tell()
+        write_uint16(f, 1)
+        SkeletalIndexBuffer.write(f, lod.ib)
+        PositionVertexBuffer.write(f, lod.vb)
+
+        write_uint16(f, 1)
+        write_uint32(f, lod.uv_vb.uv_num)
+        write_uint32(f, lod.vb.vertex_num)
+        write_uint32(f, lod.uv_vb.use_float32UV)
+        write_null(f)
+        NormalVertexBuffer.write(f, lod.normal_vb)
+        UVVertexBuffer.write(f, lod.uv_vb)
+        SkinWeightVertexBuffer5.write(f, lod.weight_vb)
+        write_uint16(f, 1)
+        write_null(f)
+        write_uint32(f, 4)
+        if lod.version>='5.0':
+            write_null_array(f, 4)
+        else:
+            write_null(f)
+            SkeletalIndexBuffer.write(f, lod.adjacency_vb)
+            write_null(f)
+            write_null(f)
+
+        end_offset = f.tell()
+        buffer_block_size = end_offset - buffer_block_start_offset
+        f.seek(buffer_block_start_offset-4)
+        write_uint32(f, buffer_block_size)
+        f.seek(end_offset)
+
+    def get_buffers(self):
+        buffers = [self.ib, self.vb, self.normal_vb, self.uv_vb, self.weight_vb]
+        return buffers
+
+    def parse_buffers_for_blender(self):
+        normal = self.normal_vb.parse()
+        pos = self.vb.parse()
+        texcoords = self.uv_vb.parse()
+        
+        joint, weight = self.weight_vb.parse()
+        first_vertex_ids = [section.first_vertex_id for section in self.sections]
+        vertex_groups = [section.vertex_group for section in self.sections]
+
+        ls = [normal, pos, joint, weight]
+        normals, positions, joints, weights = [split_list(l, first_vertex_ids) for l in ls]
+        texcoords = [split_list(l, first_vertex_ids) for l in texcoords]
+
+        #joints = [[[j_ for j_,w_ in zip(j, w) if w_!=0] for j, w in zip(joint, weight)] for joint, weight in zip(joints, weights)]
+        #weights = [[[w_/255 for w_ in w] for w in weight] for weight in weights]
+
+        indices = self.ib.parse()
+        first_ib_ids = [section.first_ib_id for section in self.sections]
+        indices = split_list(indices, first_ib_ids)
+        indices = [[i-first_id for i in ids] for ids, first_id in zip(indices, first_vertex_ids)]
+        return normals, positions, texcoords, vertex_groups, joints, weights, indices

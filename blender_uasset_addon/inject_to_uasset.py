@@ -292,7 +292,10 @@ class InjectToUasset(Operator):
             #load source file
             general_options = context.scene.general_options
             inject_options = context.scene.inject_options
-            asset = unreal.uasset.Uasset(general_options.source_file, version=general_options.ue_version)
+            version = general_options.ue_version
+            if version not in ['ff7r', '4.18']:
+                raise RuntimeError('Injection is unsupported for {}'.format())
+            asset = unreal.uasset.Uasset(general_options.source_file, version=version)
             asset_type = asset.asset_type
 
             if armature is None and 'Skelet' in asset_type:
