@@ -1,22 +1,28 @@
+"""Classes for materials."""
+
 import os
 from ..util import io_util as io
 from . import uasset
 
 
-# Base class for material
 class Material:
+    """Base class for material."""
     def __init__(self, import_id, slot_name_id, bin):
+        """Constructor."""
         self.import_id = import_id
         self.slot_name_id = slot_name_id
         self.bin = bin
 
     def read(f):
+        """Read function."""
         pass
 
     def write(f, material):
+        """Write function."""
         pass
 
     def update_material_data(materials, name_list, imports):
+        """Get meta data from .uasset files."""
         for material in materials:
             material.slot_name = name_list[material.slot_name_id]
             material_import = imports[-material.import_id - 1]
@@ -25,12 +31,14 @@ class Material:
             material.asset_path = material_import.parent_name
 
     def print(self, padding=2):
+        """Print meta data."""
         pad = ' ' * padding
         print(pad + self.import_name)
-        print(pad + '  slot name: {}'.format(self.slot_name))
-        print(pad + '  asset path: {}'.format(self.asset_path))
+        print(pad + f'  slot name: {self.slot_name}')
+        print(pad + f'  asset path: {self.asset_path}')
 
     def assign_materials(materials1, materials2):
+        """Assign material ids."""
         # if len(materials1)!=len(materials2):
         #     raise RuntimeError('Number of materials should be the same.')
 
@@ -86,18 +94,20 @@ class Material:
                 assigned1[new_id] = True
                 new_material_ids[i] = new_id
 
-        for i, m2 in zip(range(len(materials2)), materials2):
-            m1 = materials1[new_material_ids[i]]
-            m1str = m1.import_name
-            if m1str != m1.slot_name:
-                m1str += '({})'.format(m1.slot_name)
+        for i, mat2 in zip(range(len(materials2)), materials2):
+            mat1 = materials1[new_material_ids[i]]
+            m1str = mat1.import_name
+            if m1str != mat1.slot_name:
+                m1str += f'({mat1.slot_name})'
 
-            m2str = m2.import_name
-            print('Assigned {} to {}'.format(m2str, m1str))
+            m2str = mat2.import_name
+            print(f'Assigned {m2str} to {m1str}')
 
         return new_material_ids
 
     def load_asset(self, main_file_path, main_asset_path, version):
+        """Load material assets and store texture paths."""
+
         def get_actual_path(target_asset_path):
             main_asset_dir = os.path.dirname(main_asset_path)
             rel_path = os.path.relpath(os.path.dirname(target_asset_path), start=main_asset_dir)
@@ -124,9 +134,10 @@ class Material:
             self.texture_actual_paths = []
 
 
-# material for static mesh
 class StaticMaterial(Material):
+    """Material for static mesh."""
     def read(f):
+        """Read function."""
         f.seek(2, 1)
         import_id = io.read_int32(f)
         slot_name_id = io.read_uint32(f)
@@ -134,27 +145,32 @@ class StaticMaterial(Material):
         return StaticMaterial(import_id, slot_name_id, None)
 
     def write(f, material):
+        """Write function."""
         f.write(b'\x00\x07')
         io.write_int32(f, material.import_id)
         io.write_uint32(f, material.slot_name_id)
         f.write(material.bin)
 
     def copy(self):
+        """Copy itself."""
         return StaticMaterial(self.import_id, self.slot_name_id, b''.join([self.bin]))
 
 
-# material for skeletal mesh
 class SkeletalMaterial(Material):
+    """Material for skeletal mesh."""
     def read(f, version):
+        """Read function."""
         import_id = io.read_int32(f)
         slot_name_id = io.read_uint32(f)
         bin = f.read(28 + 4 * (version >= '4.27'))  # cast shadow, uv density?
         return SkeletalMaterial(import_id, slot_name_id, bin)
 
     def write(f, material):
+        """Write function."""
         io.write_int32(f, material.import_id)
         io.write_uint32(f, material.slot_name_id)
         f.write(material.bin)
 
     def copy(self):
+        """Copy itself."""
         return SkeletalMaterial(self.import_id, self.slot_name_id, b''.join([self.bin]))

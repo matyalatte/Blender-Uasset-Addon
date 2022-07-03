@@ -1,3 +1,4 @@
+"""Class for texture asset."""
 import os
 from ..util import io_util as io
 from .mipmap import Mipmap
@@ -30,12 +31,13 @@ PF_FORMAT = {
 }
 
 
-def is_power_of_2(n):
-    if n == 1:
+def is_power_of_2(num):
+    """The number is a power of 2 or not."""
+    if num == 1:
         return True
-    if n % 2 != 0:
+    if num % 2 != 0:
         return False
-    return is_power_of_2(n // 2)
+    return is_power_of_2(num // 2)
 
 
 # get all file paths for texture asset from a file path.
@@ -43,30 +45,33 @@ EXT = ['.uasset', '.uexp', '.ubulk']
 
 
 def get_all_file_path(file):
+    """Get .uasset, .uexp, and .ubulk paths."""
     base_name, ext = os.path.splitext(file)
     if ext not in EXT:
-        raise RuntimeError('Not Uasset. ({})'.format(file))
+        raise RuntimeError(f'Not Uasset. ({file})')
     return [base_name + ext for ext in EXT]
 
 
 VERSION_ERR_MSG = 'Make sure you specified UE4 version correctly.'
 
 
-# texture class for ue4
 class Texture:
+    """Class for texture asset."""
     UNREAL_SIGNATURE = b'\xC1\x83\x2A\x9E'
     UBULK_FLAG = [0, 16384]
 
     def read(f, uasset, verbose=False):
+        """Read function."""
         return Texture(f, uasset, verbose=verbose)
 
     def __init__(self, f, uasset, verbose=False):
+        """Load .uexp and .ubulk."""
         self.uasset = uasset
         version = self.uasset.version
 
         file_path = f.name
 
-        uasset_name, uexp_name, ubulk_name = get_all_file_path(file_path)
+        _, _, ubulk_name = get_all_file_path(file_path)
 
         self.version = version
 
@@ -93,23 +98,23 @@ class Texture:
         if verbose:
             self.print()
 
-    # read uexp
     def read_uexp(self, f):
+        """Read .uexp."""
         # read cooked size if exist
         self.bin1 = None
         self.imported_width = None
         self.imported_height = None
         if self.uasset.unversioned:
-            uh = io.read_uint8_array(f, 2)
-            is_last = uh[1] % 2 == 0
-            while (is_last):
-                uh = io.read_uint8_array(f, 2)
-                is_last = uh[1] % 2 == 0
+            unv_head = io.read_uint8_array(f, 2)
+            is_last = unv_head[1] % 2 == 0
+            while is_last:
+                unv_head = io.read_uint8_array(f, 2)
+                is_last = unv_head[1] % 2 == 0
                 if f.tell() > 100:
                     raise RuntimeError('Parse Failed. ' + VERSION_ERR_MSG)
-            s = f.tell()
+            size = f.tell()
             f.seek(0)
-            self.bin1 = f.read(s)
+            self.bin1 = f.read(size)
             chk = io.read_uint8_array(f, 8)
             chk = [i for i in chk if i == 0]
             f.seek(-8, 1)
@@ -129,14 +134,14 @@ class Texture:
 
         # skip property part
         offset = f.tell()
-        b = f.read(8)
-        while (b != b'\x01\x00\x01\x00\x01\x00\x00\x00'):
-            b = b''.join([b[1:], f.read(1)])
+        binary = f.read(8)
+        while binary != b'\x01\x00\x01\x00\x01\x00\x00\x00':
+            binary = b''.join([binary[1:], f.read(1)])
             if f.tell() > 1000:
                 raise RuntimeError('Parse Failed. ' + VERSION_ERR_MSG)
-        s = f.tell() - offset
+        size = f.tell() - offset
         f.seek(offset)
-        self.unk = f.read(s)
+        self.unk = f.read(size)
         # read meta data
         self.type_name_id = io.read_uint64(f)
         self.offset_to_end_offset = f.tell()
@@ -177,7 +182,7 @@ class Texture:
 
         # get format name
         if self.type not in PF_FORMAT:
-            raise RuntimeError('Unsupported format. ({})'.format(self.type))
+            raise RuntimeError(f'Unsupported format. ({self.type})')
         self.format_name = PF_FORMAT[self.type]
         self.byte_per_pixel = BYTE_PER_PIXEL[self.format_name]
 
@@ -196,19 +201,20 @@ class Texture:
         # check(self.end_offset, f.tell()+self.uasset_size)
         self.none_name_id = io.read_uint64(f)
 
-    # get max size of uexp mips
     def get_max_uexp_size(self):
+        """Get max mip size for .uexp."""
         for mip in self.mipmaps:
             if mip.uexp:
+                width, height = mip.width, mip.height
                 break
-        return mip.width, mip.height
+        return width, height
 
-    # get max size of mips
     def get_max_size(self):
+        """Get max mip size for .uexp and .ubulk."""
         return self.mipmaps[0].width, self.mipmaps[0].height
 
-    # get number of mipmaps
     def get_mipmap_num(self):
+        """Get number of mipmaps."""
         uexp_map_num = 0
         ubulk_map_num = 0
         for mip in self.mipmaps:
@@ -216,14 +222,14 @@ class Texture:
             ubulk_map_num += not mip.uexp
         return uexp_map_num, ubulk_map_num
 
-    # save as uasset
     def write(self, f):
+        """Write .uexp and .ubulk."""
         file_path = f.name
         folder = os.path.dirname(file_path)
         if folder not in ['.', ''] and not os.path.exists(folder):
             io.mkdir(folder)
 
-        uasset_name, uexp_name, ubulk_name = get_all_file_path(file_path)
+        _, _, ubulk_name = get_all_file_path(file_path)
         if not self.has_ubulk:
             ubulk_name = None
 
@@ -238,6 +244,7 @@ class Texture:
                         bulk_f.write(mip.data)
 
     def write_uexp(self, f, valid=False):
+        """Write .uexp."""
         # get mipmap info
         max_width, max_height = self.get_max_size()
         uexp_map_num, ubulk_map_num = self.get_mipmap_num()
@@ -332,8 +339,8 @@ class Texture:
         io.write_uint32(f, new_end_offset)
         f.seek(0, 2)
 
-    # remove mipmaps except the largest one
     def remove_mipmaps(self):
+        """Remove mipmaps except the largest one."""
         old_mipmap_num = len(self.mipmaps)
         if old_mipmap_num == 1:
             return
@@ -343,17 +350,17 @@ class Texture:
         # print('mipmaps have been removed.')
         # print('  mipmap: {} -> 1'.format(old_mipmap_num))
 
-    # inject dds into asset
     def inject_dds(self, dds, force=False):
+        """Inject dds into asset."""
         # check formats
         if '(signed)' in dds.header.format_name:
-            raise RuntimeError('UE4 requires unsigned format but your dds is {}.'.format(dds.header.format_name))
+            raise RuntimeError(f'UE4 requires unsigned format but your dds is {dds.header.format_name}.')
 
         if dds.header.format_name != self.format_name and not force:
-            raise RuntimeError('The format does not match. ({}, {})'.format(self.type, dds.header.format_name))
+            raise RuntimeError(f'The format does not match. ({self.type}, {dds.header.format_name})')
 
         if dds.header.texture_type != self.texture_type:
-            msg = 'Texture type does not match. ({}, {})'.format(self.texture_type, dds.header.texture_type)
+            msg = f'Texture type does not match. ({self.texture_type}, {dds.header.texture_type})'
             raise RuntimeError(msg)
 
         max_width, max_height = self.get_max_size()
@@ -383,18 +390,18 @@ class Texture:
         new_mipmap_num = len(self.mipmaps)
 
         print('dds has been injected.')
-        print('  size: {} -> {}'.format(old_size, new_size))
-        print('  mipmap: {} -> {}'.format(old_mipmap_num, new_mipmap_num))
+        print(f'  size: {old_size} -> {new_size}')
+        print(f'  mipmap: {old_mipmap_num} -> {new_mipmap_num}')
 
         # warnings
         if new_mipmap_num > 1 and (not is_power_of_2(max_width) or not is_power_of_2(max_height)):
             msg = 'Warning: Mipmaps should have power of 2 as its width and height. '
-            print(msg + '({}, {})'.format(max_width, max_height))
+            print(msg + f'({max_width}, {max_height})')
         if new_mipmap_num > 1 and old_mipmap_num == 1:
             print('Warning: The original texture has only 1 mipmap. But your dds has multiple mipmaps.')
 
     def print(self):
+        """Print meta data."""
         for mip, i in zip(self.mipmaps, range(len(self.mipmaps))):
-            print('Mipmap{}'.format(i))
+            print(f'Mipmap{i}')
             mip.print()
-        return

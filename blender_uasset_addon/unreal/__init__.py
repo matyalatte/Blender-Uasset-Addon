@@ -1,3 +1,5 @@
+"""Classes to read .uasset files."""
+
 from . import uasset, dds
 if "bpy" in locals():
     import importlib

@@ -1,10 +1,14 @@
+"""Classes for buffers."""
+
 import struct
 from ..util import io_util as io
 
 
-# Base class for buffers
 class Buffer:
+    """Base class for buffers."""
+
     def __init__(self, stride, size, buf, offset, name):
+        """Constructor."""
         self.stride = stride
         self.size = size
         self.buf = buf
@@ -12,6 +16,7 @@ class Buffer:
         self.name = name
 
     def read(f, name=''):
+        """Read function."""
         stride = io.read_uint32(f)
         size = io.read_uint32(f)
         offset = f.tell()
@@ -19,39 +24,46 @@ class Buffer:
         return Buffer(stride, size, buf, offset, name)
 
     def write(f, buffer):
+        """Write function."""
         io.write_uint32(f, buffer.stride)
         io.write_uint32(f, buffer.size)
         f.write(buffer.buf)
 
     def print(self, padding=2):
+        """Print meta data."""
         pad = ' ' * padding
-        print(pad + '{} (offset: {})'.format(self.name, self.offset))
+        print(pad + f'{self.name} (offset: {self.offset})')
         _, stride, size = self.get_meta()
-        print(pad + '  stride: {}'.format(stride))
-        print(pad + '  size: {}'.format(size))
+        print(pad + f'  stride: {stride}')
+        print(pad + f'  size: {size}')
 
     def dump(file, buffer):
+        """Write buffer."""
         with open(file, 'wb') as f:
             f.write(buffer.buf)
 
     def get_meta(self):
+        """Get meta data."""
         return self.offset, self.stride, self.size
 
 
-# Vertex buffer
 class VertexBuffer(Buffer):
+    """Base clas for vertex buffer."""
     def __init__(self, stride, size, buf, offset, name):
+        """Constructor."""
         self.vertex_num = size
         super().__init__(stride, size, buf, offset, name)
 
     def read(f, name=''):
+        """Read function."""
         buf = Buffer.read(f, name=name)
         return VertexBuffer(buf.stride, buf.size, buf.buf, buf.offset, name)
 
 
-# Positions for static mesh and UE5 skeletal mesh
 class PositionVertexBuffer(VertexBuffer):
+    """Positions for static mesh and UE5 skeletal mesh."""
     def read(f, name=''):
+        """Read function."""
         stride = io.read_uint32(f)
         vertex_num = io.read_uint32(f)
         buf = Buffer.read(f, name=name)
@@ -61,16 +73,19 @@ class PositionVertexBuffer(VertexBuffer):
         return PositionVertexBuffer(buf.stride, buf.size, buf.buf, buf.offset, name)
 
     def write(f, vb):
+        """Write function."""
         io.write_uint32(f, vb.stride)
         io.write_uint32(f, vb.vertex_num)
         Buffer.write(f, vb)
 
     def parse(self):
+        """Parse buffer."""
         parsed = struct.unpack('<' + 'f' * 3 * self.size, self.buf)
         position = [parsed[i * 3: i * 3 + 3] for i in range(self.size)]
         return position
 
     def import_from_blender(self, position):
+        """Update buffer."""
         self.stride = 12
         self.size = len(position)
         self.vertex_num = self.size
@@ -78,17 +93,20 @@ class PositionVertexBuffer(VertexBuffer):
         self.buf = struct.pack('<' + 'f' * 3 * self.size, *buf)
 
 
-# Normals for UE5 skeletal mesh
 class NormalVertexBuffer(VertexBuffer):
+    """Normals for UE5 skeletal mesh."""
     def read(f, name=''):
+        """Read function."""
         buf = Buffer.read(f, name=name)
         io.check(buf.stride, 8)
         return NormalVertexBuffer(buf.stride, buf.size, buf.buf, buf.offset, name)
 
     def write(f, vb):
+        """Write function."""
         Buffer.write(f, vb)
 
     def parse(self):
+        """Parse buffer."""
         def unpack(i):
             mask8bit = 0xff
             x = i & mask8bit
@@ -101,6 +119,7 @@ class NormalVertexBuffer(VertexBuffer):
         return normal
 
     def import_from_blender(self, normal):
+        """Update buffer."""
         self.size = len(normal)
         self.vertex_num = self.size
         buf = normal
@@ -108,22 +127,26 @@ class NormalVertexBuffer(VertexBuffer):
         self.buf = struct.pack('<' + 'B' * self.stride * self.size, *buf)
 
 
-# UV maps for UE5 skeletal mesh
 class UVVertexBuffer(VertexBuffer):
+    """UV maps for UE5 skeletal mesh."""
     def __init__(self, uv_num, use_flaot32UV, stride, size, buf, offset, name):
+        """Constructor."""
         self.uv_num = uv_num
         self.use_float32UV = use_flaot32UV
         super().__init__(stride, size, buf, offset, name)
 
     def read(f, uv_num, use_float32UV, name=''):
+        """Read function."""
         buf = Buffer.read(f, name=name)
         io.check(buf.stride, 4 * (1 + use_float32UV))
         return UVVertexBuffer(uv_num, use_float32UV, buf.stride, buf.size, buf.buf, buf.offset, name)
 
     def write(f, vb):
+        """Write function."""
         Buffer.write(f, vb)
 
     def parse(self):
+        """Parse buffer."""
         float_type = 'f' if self.use_float32UV else 'e'
         parsed = struct.unpack('<' + float_type * 2 * self.size, self.buf)
         stride = 2 * self.uv_num
@@ -135,6 +158,7 @@ class UVVertexBuffer(VertexBuffer):
         return texcoords
 
     def import_from_blender(self, texcoords):
+        """Update buffer."""
         self.uv_num = len(texcoords)
         size = len(texcoords[0])
         self.size = size * self.uv_num
@@ -148,14 +172,16 @@ class UVVertexBuffer(VertexBuffer):
         self.buf = struct.pack('<' + float_type * 2 * self.size, *buf)
 
 
-# Normals and UV maps for static mesh
 class StaticMeshVertexBuffer(VertexBuffer):
+    """Normals and UV maps for static mesh."""
     def __init__(self, uv_num, use_float32, stride, size, buf, offset, name):
+        """Constructor."""
         self.uv_num = uv_num
         self.use_float32 = use_float32
         super().__init__(stride, size, buf, offset, name)
 
     def read(f, name=''):
+        """Read function."""
         one = io.read_uint16(f)
         io.check(one, 1, f)
         uv_num = io.read_uint32(f)
@@ -170,6 +196,7 @@ class StaticMeshVertexBuffer(VertexBuffer):
         return StaticMeshVertexBuffer(uv_num, use_float32, buf.stride, buf.size, buf.buf, buf.offset, name)
 
     def write(f, vb):
+        """Write function."""
         io.write_uint16(f, 1)
         io.write_uint32(f, vb.uv_num)
         io.write_uint32(f, vb.stride)
@@ -179,6 +206,7 @@ class StaticMeshVertexBuffer(VertexBuffer):
         Buffer.write(f, vb)
 
     def parse(self):
+        """Parse buffer."""
         uv_type = 'f' * self.use_float32 + 'e' * (not self.use_float32)
         parsed = struct.unpack('<' + ('B' * 8 + uv_type * 2 * self.uv_num) * self.size, self.buf)
         stride = 8 + 2 * self.uv_num
@@ -192,6 +220,7 @@ class StaticMeshVertexBuffer(VertexBuffer):
         return normal, texcoords
 
     def import_from_blender(self, normal, texcoords, uv_num):
+        """Update buffer."""
         uv_type = 'f' * self.use_float32 + 'e' * (not self.use_float32)
         self.uv_num = uv_num
         self.stride = 8 + (1 + self.use_float32) * 4 * self.uv_num
@@ -204,9 +233,10 @@ class StaticMeshVertexBuffer(VertexBuffer):
         self.buf = struct.pack('<' + ('B' * 8 + uv_type * 2 * self.uv_num) * self.size, *buf)
 
 
-# Vertex colors
 class ColorVertexBuffer(VertexBuffer):
+    """Vertex colors."""
     def read(f, name=''):
+        """Read function."""
         one = io.read_uint16(f)
         io.check(one, 1, f)
         stride = io.read_uint32(f)
@@ -220,6 +250,7 @@ class ColorVertexBuffer(VertexBuffer):
             return ColorVertexBuffer(stride, vertex_num, None, f.tell(), name)
 
     def write(f, vb):
+        """Write function."""
         io.write_uint16(f, 1)
         io.write_uint32(f, vb.stride)
         io.write_uint32(f, vb.vertex_num)
@@ -227,25 +258,29 @@ class ColorVertexBuffer(VertexBuffer):
             Buffer.write(f, vb)
 
     def update(self, vertex_count):
+        """Update buffer."""
         self.vertex_num = vertex_count
         self.size = vertex_count
         self.buf = b'ff' * self.size * self.stride
 
     def disable(self):
+        """Disable vertex colors."""
         self.buf = None
         self.stride = 0
         self.vertex_num = 0
 
 
-# Normals, positions, and UV maps for UE4 skeletal mesh
 class SkeletalMeshVertexBuffer(VertexBuffer):
+    """Normals, positions, and UV maps for UE4 skeletal mesh."""
     def __init__(self, uv_num, use_float32, scale, stride, size, buf, offset, name):
+        """Constructor."""
         self.uv_num = uv_num
         self.use_float32 = use_float32
         self.scale = scale
         super().__init__(stride, size, buf, offset, name)
 
     def read(f, name=''):
+        """Read function."""
         one = io.read_uint16(f)
         io.check(one, 1, f)
         uv_num = io.read_uint32(f)
@@ -257,6 +292,7 @@ class SkeletalMeshVertexBuffer(VertexBuffer):
         return SkeletalMeshVertexBuffer(uv_num, use_float32UV, scale, buf.stride, buf.size, buf.buf, buf.offset, name)
 
     def write(f, vb):
+        """Write function."""
         io.write_uint16(f, 1)
         io.write_uint32(f, vb.uv_num)
         io.write_uint32(f, vb.use_float32)
@@ -265,6 +301,7 @@ class SkeletalMeshVertexBuffer(VertexBuffer):
         Buffer.write(f, vb)
 
     def parse(self):
+        """Parse buffer."""
         uv_type = 'f' * self.use_float32 + 'e' * (not self.use_float32)
         parsed = struct.unpack('<' + ('B' * 8 + 'fff' + uv_type * 2 * self.uv_num) * self.size, self.buf)
         stride = 11 + 2 * self.uv_num
@@ -279,6 +316,7 @@ class SkeletalMeshVertexBuffer(VertexBuffer):
         return normal, position, texcoords
 
     def get_range(self):
+        """Get range of vertex positions."""
         uv_type = 'f' * self.use_float32 + 'e' * (not self.use_float32)
         parsed = struct.unpack('<' + ('B' * 8 + 'fff' + uv_type * 2 * self.uv_num) * self.size, self.buf)
         stride = 11 + 2 * self.uv_num
@@ -289,6 +327,7 @@ class SkeletalMeshVertexBuffer(VertexBuffer):
         return [max(x) - min(x), max(y) - min(y), max(z) - min(z)]
 
     def import_from_blender(self, normal, position, texcoords, uv_num):
+        """Update buffer."""
         uv_type = 'f' * self.use_float32 + 'e' * (not self.use_float32)
         self.uv_num = uv_num
         self.stride = 20 + (1 + self.use_float32) * 4 * self.uv_num
@@ -302,16 +341,19 @@ class SkeletalMeshVertexBuffer(VertexBuffer):
 
 
 def flatten(array):
+    """Flatten list."""
     return [x for row in array for x in row]
 
 
-# Skin weights for UE4 skeletal mesh
 class SkinWeightVertexBuffer4(VertexBuffer):
+    """Skin weights for UE4 skeletal mesh."""
     def __init__(self, extra_bone_flag, stride, size, buf, offset, name):
+        """Constructor."""
         self.extra_bone_flag = extra_bone_flag
         super().__init__(stride, size, buf, offset, name)
 
     def read(f, name=''):
+        """Read function."""
         one = io.read_uint16(f)
         io.check(one, 1, f)
         extra_bone_flag = io.read_uint32(f)  # if stride is 16 or not
@@ -322,18 +364,21 @@ class SkinWeightVertexBuffer4(VertexBuffer):
         return SkinWeightVertexBuffer4(extra_bone_flag, buf.stride, buf.size, buf.buf, buf.offset, name)
 
     def write(f, vb):
+        """Write function."""
         io.write_uint16(f, 1)
         io.write_uint32(f, vb.extra_bone_flag)
         io.write_uint32(f, vb.vertex_num)
         Buffer.write(f, vb)
 
     def parse(self):
+        """Parse buffer."""
         parsed = struct.unpack('<' + 'B' * len(self.buf), self.buf)
         joint = [parsed[i * self.stride: i * self.stride + self.stride // 2] for i in range(self.size)]
         weight = [parsed[i * self.stride + self.stride // 2: (i + 1) * self.stride] for i in range(self.size)]
         return joint, weight
 
     def import_from_blender(self, joint, weight, extra_bone_flag):
+        """Update buffer."""
         self.size = len(joint)
         self.vertex_num = self.size
         self.extra_bone_flag = extra_bone_flag
@@ -343,13 +388,15 @@ class SkinWeightVertexBuffer4(VertexBuffer):
         self.buf = struct.pack('<' + 'B' * self.size * self.stride, *buf)
 
 
-# Skin weights for UE5 skeletal mesh
 class SkinWeightVertexBuffer5(VertexBuffer):
+    """Skin weights for UE5 skeletal mesh."""
     def __init__(self, influence_count, stride, size, buf, offset, name):
+        """Constructor."""
         self.influence_count = influence_count
         super().__init__(stride, size, buf, offset, name)
 
     def read(f, name=''):
+        """Read function."""
         one = io.read_uint16(f)
         io.check(one, 1, f)
         io.read_null(f)
@@ -362,6 +409,7 @@ class SkinWeightVertexBuffer5(VertexBuffer):
         return SkinWeightVertexBuffer5(influence_count, buf.stride, buf.size, buf.buf, buf.offset, name)
 
     def write(f, vb):
+        """Write function."""
         io.write_uint16(f, 1)
         io.write_null(f)
         io.write_uint32(f, vb.influence_count)
@@ -371,6 +419,7 @@ class SkinWeightVertexBuffer5(VertexBuffer):
         Buffer.write(f, vb)
 
     def parse(self):
+        """Parse buffer."""
         parsed = struct.unpack('<' + 'B' * len(self.buf), self.buf)
         stride = self.influence_count * 2
         size = self.size // self.influence_count // 2
@@ -379,6 +428,7 @@ class SkinWeightVertexBuffer5(VertexBuffer):
         return joint, weight
 
     def import_from_blender(self, joint, weight):
+        """Update buffer."""
         self.influence_count = len(joint[0])
         buf = [j + w for j, w in zip(joint, weight)]
         buf = flatten(buf)
@@ -386,13 +436,15 @@ class SkinWeightVertexBuffer5(VertexBuffer):
         self.buf = struct.pack('<' + 'B' * self.size * self.stride, *buf)
 
 
-# Index buffer for static mesh
 class StaticIndexBuffer(Buffer):
+    """Index buffer for static mesh."""
     def __init__(self, uint32_flag, stride, size, ib, offset, name):
+        """Constructor."""
         self.uint32_flag = uint32_flag
         super().__init__(stride, size, ib, offset, name)
 
     def read(f, name=''):
+        """Read function."""
         uint32_flag = io.read_uint32(f)  # 0: uint16 id, 1: uint32 id
         buf = Buffer.read(f, name=name)
         # buf.stride==1
@@ -400,21 +452,25 @@ class StaticIndexBuffer(Buffer):
         return StaticIndexBuffer(uint32_flag, buf.stride, buf.size, buf.buf, buf.offset, name)
 
     def write(f, ib):
+        """Write function."""
         io.write_uint32(f, ib.uint32_flag)
         Buffer.write(f, ib)
 
     def get_meta(self):
+        """Get meta data."""
         stride = 2 + 2 * self.uint32_flag
         size = len(self.buf) // stride
         return self.offset, stride, size
 
     def parse(self):
+        """Parse buffer."""
         _, stride, size = self.get_meta()
         form = [None, None, 'H', None, 'I']
         indices = struct.unpack('<' + form[stride] * size, self.buf)
         return indices
 
     def update(self, new_ids, use_uint32=False):
+        """Update buffer."""
         form = [None, None, 'H', None, 'I']
         self.uint32_flag = use_uint32
         stride = 2 + 2 * use_uint32
@@ -424,27 +480,32 @@ class StaticIndexBuffer(Buffer):
         self.buf = struct.pack('<' + form[stride] * size, *new_ids)
 
     def disable(self):
+        """Disable buffer."""
         self.update([])
 
 
-# Index buffer for skeletal mesh
 class SkeletalIndexBuffer(Buffer):
+    """Index buffer for skeletal mesh."""
     def read(f, name=''):
+        """Read function."""
         stride = io.read_uint8(f)  # 2: uint16 id, 4: uint32 id
         buf = Buffer.read(f, name=name)
         io.check(stride, buf.stride)
         return SkeletalIndexBuffer(buf.stride, buf.size, buf.buf, buf.offset, name)
 
     def write(f, ib):
+        """Write function."""
         io.write_uint8(f, ib.stride)
         Buffer.write(f, ib)
 
     def parse(self):
+        """Parse buffer."""
         form = [None, None, 'H', None, 'I']
         indices = struct.unpack('<' + form[self.stride] * self.size, self.buf)
         return indices
 
     def update(self, new_ids, stride):
+        """Update buffer."""
         form = [None, None, 'H', None, 'I']
         self.size = len(new_ids)
         # new_ids = [new_ids[i*3:(i+1)*3] for i in range(self.size//3)]
@@ -455,14 +516,16 @@ class SkeletalIndexBuffer(Buffer):
         self.buf = struct.pack('<' + form[self.stride] * self.size, *new_ids)
 
 
-# KDI buffers
 class KDIBuffer(Buffer):
+    """KDI buffers."""
     def read(f, name=''):
+        """Read function."""
         one = io.read_uint16(f)
         io.check(one, 1, f)
         buf = Buffer.read(f, name=name)
         return KDIBuffer(buf.stride, buf.size, buf.buf, buf.offset, name)
 
     def write(f, vb):
+        """Write function."""
         io.write_uint16(f, 1)
         Buffer.write(f, vb)

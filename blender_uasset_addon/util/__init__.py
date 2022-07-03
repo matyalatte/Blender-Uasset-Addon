@@ -1,3 +1,4 @@
+"""Utils non-related to uasset."""
 from . import io_util
 if "bpy" in locals():
     import importlib

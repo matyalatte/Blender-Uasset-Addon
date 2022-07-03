@@ -1,5 +1,5 @@
 v0.1.6
-- Introduced flake8 to review codes
+- Introduced flake8 and pylint to review codes
 
 v0.1.5
 - Fixed a bug it won't work for Blender 2.8x

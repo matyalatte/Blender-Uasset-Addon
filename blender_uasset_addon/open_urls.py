@@ -1,7 +1,9 @@
+"""UI panel to open URLs."""
 import bpy
 
 
 class VIEW3D_PT_urls(bpy.types.Panel):
+    """UI panel to open URLs."""
     bl_label = "URLs"
     bl_idname = "VIEW3D_PT_urls"
     bl_space_type = "VIEW_3D"
@@ -17,11 +19,12 @@ class VIEW3D_PT_urls(bpy.types.Panel):
     icons = ['TEXT', 'INFO', 'QUESTION']
 
     def draw(self, context):
+        """Draw UI panel to open URLs."""
         layout = self.layout
         col = layout.column()
         for (name, url), icon in zip(VIEW3D_PT_urls.urls.items(), VIEW3D_PT_urls.icons):
-            op = col.operator('wm.url_open', text=name, icon=icon)
-            op.url = url
+            ope = col.operator('wm.url_open', text=name, icon=icon)
+            ope.url = url
 
 
 classes = (
@@ -30,10 +33,12 @@ classes = (
 
 
 def register():
+    """Regist UI panel."""
     for cls in classes:
         bpy.utils.register_class(cls)
 
 
 def unregister():
+    """Unregist UI panel."""
     for cls in reversed(classes):
         bpy.utils.unregister_class(cls)

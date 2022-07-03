@@ -1,3 +1,4 @@
+"""Classes for mesh."""
 import json
 import os
 import struct
@@ -9,43 +10,47 @@ from .material import Material, StaticMaterial, SkeletalMaterial
 from .buffer import Buffer
 
 
-# Base class for mesh
 class Mesh:
+    """Base class for mesh."""
     def __init__(self, LODs):
+        """Constructor."""
         self.LODs = LODs
 
     def remove_LODs(self):
+        """Remove LOD1~."""
         num = len(self.LODs)
         if num <= 1:
             return
 
         self.LODs = [self.LODs[0]]
 
-        print('Removed LOD1~{}'.format(num - 1))
+        print(f'Removed LOD1~{num - 1}')
 
     def dump_buffers(self, save_folder):
+        """Dump buffers."""
         logs = {}
         for lod, i in zip(self.LODs, range(len(self.LODs))):
             log = {}
             for buf in lod.get_buffers():
-                file_name = 'LOD{}_{}'.format(i, buf.name) + '.buf'
+                file_name = f'LOD{i}_{buf.name}.buf'
                 file = os.path.join(save_folder, file_name)
                 Buffer.dump(file, buf)
                 offset, stride, size = buf.get_meta()
                 log[buf.name] = {'offset': offset, 'stride': stride, 'size': size}
 
-            logs['LOD{}'.format(i)] = log
+            logs[f'LOD{i}'] = log
 
         file = os.path.join(save_folder, 'log.json')
         with open(file, 'w') as f:
             json.dump(logs, f, indent=4)
 
     def seek_materials(f, imports, seek_import=False):
+        """Read binary data until find material import ids."""
         # offset = f.tell()
         buf = f.read(3)
         size = io.get_size(f)
-        while (True):
-            while (buf != b'\xff' * 3):
+        while True:
+            while buf != b'\xff' * 3:
                 if b'\xff' not in buf:
                     buf = f.read(3)
                 else:
@@ -61,6 +66,7 @@ class Mesh:
         return
 
     def add_material_slot(self, imports, name_list, file_data_ids, material):
+        """Add material slots to asset."""
         if isinstance(material, str):
             slot_name = material
             import_name = material
@@ -95,17 +101,20 @@ class Mesh:
         name_list.append(file_path)
 
     def import_from_blender(self, primitives, imports, name_list, file_data_ids, only_mesh=True):
+        """Import mesh data from Blender."""
         materials = primitives['MATERIALS']
         if len(self.materials) < len(materials):
             msg = 'Can not add material slots. '
-            msg += '(source file: {}, blender: {})'.format(len(self.materials), len(materials))
+            msg += f'(source file: {len(self.materials)}, blender: {len(materials)})'
             raise RuntimeError(msg)
+            """
             added_num = len(materials) - len(self.materials)
             for i in range(added_num):
                 self.add_material_slot(imports, name_list, file_data_ids, materials[len(self.materials)].name)
-            msg = 'Added {} materials. '.format(added_num)
+            msg = f'Added {added_num} materials. '
             msg += 'You need to edit name table to use the new materials.'
             print(msg)
+            """
 
         new_material_ids = Material.assign_materials(self.materials, materials)
 
@@ -115,14 +124,16 @@ class Mesh:
         lod.update_material_ids(new_material_ids)
 
 
-# static mesh
 class StaticMesh(Mesh):
+    """Static mesh."""
     def __init__(self, unk, materials, LODs):
+        """Constructor."""
         self.unk = unk
         self.materials = materials
         self.LODs = LODs
 
     def read(f, uasset, verbose=False):
+        """Read function."""
         imports = uasset.imports
         name_list = uasset.name_list
         version = uasset.version
@@ -142,12 +153,12 @@ class StaticMesh(Mesh):
 
         Material.update_material_data(materials, name_list, imports)
         if verbose:
-            print('Materials (offset: {})'.format(material_offset))
+            print(f'Materials (offset: {material_offset})')
             for material in materials:
                 material.print()
 
         buf = f.read(6)
-        while (buf != b'\x01\x00\x01\x00\x00\x00'):
+        while buf != b'\x01\x00\x01\x00\x00\x00':
             buf = b''.join([buf[1:], f.read(1)])
         unk_size = f.tell() - offset + 28
 
@@ -160,24 +171,28 @@ class StaticMesh(Mesh):
         return StaticMesh(unk, materials, LODs)
 
     def write(f, staticmesh):
+        """Write function."""
         f.write(staticmesh.unk)
         io.write_array(f, staticmesh.LODs, StaticLOD.write, with_length=True)
 
+    """
     def import_LODs(self, mesh, imports, name_list, file_data_ids):
         if len(self.materials) < len(mesh.materials):
             raise RuntimeError('Can not add materials to static mesh.')
         ignore_material_names = False
         super().import_LODs(mesh, imports, name_list, file_data_ids, ignore_material_names=ignore_material_names)
+    """
 
 
-# skeletal mesh
 class SkeletalMesh(Mesh):
+    """Skeletal mesh."""
     # unk: ?
     # materials: material names
     # skeleton: skeleton data
     # LOD: LOD array
     # extra_mesh: ?
     def __init__(self, version, unk, materials, skeleton, LODs, extra_mesh):
+        """Constructor."""
         self.version = version
         self.unk = unk
         self.materials = materials
@@ -186,6 +201,7 @@ class SkeletalMesh(Mesh):
         self.extra_mesh = extra_mesh
 
     def read(f, uasset, verbose=False):
+        """Read function."""
         imports = uasset.imports
         name_list = uasset.name_list
         version = uasset.version
@@ -201,7 +217,7 @@ class SkeletalMesh(Mesh):
         materials = [SkeletalMaterial.read(f, version) for i in range(io.read_uint32(f))]
         Material.update_material_data(materials, name_list, imports)
         if verbose:
-            print('Materials (offset: {})'.format(material_offset))
+            print(f'Materials (offset: {material_offset})')
             for material in materials:
                 material.print()
 
@@ -234,6 +250,7 @@ class SkeletalMesh(Mesh):
         return SkeletalMesh(version, unk, materials, skeleton, LODs, extra_mesh)
 
     def write(f, skeletalmesh):
+        """Write function."""
         f.write(skeletalmesh.unk)
         io.write_array(f, skeletalmesh.materials, SkeletalMaterial.write, with_length=True)
         Skeleton.write(f, skeletalmesh.skeleton)
@@ -247,6 +264,7 @@ class SkeletalMesh(Mesh):
             io.write_uint32(f, 1)
             ExtraMesh.write(f, skeletalmesh.extra_mesh)
 
+    """
     def import_LODs(self, skeletalmesh, imports, name_list, file_data_ids, only_mesh=False, only_phy_bones=False,
                     dont_remove_KDI=False):
         if self.version != 'ff7r':
@@ -278,8 +296,10 @@ class SkeletalMesh(Mesh):
 
         if not dont_remove_KDI:
             self.remove_KDI()
+    """
 
     def remove_KDI(self):
+        """Disable KDI."""
         if self.version != 'ff7r':
             raise RuntimeError("The file should be an FF7R's asset!")
 
@@ -289,11 +309,12 @@ class SkeletalMesh(Mesh):
         print("KDI buffers have been removed.")
 
     def import_from_blender(self, primitives, imports, name_list, file_data_ids, only_mesh=True):
+        """Import mesh data from Blender."""
         bones = primitives['BONES']
         if only_mesh:
             if len(bones) != len(self.skeleton.bones):
                 msg = 'The number of bones are not the same.'
-                msg += '(source file: {}, blender: {})'.format(len(self.skeleton.bones), len(bones))
+                msg += f'(source file: {len(self.skeleton.bones)}, blender: {len(bones)})'
                 raise RuntimeError(msg)
 
         if self.extra_mesh is not None and not only_mesh:
@@ -301,11 +322,16 @@ class SkeletalMesh(Mesh):
         super().import_from_blender(primitives, imports, name_list, file_data_ids)
 
 
-# Skeletal meshes have an extra low poly mesh.
-# I removed buffers from this mesh, but it won't affect physics
-# (collision with other objects, and collision between body and cloth)
 class ExtraMesh:
+    """Extra mesh data for ff7r.
+
+    Notes:
+        Skeletal meshes have an extra low poly mesh.
+        I removed buffers from this mesh, but it won't affect physics
+        (collision with other objects, and collision between body and cloth)
+    """
     def __init__(self, f, bones):
+        """Read function."""
         self.offset = f.tell()
         self.names = [b.name for b in bones]
         vertex_num = io.read_uint32(f)
@@ -317,14 +343,17 @@ class ExtraMesh:
         self.unk = f.read(8)
 
     def disable(self):
+        """Remove mesh data."""
         self.vb = b''
         self.weight_buffer = b''
         self.ib = b''
 
     def read(f, bones):
+        """Read function."""
         return ExtraMesh(f, bones)
 
     def write(f, mesh):
+        """Write function."""
         vertex_num = len(mesh.vb) // 12
         io.write_uint32(f, vertex_num)
         f.write(mesh.vb)
@@ -337,7 +366,8 @@ class ExtraMesh:
         f.write(mesh.unk)
 
     def print(self, padding=0):
+        """Print meta data."""
         pad = ' ' * padding
-        print(pad + 'Mesh (offset: {})'.format(self.offset))
-        print(pad + '  vertex_num: {}'.format(len(self.vb) // 12))
-        print(pad + '  face_num: {}'.format(len(self.ib) // 6))
+        print(pad + f'Mesh (offset: {self.offset})')
+        print(pad + f'  vertex_num: {len(self.vb) // 12}')
+        print(pad + f'  face_num: {len(self.ib) // 6}')

@@ -1,14 +1,14 @@
-# classes for .uasset
+"""Classes for .uasset files."""
+import ctypes as c
 import os
 
 from ..util import io_util as io
 from ..util.version import VersionInfo
 from .uexp import Uexp
-import ctypes as c
 
 
-# header of .uasset
 class UassetHeader(c.LittleEndianStructure):
+    """Class for uasset header."""
     HEAD = b'\xC1\x83\x2A\x9E'
     _pack_ = 1
     _fields_ = [  # 193 bytes
@@ -41,12 +41,21 @@ class UassetHeader(c.LittleEndianStructure):
         ("file_data_offset", c.c_uint32)
     ]
 
+    def __init__(self):
+        """Constructor."""
+        super().__init__()
+        self.version = 0
+        self.null = b''
+        self.unversioned = False
+        self.unk_count = 0
+
     def read(f):
+        """Read function."""
         header = UassetHeader()
         io.check(f.read(4), UassetHeader.HEAD)
         header.version = - io.read_int32(f) - 1
         if header.version not in [6, 7]:
-            raise RuntimeError('Unsupported header version. ({})'.format(header.version))
+            raise RuntimeError(f'Unsupported header version. ({header.version}')
         header.null = f.read(16 + 4 * (header.version >= 7))
         f.readinto(header)
         header.unversioned = (header.pkg_flags & 8192) != 0
@@ -57,6 +66,7 @@ class UassetHeader(c.LittleEndianStructure):
         return header
 
     def write(f, header):
+        """Write function."""
         f.write(UassetHeader.HEAD)
         io.write_int32(f, -header.version - 1)
         f.write(header.null)
@@ -67,23 +77,25 @@ class UassetHeader(c.LittleEndianStructure):
             io.write_int32(f, -1)
 
     def print(self):
+        """Print meta data."""
         print('Header info')
-        print('  file size: {}'.format(self.uasset_size))
-        print('  number of names: {}'.format(self.name_count))
+        print(f'  file size: {self.uasset_size}')
+        print(f'  number of names: {self.name_count}')
         print('  name directory offset: 193')
-        print('  number of exports: {}'.format(self.export_count))
-        print('  export directory offset: {}'.format(self.export_offset))
-        print('  number of imports: {}'.format(self.import_count))
-        print('  import directory offset: {}'.format(self.import_offset))
-        print('  end offset of export: {}'.format(self.end_to_export))
-        print('  padding offset: {}'.format(self.padding_offset))
-        print('  file length (uasset+uexp-4): {}'.format(self.file_length))
-        print('  file data count: {}'.format(self.file_data_count))
-        print('  file data offset: {}'.format(self.file_data_offset))
+        print(f'  number of exports: {self.export_count}')
+        print(f'  export directory offset: {self.export_offset}')
+        print(f'  number of imports: {self.import_count}')
+        print(f'  import directory offset: {self.import_offset}')
+        print(f'  end offset of export: {self.end_to_export}')
+        print(f'  padding offset: {self.padding_offset}')
+        print(f'  file length (uasset+uexp-4): {self.file_length}')
+        print(f'  file data count: {self.file_data_count}')
+        print(f'  file data offset: {self.file_data_offset}')
 
 
 # import data of .uasset
 class UassetImport(c.LittleEndianStructure):
+    """Import data of .uasset."""
     _pack_ = 1
     _fields_ = [  # 28 bytes
         ("parent_dir_id", c.c_uint64),
@@ -94,9 +106,16 @@ class UassetImport(c.LittleEndianStructure):
     ]
 
     def __init__(self):
+        """Constructor."""
+        super().__init__()
         self.material = False
+        self.name = None
+        self.class_name = None
+        self.parent_dir = None
+        self.unk2 = None
 
     def read(f, version):
+        """Read function."""
         imp = UassetImport()
         f.readinto(imp)
         if version == '5.0':
@@ -104,11 +123,13 @@ class UassetImport(c.LittleEndianStructure):
         return imp
 
     def write(self, f, version):
+        """Write function."""
         f.write(self)
         if version == '5.0':
             io.write_uint32(f, self.unk2)
 
     def name_import(self, name_list):
+        """Convert ids to strings."""
         self.name = name_list[self.name_id]
         self.class_name = name_list[self.class_id]
         self.parent_dir = name_list[self.parent_dir_id]
@@ -116,6 +137,7 @@ class UassetImport(c.LittleEndianStructure):
         return self.name
 
     def print(self, s='', padding=2):
+        """Print meta data."""
         pad = ' ' * padding
         print(pad + s + ': ' + self.name)
         print(pad + '  class: ' + self.class_name)
@@ -123,17 +145,19 @@ class UassetImport(c.LittleEndianStructure):
         print(pad + '  parent import: ' + self.parent_name)
 
     def copy(self):
+        """Copy itself."""
         copied = UassetImport()
         copied.parent_dir_id = self.parent_dir_id
         copied.class_id = self.class_id
         copied.parent_import_id = self.parent_import_id
         copied.name_id = self.name_id
-        copied.unk = copied.unk
+        copied.unk = self.unk
         copied.material = self.material
         return copied
 
 
 def name_imports(imports, name_list):
+    """Convert ids to strings."""
     import_names = list(map(lambda x: x.name_import(name_list), imports))
 
     def name_parent(x):
@@ -142,11 +166,11 @@ def name_imports(imports, name_list):
         else:
             x.parent_name = import_names[-x.parent_import_id - 1]
 
-    list(map(lambda x: name_parent(x), imports))
+    list(map(name_parent, imports))
 
 
-# export data of .uasset
 class UassetExport(c.LittleEndianStructure):
+    """Export data of .uasset."""
     _pack_ = 1
     _fields_ = [  # 104 bytes
         ("class_id", c.c_int32),
@@ -165,6 +189,7 @@ class UassetExport(c.LittleEndianStructure):
                     'Texture2D', 'TextureCube', 'Material', 'MaterialInstanceConstant']
 
     def read(f, version):
+        """Read function."""
         exp = UassetExport()
         f.readinto(exp)
         if version == '5.0':
@@ -172,15 +197,18 @@ class UassetExport(c.LittleEndianStructure):
         return exp
 
     def write(self, f, version):
+        """Write function."""
         f.write(self)
         if version == '5.0':
             io.write_uint32(f, self.unk2)
 
     def update(self, size, offset):
+        """Update attributes."""
         self.size = size
         self.offset = offset
 
     def name_exports(exports, imports, name_list):
+        """Convert ids to strings."""
         asset_type = None
         for export in exports:
             export_import = imports[-export.import_id - 1]
@@ -195,23 +223,28 @@ class UassetExport(c.LittleEndianStructure):
         return asset_type
 
     def read_uexp(self, f):
+        """Read .uexp and store export data as it is."""
         self.bin = f.read(self.size)
 
     def write_uexp(self, f):
+        """Write export data as it is."""
         f.write(self.bin)
 
     def print(self, padding=2):
+        """Print meta data."""
         pad = ' ' * padding
         print(pad + self.name)
-        print(pad + '  class: {}'.format(self.class_name))
-        print(pad + '  import: {}'.format(self.import_name))
-        print(pad + '  size: {}'.format(self.size))
-        print(pad + '  offset: {}'.format(self.offset))
+        print(pad + f'  class: {self.class_name}')
+        print(pad + f'  import: {self.import_name}')
+        print(pad + f'  size: {self.size}')
+        print(pad + f'  offset: {self.offset}')
 
 
 class Uasset:
+    """Class for .uasset file."""
 
     def __init__(self, file, version='ff7r', ignore_uexp=False, asset_type='', verbose=False):
+        """Load an asset file."""
         ext = io.get_ext(file)
         base = file[:-len(ext)]
         if ext != 'uasset':
@@ -240,7 +273,7 @@ class Uasset:
             self.unversioned = self.header.unversioned
 
             if verbose:
-                print('size: {}'.format(self.size))
+                print(f'size: {self.size}')
                 self.header.print()
                 print('Name list')
 
@@ -249,7 +282,7 @@ class Uasset:
                 name = io.read_str(f)
                 hash = f.read(4)
                 if verbose:
-                    print('  {}: {}'.format(i, name))
+                    print(f'  {i}: {name}')
                 return name, hash
             names = [read_names(f, i) for i in range(self.header.name_count)]
             self.name_list = [x[0] for x in names]
@@ -261,7 +294,7 @@ class Uasset:
             name_imports(self.imports, self.name_list)
             if verbose:
                 print('Import')
-                [x.print(str(i)) for x, i in zip(self.imports, range(len(self.imports)))]
+                list(map(lambda x, i: x.print(str(i)), self.imports, range(len(self.imports))))
 
             paths = [n for n in self.name_list if n[0] == '/']
             import_names = list(set([imp.name for imp in self.imports] + [imp.parent_dir for imp in self.imports]))
@@ -280,7 +313,7 @@ class Uasset:
             if self.asset_type is None:
                 raise RuntimeError('Unsupported asset')
             if asset_type not in self.asset_type:
-                raise RuntimeError('Not {}.'.format(asset_type))
+                raise RuntimeError(f'Not {asset_type}.')
 
             if verbose:
                 print('Export')
@@ -302,6 +335,7 @@ class Uasset:
         self.uexp = Uexp(base + 'uexp', self, verbose=verbose)
 
     def save(self, file):
+        """Save an asset file."""
         ext = io.get_ext(file)
         base = file[:-len(ext)]
         if ext != 'uasset':

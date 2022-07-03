@@ -1,6 +1,9 @@
+"""UI panel and operator to import .uasset files."""
+# Todo: Write args to docstrings.
+import os
+import time
+
 import bpy
-from mathutils import Vector, Quaternion, Matrix
-import numpy as np
 from bpy.props import (StringProperty,
                        BoolProperty,
                        EnumProperty,
@@ -9,7 +12,8 @@ from bpy.props import (StringProperty,
                        CollectionProperty)
 from bpy.types import Operator, PropertyGroup
 from bpy_extras.io_utils import ImportHelper
-import os
+from mathutils import Vector, Quaternion, Matrix
+import numpy as np
 
 from . import bpy_util, unreal, util
 if "bpy" in locals():
@@ -23,12 +27,25 @@ if "bpy" in locals():
 
 
 def get_rescale_factor(rescale):
+    """Calculate rescale factor from rescale value and unit scale."""
     return 0.01 * rescale / bpy.context.scene.unit_settings.scale_length
 
 
-# add a skeleton to scene
 def generate_armature(name, bones, normalize_bones=True, rotate_bones=False,
                       minimal_bone_length=0.025, rescale=1.0):
+    """Add a skeleton to scene.
+
+    Args:
+        name (string): armature name
+        bones (list[unreal.skeleton.Bone]): bone data
+        normalize_bones (bool): Force all bones to have the same length
+        rotate_bones (bool): Rotate all bones by 90 degrees
+        minimal_bone_length (float): Force all bones to be longer than this value
+        rescale (float): rescale factor for bone positions
+
+    Returns:
+        amt (bpy.types.Armature): Added armature
+    """
     print('Generating an armature...')
 
     amt = bpy_util.add_armature(name=name)
@@ -40,15 +57,15 @@ def generate_armature(name, bones, normalize_bones=True, rotate_bones=False,
         scale = Vector((bone.scale[0], bone.scale[1], bone.scale[2]))
         bone.trs = bpy_util.make_trs(trans, rot, scale)
         bone.trans = trans
-    list(map(lambda b: cal_trs(b), bones))
+    list(map(cal_trs, bones))
 
     def cal_length(bone, bones):
         if len(bone.children) == 0:
             bone.length = rescale_factor
             return
         length = 0
-        for c in bone.children:
-            child = bones[c]
+        for child_id in bone.children:
+            child = bones[child_id]
             length += child.trans.length
         length /= len(bone.children)
         bone.length = length
@@ -80,22 +97,39 @@ def generate_armature(name, bones, normalize_bones=True, rotate_bones=False,
             root.tail = trs @ (local_bone_vec * minimal_bone_length)
             root.z_axis_tail = trs @ (z_axis * minimal_bone_length)
 
-        for c in root.children:
-            child = bones[c]
+        for child_id in root.children:
+            child = bones[child_id]
             cal_global_matrix(child, root.global_matrix, bones)
 
     cal_global_matrix(bones[0], Matrix.Identity(4), bones)
 
     def generate_bones(amt, root, bones, parent=None):
-        b = bpy_util.add_bone(amt, root.name, root.head, root.tail, root.z_axis_tail, parent=parent)
-        for c in root.children:
-            child = bones[c]
-            generate_bones(amt, child, bones, parent=b)
+        new_b = bpy_util.add_bone(amt, root.name, root.head, root.tail, root.z_axis_tail, parent=parent)
+        for child_id in root.children:
+            child = bones[child_id]
+            generate_bones(amt, child, bones, parent=new_b)
     generate_bones(amt, bones[0], bones)
     return amt
 
 
 def load_utexture(file, name, version, asset=None, invert_normals=False):
+    """Import a texture form .uasset file.
+
+    Args:
+        file (string): file path to .uasset file
+        name (string): texture name
+        version (string): UE version
+        asset (unreal.uasset.Uasset): loaded asset data
+        invert_normals (bool): Flip y axis if the texture is normal map.
+
+    Returns:
+        tex (bpy.types.Image): loaded texture
+        tex_type (string): texture type
+
+    Notes:
+        if asset is None, it will load .uasset file
+        if it's not None, it will get texture data from asset
+    """
     temp = util.io_util.make_temp_file(suffix='.dds')
     if asset is not None:
         name = asset.name
@@ -113,9 +147,9 @@ def load_utexture(file, name, version, asset=None, invert_normals=False):
             tex_type = 'COLOR'
         dds = unreal.dds.DDS.asset_to_DDS(utex)
         dds.save(temp)
-        tex = bpy_util.load_dds(temp, name=name, type=tex_type, invert_normals=invert_normals)
+        tex = bpy_util.load_dds(temp, name=name, tex_type=tex_type, invert_normals=invert_normals)
     except Exception:
-        print('Failed to load {}'.format(file))
+        print(f'Failed to load {file}')
         tex = None
         tex_type = None
 
@@ -125,7 +159,20 @@ def load_utexture(file, name, version, asset=None, invert_normals=False):
 
 
 def generate_materials(asset, version, load_textures=False,
-                       invert_normal_maps=False, suffix_list=[['_C', '_D'], ['_N'], ['_A']]):
+                       invert_normal_maps=False, suffix_list=(['_C', '_D'], ['_N'], ['_A'])):
+    """Add materials and textures, and make shader nodes.
+
+    args:
+        asset (unreal.uasset.Uasset): mesh asset
+        version (string): UE version
+        load_textures (bool): if import texture files or not
+        invert_normal_maps (bool): if flip y axis for normal maps or not
+        suffix_list (list[list[string]]): suffix list for color map, normal maps, and alpha textures
+
+    Returns:
+        materials (list[bpy.types.Material]): Added materials
+        material_names (list[string]): material names
+    """
     if load_textures:
         print('Loading textures...')
     # add materials to mesh
@@ -135,6 +182,19 @@ def generate_materials(asset, version, load_textures=False,
     texture_num = sum([len(m.texture_asset_paths) for m in asset.uexp.mesh.materials])
     progress = 1
     texs = {}
+
+    def contain_suffix(base_name, names, suffix_list):
+        for suf in suffix_list:
+            if base_name + suf in names:
+                return names.index(base_name + suf)
+        return -1
+
+    def has_suffix(name, suffix_list):
+        for suf in suffix_list:
+            if name[-len(suf):] == suf:
+                return True
+        return False
+
     for m, ue_m in zip(materials, asset.uexp.mesh.materials):
         m['class'] = ue_m.class_name
         m['asset_path'] = ue_m.asset_path
@@ -163,55 +223,55 @@ def generate_materials(asset, version, load_textures=False,
 
             types = [texs[n][1] for n in names]
 
-            def contain_suffix(base_name, names, suffix_list):
-                for suf in suffix_list:
-                    if base_name + suf in names:
-                        return names.index(base_name + suf)
-                return -1
-
-            def has_suffix(n, suffix_list):
-                for suf in suffix_list:
-                    if n[-len(suf):] == suf:
-                        return True
-                return False
-
-            def search_suffix(suffix, tex_type, new_type_suffix, need_suffix=False):
+            def search_suffix(suffix, tex_type, new_type_suffix, types, names, material_name, need_suffix=False):
                 if tex_type not in types:
                     return
-                id = None
+                index = None
                 type_names = [n for n, t in zip(names, types) if t == tex_type]
                 new_id = contain_suffix(material_name, type_names, suffix)
                 if new_id != -1:
-                    id = new_id
-                if id is None:
-                    ns = [n for n in type_names if has_suffix(n, suffix)]
-                    if len(ns) > 0:
-                        id = names.index(ns[0])
+                    index = new_id
+                if index is None:
+                    names_has_suf = [n for n in type_names if has_suffix(n, suffix)]
+                    if len(names_has_suf) > 0:
+                        index = names.index(names_has_suf[0])
                     elif need_suffix:
                         return
-                if id is None:
-                    id = names.index(type_names[0])
-                if id is not None:
-                    types[id] += new_type_suffix
-                    print('{}: {}'.format(types[id], names[id]))
-            search_suffix(suffix_list[0], 'COLOR', '_MAIN')
-            search_suffix(suffix_list[1], 'NORMAL', '_MAIN')
-            search_suffix(suffix_list[2], 'GRAY', '_ALPHA', need_suffix=True)
+                if index is None:
+                    index = names.index(type_names[0])
+                if index is not None:
+                    types[index] += new_type_suffix
+                    print(f'{types[index]}: {names[index]}')
+            search_suffix(suffix_list[0], 'COLOR', '_MAIN', types, names, material_name)
+            search_suffix(suffix_list[1], 'NORMAL', '_MAIN', types, names, material_name)
+            search_suffix(suffix_list[2], 'GRAY', '_ALPHA', types, names, material_name, need_suffix=True)
 
-            y = 300
+            height = 300
             for name, tex_type in zip(names, types):
                 tex, _ = texs[name]
                 # no need to invert normals if it is already inverted.
-                bpy_util.assign_texture(tex, m, tex_type=tex_type, location=[-800, y],
+                bpy_util.assign_texture(tex, m, tex_type=tex_type, location=[-800, height],
                                         invert_normals=not invert_normal_maps)
-                y -= 300
+                height -= 300
     return materials, material_names
 
 
-# add meshes to scene
 def generate_mesh(amt, asset, materials, material_names, rescale=1.0,
                   keep_sections=False, smoothing=True):
+    """Add meshes to scene.
 
+    Args:
+        amt (bpy.types.Armature): target armature
+        asset (unreal.uasset.Uasset): source asset
+        materials (list[bpy.types.Material]): material objects
+        material_names (list[string]): material names
+        rescale (float): rescale factor for vertex positions
+        keep_sections (bool): split mesh by materials or not
+        smoothing (bool): apply smooth shading or not
+
+    Returns:
+        mesh (bpy.types.Mesh): A mesh object
+    """
     print('Generating meshes...')
     # get mesh data from asset
     material_ids, _ = asset.uexp.mesh.LODs[0].get_meta_for_blender()
@@ -256,7 +316,7 @@ def generate_mesh(amt, asset, materials, material_names, rescale=1.0,
         norm = norm / np.linalg.norm(norm, axis=1)[:, np.newaxis]
 
         norm = bpy_util.flip_y_for_3d_vectors(norm)
-        bpy_util.smoothing(mesh_data, len(indice) // 3, norm, smoothing=smoothing)
+        bpy_util.smoothing(mesh_data, len(indice) // 3, norm, enable_smoothing=smoothing)
 
     if not keep_sections:
         # join meshes
@@ -267,28 +327,31 @@ def generate_mesh(amt, asset, materials, material_names, rescale=1.0,
     return sections[0]
 
 
-# add mesh asset to scene
 def load_uasset(file, rename_armature=True, keep_sections=False,
                 normalize_bones=True, rotate_bones=False,
                 minimal_bone_length=0.025, rescale=1.0,
                 smoothing=True, only_skeleton=False,
                 show_axes=False, bone_display_type='OCTAHEDRAL', show_in_front=True,
                 load_textures=False, invert_normal_maps=False, ue_version='4.18',
-                suffix_list=[['_C', '_D'], ['_N'], ['_A']]):
+                suffix_list=(['_C', '_D'], ['_N'], ['_A'])):
+    """Import assets form .uasset file.
 
+    Notes:
+        See property groups for the description of arguments
+    """
     # load .uasset
     asset = unreal.uasset.Uasset(file, version=ue_version)
     asset_type = asset.asset_type
-    print('Asset type: {}'.format(asset_type))
+    print(f'Asset type: {asset_type}')
 
     if 'Texture' in asset_type:
         tex, _ = load_utexture('', '', ue_version, asset=asset, invert_normals=invert_normal_maps)
         return tex, asset_type
     if 'Material' in asset_type:
-        raise RuntimeError('Unsupported asset. ({})'.format(asset.asset_type))
+        raise RuntimeError(f'Unsupported asset. ({asset.asset_type})')
 
     if asset_type not in ['SkeletalMesh', 'Skeleton', 'StaticMesh']:
-        raise RuntimeError('Unsupported asset. ({})'.format(asset.asset_type))
+        raise RuntimeError(f'Unsupported asset. ({asset.asset_type})')
     if asset.uexp.mesh is None and only_skeleton:
         raise RuntimeError('"Only Skeleton" option is checked, but the asset has no skeleton.')
 
@@ -330,6 +393,7 @@ def load_uasset(file, rename_armature=True, keep_sections=False,
 
 
 class TABFLAGS_WindowManager(PropertyGroup):
+    """Properties to manage tabs."""
     ui_general: BoolProperty(name='General', default=True)
     ui_mesh: BoolProperty(name='Mesh', default=True)
     ui_texture: BoolProperty(name='Texture', default=False)
@@ -338,6 +402,7 @@ class TABFLAGS_WindowManager(PropertyGroup):
 
 
 class GeneralOptions(PropertyGroup):
+    """Properties for general options."""
     ue_version: EnumProperty(
         name='UE version',
         items=(('ff7r', 'FF7R', ''),
@@ -358,6 +423,7 @@ class GeneralOptions(PropertyGroup):
 
 
 class ImportOptions(PropertyGroup):
+    """Properties for import options."""
     rename_armature: BoolProperty(
         name='Rename Armature',
         description=(
@@ -503,6 +569,7 @@ class ImportOptions(PropertyGroup):
 
 
 class ImportUasset(Operator, ImportHelper):
+    """Operator to import .uasset files."""
     bl_idname = 'import.uasset'
     bl_label = 'Import Uasset'
     bl_description = 'Import .uasset files'
@@ -516,16 +583,17 @@ class ImportUasset(Operator, ImportHelper):
     )
 
     def draw(self, context):
+        """Draw options for file picker."""
         layout = self.layout
 
         layout.use_property_split = False
         layout.use_property_decorate = False  # No animation.
 
-        wm = bpy.context.window_manager.tabflags
+        win_m = bpy.context.window_manager.tabflags
         goption = context.scene.general_options
         ioption = context.scene.import_options
         options = [goption] + [ioption] * 4
-        show_flags = [wm.ui_general, wm.ui_mesh, wm.ui_texture, wm.ui_armature, wm.ui_scale]
+        show_flags = [win_m.ui_general, win_m.ui_mesh, win_m.ui_texture, win_m.ui_armature, win_m.ui_scale]
         labels = ['ui_general', 'ui_mesh', 'ui_texture', 'ui_armature', 'ui_scale']
         props = [
             ['ue_version'],
@@ -540,7 +608,7 @@ class ImportUasset(Operator, ImportHelper):
             box = layout.box()
             row = box.row(align=True)
             row.alignment = 'LEFT'
-            row.prop(wm, label, icon='DOWNARROW_HLT' if show_flag else 'RIGHTARROW', emboss=False)
+            row.prop(win_m, label, icon='DOWNARROW_HLT' if show_flag else 'RIGHTARROW', emboss=False)
             if show_flag:
                 box.use_property_split = True
                 box.use_property_decorate = False
@@ -548,17 +616,18 @@ class ImportUasset(Operator, ImportHelper):
                     box.prop(option, prop)
 
     def invoke(self, context, event):
+        """Invoke."""
         return ImportHelper.invoke(self, context, event)
 
     def execute(self, context):
+        """Run the operator."""
         if bpy_util.os_is_windows():
             bpy.ops.wm.console_toggle()
             bpy.ops.wm.console_toggle()
         return self.import_uasset(context)
 
     def import_uasset(self, context):
-        import os
-
+        """Import files."""
         if self.files:
             # Multiple file import
             ret = {'CANCELLED'}
@@ -568,12 +637,12 @@ class ImportUasset(Operator, ImportHelper):
                 if self.unit_import(path, context) == {'FINISHED'}:
                     ret = {'FINISHED'}
             return ret
-        else:
-            # Single file import
-            return self.unit_import(self.filepath, context)
+
+        # Single file import
+        return self.unit_import(self.filepath, context)
 
     def unit_import(self, file, context):
-        import time
+        """Import a file."""
         try:
             start_time = time.time()
             general_options = context.scene.general_options
@@ -589,7 +658,7 @@ class ImportUasset(Operator, ImportHelper):
             suffix_list = [str_to_list(import_options.suffix_for_color),
                            str_to_list(import_options.suffix_for_normal),
                            str_to_list(import_options.suffix_for_alpha)]
-            root_obj, asset_type = load_uasset(
+            _, asset_type = load_uasset(
                 file,
                 rename_armature=import_options.rename_armature,
                 keep_sections=import_options.keep_sections,
@@ -623,18 +692,21 @@ class ImportUasset(Operator, ImportHelper):
 
 
 class ToggleConsole(Operator):
+    """Operator to toggle the system console."""
     bl_idname = 'import.toggle_console'
     bl_label = 'Toggle Console'
     bl_description = ('Toggle the system console.\n'
                       'I recommend enabling the system console to see the progress')
 
     def execute(self, context):
+        """Toggle console."""
         if bpy_util.os_is_windows():
             bpy.ops.wm.console_toggle()
         return {'FINISHED'}
 
 
 class UASSET_PT_import_panel(bpy.types.Panel):
+    """UI panel for improt function."""
     bl_label = "Import Uasset"
     bl_idname = 'VIEW3D_PT_import_uasset'
     bl_space_type = "VIEW_3D"
@@ -642,6 +714,7 @@ class UASSET_PT_import_panel(bpy.types.Panel):
     bl_category = "Uasset"
 
     def draw(self, context):
+        """Draw UI panel."""
         layout = self.layout
         layout.operator(ImportUasset.bl_idname, icon='MESH_DATA')
         general_options = context.scene.general_options
@@ -659,6 +732,7 @@ class UASSET_PT_import_panel(bpy.types.Panel):
 
 
 def menu_func_import(self, context):
+    """Add import operator to File->Import."""
     self.layout.operator(ImportUasset.bl_idname, text='Uasset (.uasset)')
 
 
@@ -673,6 +747,7 @@ classes = (
 
 
 def register():
+    """Regist UI panel, operator, and properties."""
     for c in classes:
         bpy.utils.register_class(c)
     bpy.types.TOPBAR_MT_file_import.append(menu_func_import)
@@ -682,6 +757,7 @@ def register():
 
 
 def unregister():
+    """Unregist UI panel, operator, and properties."""
     for c in classes:
         bpy.utils.unregister_class(c)
     bpy.types.TOPBAR_MT_file_import.remove(menu_func_import)

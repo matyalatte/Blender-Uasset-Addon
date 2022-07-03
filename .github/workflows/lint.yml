@@ -1,0 +1,63 @@
+name: lint
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '**.py'    
+  workflow_dispatch:
+      
+env:
+  GIST_ID: f1a5f45e1346698f50387619ff6c5bf7
+  JSON_NAME: blender_uasset_addon_pylint_badge.json
+  
+jobs:
+  flake8:
+    runs-on: windows-latest
+    steps:
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.7.x
+          architecture: x64
+          
+      - uses: actions/checkout@v3
+      
+      - name: Install flake8
+        run: pip install flake8
+        
+      - name: Run flake8
+        uses: suo/flake8-github-action@releases/v1
+        with:
+          checkName: 'flake8'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          
+  pylint:
+    runs-on: windows-latest
+    steps:
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.7.x
+          architecture: x64
+          
+      - uses: actions/checkout@v3
+      
+      - name: Install
+        run: pip install pylint pydocstyle
+        
+      - name: Run pylint
+        run: |
+          pydocstyle
+          python for_dev/lint.py --path=blender_uasset_addon --threshold=3 --file_name=${{ env.JSON_NAME }}
+
+      - name: Deploy
+        continue-on-error: true
+        uses: exuanbo/actions-deploy-gist@v1
+        with:
+          token: ${{ secrets.GIST_TOKEN }}
+          gist_id: ${{ env.GIST_ID }}
+          file_path: ${{ env.JSON_NAME }}
+          file_type: binary

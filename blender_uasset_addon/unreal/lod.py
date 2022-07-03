@@ -1,7 +1,9 @@
+"""Classes for LOD."""
+
 import struct
 from ..util import io_util as io
 
-from .lod_section import StaticLODSection, SkeletalLODSection, SkeletalLODSection5
+from .lod_section import StaticLODSection, SkeletalLODSection4, SkeletalLODSection5
 from .buffer import (PositionVertexBuffer,
                      StaticMeshVertexBuffer,
                      ColorVertexBuffer,
@@ -15,15 +17,17 @@ from .buffer import (PositionVertexBuffer,
                      KDIBuffer)
 
 
-# Base class for LOD
 class LOD:
+    """Base class for LOD."""
     def __init__(self, vb, vb2, ib, ib2, color_vb=None):
+        """Constructor."""
         self.vb = vb
         self.vb2 = vb2
         self.ib = ib
         self.ib2 = ib2
         self.color_vb = color_vb
 
+    """
     def import_LOD(self, lod, name=''):
         # if len(self.sections)<len(lod.sections):
         #     raise RuntimeError('too many materials')
@@ -44,38 +48,44 @@ class LOD:
         print('  faces: {} -> {}'.format(f_num1, f_num2))
         print('  vertices: {} -> {}'.format(v_num1, v_num2))
         print('  uv maps: {} -> {}'.format(uv_num1, uv_num2))
+    """
 
-    # get all buffers LOD has
+    # Todo: Generalize this function for all LOD classes.
     def get_buffers(self):
+        """Get all buffers LOD has."""
         buffers = [self.vb, self.vb2, self.ib, self.ib2]
         if self.color_vb is not None:
             buffers += [self.color_vb]
         return buffers
 
-    # reorder material ids
     def update_material_ids(self, new_material_ids):
+        """Reorder material ids."""
         for section in self.sections:
             section.update_material_ids(new_material_ids)
 
     def get_meta_for_blender(self):
+        """Get meta data for Blender."""
         material_ids = [section.material_id for section in self.sections]
         return material_ids, self.uv_num
 
 
 def split_list(array, first_ids):
+    """Split list by ids."""
     last_ids = first_ids[1:] + [len(array)]
     splitted = [array[first: last] for first, last in zip(first_ids, last_ids)]
     return splitted
 
 
 def flatten(array):
+    """Flatten a list."""
     return [x for row in array for x in row]
 
 
-# LOD for static mesh
 class StaticLOD(LOD):
+    """LOD for static mesh."""
     def __init__(self, offset, sections, flags, vb, vb2, color_vb,
                  ib, ib2, reversed_ib, reversed_ib2, adjacency_ib, unk):
+        """Constructor."""
         self.offset = offset
         self.sections = sections
         self.flags = flags
@@ -90,6 +100,7 @@ class StaticLOD(LOD):
             self.face_num += section.face_num
 
     def read(f):
+        """Read function."""
         offset = f.tell()
         one = io.read_uint16(f)
         io.check(one, 1, f)
@@ -111,6 +122,7 @@ class StaticLOD(LOD):
                          reversed_ib, reversed_ib2, adjacency_ib, unk)
 
     def write(f, lod):
+        """Write function."""
         io.write_uint16(f, 1)
         io.write_array(f, lod.sections, StaticLODSection.write, with_length=True)
         f.write(lod.flags)
@@ -127,23 +139,25 @@ class StaticLOD(LOD):
         f.write(lod.unk)
 
     def print(self, i, padding=0):
+        """Print meta data."""
         pad = ' ' * padding
-        print(pad + 'LOD{} (offset: {})'.format(i, self.offset))
-        for j in range(len(self.sections)):
-            self.sections[j].print(j, padding=padding + 2)
-        print(pad + 'face_count: {}'.format(self.face_num))
-        print(pad + 'vertex_count: {}'.format(self.vb.vertex_num))
-        print(pad + 'uv_count: {}'.format(self.uv_num))
+        print(pad + f'LOD{i} (offset: {self.offset})')
+        for sec, j in zip(self.sections, range(len(self.sections))):
+            sec.print(j, padding=padding + 2)
+        print(pad + f'face_count: {self.face_num}')
+        print(pad + f'vertex_count: {self.vb.vertex_num}')
+        print(pad + f'uv_count: {self.uv_num}')
         for buf in self.get_buffers():
             buf.print(padding=padding + 2)
 
     def parse_buffers_for_blender(self):
+        """Get mesh data for Blender."""
         pos = self.vb.parse()
         normal, texcoords = self.vb2.parse()
         first_vertex_ids = [section.first_vertex_id for section in self.sections]
 
-        ls = [normal, pos]
-        normals, positions = [split_list(elem, first_vertex_ids) for elem in ls]
+        ary = [normal, pos]
+        normals, positions = [split_list(elem, first_vertex_ids) for elem in ary]
 
         texcoords = [split_list(tc, first_vertex_ids) for tc in texcoords]
 
@@ -155,6 +169,7 @@ class StaticLOD(LOD):
         return normals, positions, texcoords, None, None, None, indices
 
     def import_from_blender(self, primitives):
+        """Import mesh data from Blender."""
         s_num1 = len(self.sections)
         f_num1 = self.ib.size // 3
         v_num1 = self.vb.vertex_num
@@ -164,7 +179,6 @@ class StaticLOD(LOD):
         self.uv_num = len(uv_maps)
         # pos_range = self.vb.get_range()
         positions = primitives['POSITIONS']
-        positions = positions
         self.vb.import_from_blender(positions)
 
         normals = primitives['NORMALS']
@@ -183,9 +197,9 @@ class StaticLOD(LOD):
         first_vertex_id = 0
         first_ids = []
         first_ib_id = 0
-        for section, id, vert_num, face_num in zip(self.sections, material_ids, vertex_count, face_count):
+        for section, index, vert_num, face_num in zip(self.sections, material_ids, vertex_count, face_count):
             first_ids.append(first_vertex_id)
-            section.import_from_blender(id, first_vertex_id, vert_num, first_ib_id, face_num)
+            section.import_from_blender(index, first_vertex_id, vert_num, first_ib_id, face_num)
             first_vertex_id += vert_num
             first_ib_id += face_num * 3
 
@@ -206,36 +220,38 @@ class StaticLOD(LOD):
         uv_num2 = self.uv_num
 
         print('Updated LOD0')
-        print('  sections: {} -> {}'.format(s_num1, s_num2))
-        print('  faces: {} -> {}'.format(f_num1, f_num2))
-        print('  vertices: {} -> {}'.format(v_num1, v_num2))
-        print('  uv maps: {} -> {}'.format(uv_num1, uv_num2))
+        print(f'  sections: {s_num1} -> {s_num2}')
+        print(f'  faces: {f_num1} -> {f_num2}')
+        print(f'  vertices: {v_num1} -> {v_num2}')
+        print(f'  uv maps: {uv_num1} -> {uv_num2}')
 
 
-# LOD for skeletal mesh
 class SkeletalLOD(LOD):
-
+    """Base class for skeletal LOD."""
     def get_buffers(self):
+        """Get all buffers."""
         buffers = super().get_buffers()
         if self.KDI_buffer_size > 0:
             buffers += [self.KDI_buffer, self.KDI_VB]
         return buffers
 
     def print(self, name, bones, padding=0):
+        """Print meta data."""
         pad = ' ' * padding
-        print(pad + 'LOD ' + name + ' (offset: {})'.format(self.offset))
-        for i in range(len(self.sections)):
-            self.sections[i].print(str(i), bones, padding=padding + 2)
+        print(pad + f'LOD{name} (offset: {self.offset})')
+        for sec, i in zip(self.sections, range(len(self.sections))):
+            sec.print(str(i), bones, padding=padding + 2)
         pad += ' ' * padding
-        print(pad + 'face count: {}'.format(self.ib.size // 3))
-        print(pad + 'vertex count: {}'.format(self.vb.vertex_num))
-        print(pad + 'uv count: {}'.format(self.uv_num))
+        print(pad + f'face count: {self.ib.size // 3}')
+        print(pad + f'vertex count: {self.vb.vertex_num}')
+        print(pad + f'uv count: {self.uv_num}')
         for buf in self.get_buffers():
             if buf is not None:
                 buf.print(padding=padding + 2)
 
 
 class SkeletalLOD4(SkeletalLOD):
+    """Skeketal LOD for old UE versions."""
     # sections: mesh data is separeted into some sections.
     #               each section has material id and vertex group.
     # active_bone_ids: maybe bone ids. but I don't know how it works.
@@ -243,15 +259,17 @@ class SkeletalLOD4(SkeletalLOD):
     # uv_num: the number of uv maps
 
     def read(f, version):
+        """Read function."""
         return SkeletalLOD4(f, version)
 
     def __init__(self, f, version):
+        """Read function."""
         self.offset = f.tell()
         self.version = version
         one = io.read_uint8(f)
         io.check(one, 1, f, 'Parse failed! (LOD:one)')
         no_tessellation = io.read_uint8(f)
-        self.sections = [SkeletalLODSection.read(f, self.version) for i in range(io.read_uint32(f))]
+        self.sections = [SkeletalLODSection4.read(f, self.version) for i in range(io.read_uint32(f))]
 
         self.KDI_buffer_size = 0
         for section in self.sections:
@@ -277,9 +295,9 @@ class SkeletalLOD4(SkeletalLOD):
         self.vb = SkeletalMeshVertexBuffer.read(f, name='VB0')
         io.check(self.uv_num, self.vb.uv_num)
         self.vb2 = SkinWeightVertexBuffer4.read(f, name='VB2')
-        u = io.read_uint8(f)
+        test = io.read_uint8(f)
         f.seek(-1, 1)
-        if u == 1 and not no_tessellation:  # HasVertexColors
+        if test == 1 and not no_tessellation:  # HasVertexColors
             self.color_vb = ColorVertexBuffer.read(f, name='ColorVB')
         else:
             self.color_vb = None
@@ -295,9 +313,10 @@ class SkeletalLOD4(SkeletalLOD):
             self.KDI_VB = KDIBuffer.read(f, name='KDI_VB')
 
     def write(f, lod):
+        """Write function."""
         io.write_uint8(f, 1)
         io.write_uint8(f, lod.ib2 is None)
-        io.write_array(f, lod.sections, SkeletalLODSection.write, with_length=True)
+        io.write_array(f, lod.sections, SkeletalLODSection4.write, with_length=True)
         SkeletalIndexBuffer.write(f, lod.ib)
         io.write_uint32(f, len(lod.active_bone_ids) // 2)
         f.write(lod.active_bone_ids)
@@ -324,6 +343,7 @@ class SkeletalLOD4(SkeletalLOD):
             KDIBuffer.write(f, lod.KDI_VB)
 
     def remove_KDI(self):
+        """Disable KDI."""
         self.KDI_buffer_size = 0
         self.KDI_buffer = None
         self.KDI_VB = None
@@ -331,13 +351,14 @@ class SkeletalLOD4(SkeletalLOD):
             section.remove_KDI()
 
     def parse_buffers_for_blender(self):
+        """Get mesh data for Blender."""
         normal, pos, texcoords = self.vb.parse()
         joint, weight = self.vb2.parse()
         first_vertex_ids = [section.first_vertex_id for section in self.sections]
         vertex_groups = [section.vertex_group for section in self.sections]
 
-        ls = [normal, pos, joint, weight]
-        normals, positions, joints, weights = [split_list(elem, first_vertex_ids) for elem in ls]
+        ary = [normal, pos, joint, weight]
+        normals, positions, joints, weights = [split_list(elem, first_vertex_ids) for elem in ary]
 
         texcoords = [split_list(tc, first_vertex_ids) for tc in texcoords]
 
@@ -348,6 +369,7 @@ class SkeletalLOD4(SkeletalLOD):
         return normals, positions, texcoords, vertex_groups, joints, weights, indices
 
     def import_from_blender(self, primitives):
+        """Import mesh data from Blender."""
         s_num1 = len(self.sections)
         f_num1 = self.ib.size // 3
         v_num1 = self.vb.vertex_num
@@ -380,10 +402,10 @@ class SkeletalLOD4(SkeletalLOD):
         first_vertex_id = 0
         first_ids = []
         first_ib_id = 0
-        for section, vg, id, vert_num, face_num in zip(self.sections, vertex_groups, material_ids,
-                                                       vertex_count, face_count):
+        for section, vg, index, vert_num, face_num in zip(self.sections, vertex_groups, material_ids,
+                                                          vertex_count, face_count):
             first_ids.append(first_vertex_id)
-            section.import_from_blender(vg, id, first_vertex_id, vert_num,
+            section.import_from_blender(vg, index, first_vertex_id, vert_num,
                                         first_ib_id, face_num, max_bone_influences)
             first_vertex_id += vert_num
             first_ib_id += face_num * 3
@@ -404,18 +426,21 @@ class SkeletalLOD4(SkeletalLOD):
         uv_num2 = self.uv_num
 
         print('Updated LOD0')
-        print('  sections: {} -> {}'.format(s_num1, s_num2))
-        print('  faces: {} -> {}'.format(f_num1, f_num2))
-        print('  vertices: {} -> {}'.format(v_num1, v_num2))
-        print('  uv maps: {} -> {}'.format(uv_num1, uv_num2))
+        print(f'  sections: {s_num1} -> {s_num2}')
+        print(f'  faces: {f_num1} -> {f_num2}')
+        print(f'  vertices: {v_num1} -> {v_num2}')
+        print(f'  uv maps: {uv_num1} -> {uv_num2}')
 
 
 class SkeletalLOD5(SkeletalLOD):
+    """Skeletal LOD for UE5."""
 
     def read(f, version):
+        """Read function."""
         return SkeletalLOD5(f, version)
 
     def __init__(self, f, version):
+        """Read function."""
         self.offset = f.tell()
         self.version = version
         one = io.read_uint16(f)
@@ -454,6 +479,7 @@ class SkeletalLOD5(SkeletalLOD):
         io.check(f.tell() - buffer_block_start_offset, buffer_block_size)
 
     def write(f, lod):
+        """Write function."""
         io.write_uint16(f, 1)
         io.write_uint32(f, 0)
         io.write_uint32(f, 1)
@@ -492,10 +518,12 @@ class SkeletalLOD5(SkeletalLOD):
         f.seek(end_offset)
 
     def get_buffers(self):
+        """Get all buffers."""
         buffers = [self.ib, self.vb, self.normal_vb, self.uv_vb, self.weight_vb]
         return buffers
 
     def parse_buffers_for_blender(self):
+        """Get mesh data for Blender."""
         normal = self.normal_vb.parse()
         pos = self.vb.parse()
         texcoords = self.uv_vb.parse()
@@ -504,8 +532,8 @@ class SkeletalLOD5(SkeletalLOD):
         first_vertex_ids = [section.first_vertex_id for section in self.sections]
         vertex_groups = [section.vertex_group for section in self.sections]
 
-        ls = [normal, pos, joint, weight]
-        normals, positions, joints, weights = [split_list(elem, first_vertex_ids) for elem in ls]
+        ary = [normal, pos, joint, weight]
+        normals, positions, joints, weights = [split_list(elem, first_vertex_ids) for elem in ary]
         texcoords = [split_list(tc, first_vertex_ids) for tc in texcoords]
 
         indices = self.ib.parse()

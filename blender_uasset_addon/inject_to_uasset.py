@@ -1,3 +1,7 @@
+"""UI panel to inject objects into .uasset files."""
+import os
+import time
+
 import bpy
 import numpy as np
 from bpy.props import (StringProperty,
@@ -5,7 +9,6 @@ from bpy.props import (StringProperty,
                        FloatProperty,
                        PointerProperty)
 from bpy.types import Operator, PropertyGroup
-import os
 
 from . import bpy_util, unreal, util
 if "bpy" in locals():
@@ -19,15 +22,27 @@ if "bpy" in locals():
 
 
 def get_rescale_factor(rescale):
+    """Calculate rescale factor from rescale value and unit scale."""
     return bpy.context.scene.unit_settings.scale_length * 100 * rescale
 
 
 def get_bones(armature, rescale=1.0):
+    """Extract bone data from an armature.
+
+    Args:
+        armature (bpy.types.Armature): target armature
+        rescale (float): rescale factor for bone positions
+
+    Returns:
+        blender_bones (list[BlenderBone]): bone data contains name, parent, trs, etc.
+        bone_names (list[string]): bone names (same as [b.name for b in blender_bones])
+    """
     bpy.context.view_layer.objects.active = armature
     bpy.ops.object.mode_set(mode='EDIT')
     rescale_factor = get_rescale_factor(rescale)
 
     class BlenderBone:
+        """Class to store Blender's bone data."""
         def __init__(self, name, parent, matrix, index):
             self.name = name
             self.global_matrix = matrix
@@ -46,26 +61,53 @@ def get_bones(armature, rescale=1.0):
 
     edit_bones = armature.data.edit_bones
 
-    def get_blender_bone(b, i):
-        return BlenderBone(b.name, b.parent, b.matrix, i)
+    def get_blender_bone(bone, i):
+        return BlenderBone(bone.name, bone.parent, bone.matrix, i)
 
-    edit_bones = [get_blender_bone(b, i) for i, b in zip(range(len(edit_bones)), edit_bones)]
+    blender_bones = [get_blender_bone(b, i) for i, b in zip(range(len(edit_bones)), edit_bones)]
 
-    bone_names = [b.name for b in edit_bones]
+    bone_names = [b.name for b in blender_bones]
 
-    def set_parent(bone, bone_names, edit_bones):
+    def set_parent(bone, bone_names, blender_bones):
         if bone.parent_name == 'None':
             bone.parent = None
         else:
-            bone.parent = edit_bones[bone_names.index(bone.parent_name)]
+            bone.parent = blender_bones[bone_names.index(bone.parent_name)]
 
-    list(map(lambda x: set_parent(x, bone_names, edit_bones), edit_bones))
+    list(map(lambda x: set_parent(x, bone_names, blender_bones), blender_bones))
 
     bpy_util.move_to_object_mode()
-    return edit_bones, bone_names
+    return blender_bones, bone_names
 
 
 def get_primitives(asset, armature, meshes, rescale=1.0, only_mesh=False):
+    """Get mesh data as a dictionary.
+
+    Args:
+        asset (unreal.uasset.Uasset): traget asset
+        armature (bpy.types.Armature): source armature
+        meshes (list[bpy.types.Mesh]): source meshes
+        rescale (float): rescale factor for objects
+        only_mesh (bool): won't extract armature data
+
+    Returns:
+        primitives (dict): object data
+
+    Notes:
+        Keys for primitives.
+        - BONES (list[BlenderBone])
+        - BONE_NAMES (list[string])
+        - MATERIALS (list[BlenderMaterial])
+        - MATERIAL_IDS (list[int]): (section_count)
+        - POSITIONS (list[ilst[float]]): (vertex_count, 3)
+        - NORMALS (list[float]): (vertex_count, 8)
+        - UV_MAPS (list[[list[float]]): (uv_count, vertex_count, 2)
+        - INDICES (list[int]): (section_count, face_count*3)
+        - VERTEX_GROUPS (list[list[int]]): (section_count, -1)
+        - JOINTS (list[list[int]]): (vertex_count, max_influence_count)
+        - WEIGHTS (list[list[int]]): (vertex_count, max_influence_count)
+        - VERTEX_COUNTS (list[int]): (section_count)
+    """
     print('Extracting mesh data from selected objects...')
     primitives = {
         'MATERIAL_IDS': [],
@@ -84,6 +126,7 @@ def get_primitives(asset, armature, meshes, rescale=1.0, only_mesh=False):
         return primitives
 
     class BlenderMaterial:
+        """Class to store Blender's material data."""
         def __init__(self, m):
             self.import_name = m.name
             self.slot_name = None
@@ -116,56 +159,55 @@ def get_primitives(asset, armature, meshes, rescale=1.0, only_mesh=False):
         primitives['WEIGHTS'] = []
         if only_mesh:
             asset_bone_names = [b.name for b in asset.uexp.skeleton.bones]
-            for n in bone_names:
-                if n not in asset_bone_names:
+            for name in bone_names:
+                if name not in asset_bone_names:
                     raise RuntimeError("Skeletons should be same when using 'Only Mesh' option")
             bone_names = asset_bone_names
-    t = 0
-    import time
+    time_for_weights = 0
     for mesh in meshes:
         name = mesh.name
         data_name = mesh.data.name
         try:
             mesh.data.calc_tangents()
-        except Exception:
-            raise RuntimeError('Failed to calculate tangents. Meshes should be triangulated.')
+        except Exception as exc:
+            raise RuntimeError('Failed to calculate tangents. Meshes should be triangulated.') from exc
         splitted = bpy_util.split_mesh_by_materials(mesh)
         err = False
-        for m in splitted:
+        for mat in splitted:
             try:
-                m.data.calc_tangents()
+                mat.data.calc_tangents()
             except Exception:
                 err = True
                 break
-            primitives['MATERIAL_IDS'].append(material_names.index(m.data.materials[0].name))
-            position = bpy_util.get_positions(m.data)
+            primitives['MATERIAL_IDS'].append(material_names.index(mat.data.materials[0].name))
+            position = bpy_util.get_positions(mat.data)
             position = bpy_util.flip_y_for_3d_vectors(position) * rescale_factor
             primitives['POSITIONS'].append(position)
 
-            normal, tangent, signs = bpy_util.get_normals(m.data)
+            normal, tangent, signs = bpy_util.get_normals(mat.data)
             normal = bpy_util.flip_y_for_3d_vectors(normal)
             tangent = bpy_util.flip_y_for_3d_vectors(tangent)
-            zeros = np.zeros((len(m.data.loops), 1), dtype=np.float32)
+            zeros = np.zeros((len(mat.data.loops), 1), dtype=np.float32)
             normal = np.concatenate([tangent, signs, normal, zeros], axis=1)
 
-            vertex_indices = np.empty(len(m.data.loops), dtype=np.uint32)
-            m.data.loops.foreach_get('vertex_index', vertex_indices)
+            vertex_indices = np.empty(len(mat.data.loops), dtype=np.uint32)
+            mat.data.loops.foreach_get('vertex_index', vertex_indices)
             unique, indices = np.unique(vertex_indices, return_index=True)
             sort_ids = np.argsort(unique)
             normal = normal[indices][sort_ids]
             normal = ((normal + 1) * 127).astype(np.uint8)
             primitives['NORMALS'].append(normal)
-            uv_maps = bpy_util.get_uv_maps(m.data)
+            uv_maps = bpy_util.get_uv_maps(mat.data)
             uv_maps = uv_maps[:, indices][:, sort_ids]
             uv_maps = bpy_util.flip_uv_maps(uv_maps)
             primitives['UV_MAPS'].append(uv_maps)
-            indices = bpy_util.get_triangle_indices(m.data)
+            indices = bpy_util.get_triangle_indices(mat.data)
             primitives['INDICES'].append(indices)
             if armature is not None:
-                st = time.time()
+                start = time.time()
                 vertex_group, joint, weight, max_influence_count = \
-                    bpy_util.get_weights(m, bone_names)
-                t += time.time() - st
+                    bpy_util.get_weights(mat, bone_names)
+                time_for_weights += time.time() - start
                 influence_counts.append(max_influence_count)
                 primitives['VERTEX_GROUPS'].append(vertex_group)
                 primitives['JOINTS'].append(joint)
@@ -175,7 +217,7 @@ def get_primitives(asset, armature, meshes, rescale=1.0, only_mesh=False):
                            'UE can not handle the weight data.')
                     raise RuntimeError(msg)
 
-        # elapsed_s = '{:.2f}s'.format(t)
+        # elapsed_s = '{:.2f}s'.format(time_for_weights)
         # print('weight calculation in '+elapsed_s)
         joined = bpy_util.join_meshes(splitted)
         joined.name = name
@@ -195,10 +237,10 @@ def get_primitives(asset, armature, meshes, rescale=1.0, only_mesh=False):
         def lists_zero_fill(lists, length):
             return [sub_list + [0] * (length - len(sub_list)) for sub_list in lists]
 
-        def f_to_i(w):
-            w = np.array(w, dtype=np.float32) * 255.0
-            w = np.rint(w).astype(np.uint8)
-            return w
+        def f_to_i(weight):
+            weight = np.array(weight, dtype=np.float32) * 255.0
+            weight = np.rint(weight).astype(np.uint8)
+            return weight
 
         influence_count = floor4(max(influence_counts))
         primitives['JOINTS'] = [lists_zero_fill(j, influence_count) for j in primitives['JOINTS']]
@@ -211,6 +253,7 @@ def get_primitives(asset, armature, meshes, rescale=1.0, only_mesh=False):
 
 
 class InjectOptions(PropertyGroup):
+    """Properties for inject options."""
     only_mesh: BoolProperty(
         name='Only Mesh',
         description=(
@@ -254,6 +297,7 @@ class InjectOptions(PropertyGroup):
 
 
 class InjectToUasset(Operator):
+    """Operator to inject objects to .uasset files."""
     bl_idname = 'inject.uasset'
     bl_label = 'Export .uasset here'
     bl_description = 'Inject a selected asset to .uasset file'
@@ -265,6 +309,7 @@ class InjectToUasset(Operator):
     )
 
     def draw(self, context):
+        """Draw options for file picker."""
         layout = self.layout
 
         layout.use_property_split = False
@@ -283,11 +328,12 @@ class InjectToUasset(Operator):
             col.prop(inject_options, prop)
 
     def invoke(self, context, event):
+        """Invoke."""
         context.window_manager.fileselect_add(self)
         return {'RUNNING_MODAL'}
 
     def execute(self, context):
-        import time
+        """Inject selected objects into a selected file."""
         start_time = time.time()
         general_options = context.scene.general_options
         if bpy_util.os_is_windows():
@@ -307,7 +353,7 @@ class InjectToUasset(Operator):
             inject_options = context.scene.inject_options
             version = general_options.ue_version
             if version not in ['ff7r', '4.18']:
-                raise RuntimeError('Injection is unsupported for {}'.format(version))
+                raise RuntimeError(f'Injection is unsupported for {version}')
             asset = unreal.uasset.Uasset(general_options.source_file, version=version)
             asset_type = asset.asset_type
 
@@ -316,7 +362,7 @@ class InjectToUasset(Operator):
             if meshes == [] and 'Mesh' in asset_type:
                 raise RuntimeError('Select meshes.')
             if 'Mesh' not in asset_type and asset_type != 'Skeleton':
-                raise RuntimeError('Unsupported asset. ({})'.format(asset_type))
+                raise RuntimeError(f'Unsupported asset. ({asset_type})')
 
             if asset_type == 'Skeleton':
                 meshes = []
@@ -343,18 +389,19 @@ class InjectToUasset(Operator):
             asset.save(asset_path + '.uasset')
 
             elapsed_s = '{:.2f}s'.format(time.time() - start_time)
-            m = 'Success! Injected {} in {}'.format(asset_type, elapsed_s)
-            print(m)
-            self.report({'INFO'}, m)
+            msg = f'Success! Injected {asset_type} in {elapsed_s}'
+            print(msg)
+            self.report({'INFO'}, msg)
             ret = {'FINISHED'}
 
-        except ImportError as e:
-            self.report({'ERROR'}, e.args[0])
+        except ImportError as exc:
+            self.report({'ERROR'}, exc.args[0])
             ret = {'CANCELLED'}
         return ret
 
 
 class SelectUasset(Operator):
+    """File picker for source file."""
     bl_idname = 'select.uasset'
     bl_label = 'Select Uasset'
     bl_description = 'Select .uasset file you want to mod'
@@ -365,20 +412,19 @@ class SelectUasset(Operator):
         name='File Path'
     )
 
-    def draw(self, context):
-        pass
-
     def invoke(self, context, event):
+        """Invoke."""
         context.window_manager.fileselect_add(self)
         return {'RUNNING_MODAL'}
 
     def execute(self, context):
-
+        """Update file path."""
         context.scene.general_options.source_file = self.filepath
         return {'FINISHED'}
 
 
 class UASSET_PT_inject_panel(bpy.types.Panel):
+    """UI panel for inject function."""
     bl_label = "Inject to Uasset"
     bl_idname = 'VIEW3D_PT_inject_uasset'
     bl_space_type = "VIEW_3D"
@@ -386,6 +432,7 @@ class UASSET_PT_inject_panel(bpy.types.Panel):
     bl_category = "Uasset"
 
     def draw(self, context):
+        """Draw UI panel."""
         layout = self.layout
 
         # import_uasset.py->GeneralOptions
@@ -410,12 +457,14 @@ classes = (
 
 
 def register():
+    """Regist UI panel, operator, and properties."""
     for c in classes:
         bpy.utils.register_class(c)
     bpy.types.Scene.inject_options = PointerProperty(type=InjectOptions)
 
 
 def unregister():
+    """Unregist UI panel, operator, and properties."""
     for c in classes:
         bpy.utils.unregister_class(c)
     del bpy.types.Scene.inject_options

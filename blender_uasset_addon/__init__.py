@@ -1,3 +1,5 @@
+"""Blender addon to import .uasset files."""
+
 bl_info = {
     'name': 'Uasset format',
     'author': 'Matyalatte',
@@ -25,15 +27,18 @@ try:
             importlib.reload(open_urls)
 
     def register():
+        """Regist addon."""
         import_uasset.register()
         inject_to_uasset.register()
         export_as_fbx.register()
         open_urls.register()
 
     def unregister():
+        """Unregist addon."""
         import_uasset.unregister()
         inject_to_uasset.unregister()
         export_as_fbx.unregister()
         open_urls.unregister()
-except Exception:
+
+except ModuleNotFoundError:
     print('bpy not found.')

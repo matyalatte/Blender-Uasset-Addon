@@ -1,5 +1,13 @@
+"""UI panel to export objects as fbx.
+
+Notes:
+    It will use the same function as the standard fbx I/O.
+    But many options are fixed to prevent user errors.
+"""
+
 import bpy
 from bpy.props import BoolProperty, PointerProperty, StringProperty, FloatProperty, EnumProperty
+from bpy.utils import register_class, unregister_class
 from bpy_extras.io_utils import ExportHelper
 
 from . import bpy_util
@@ -10,7 +18,7 @@ if "bpy" in locals():
 
 
 def export_as_fbx(file, armature, meshes, export_options):
-
+    """Export an armature and meshed as fbx."""
     mode = bpy.context.object.mode
     bpy.ops.object.mode_set(mode='OBJECT')
 
@@ -67,6 +75,7 @@ def export_as_fbx(file, armature, meshes, export_options):
 
 
 class ExportFbxOptions(bpy.types.PropertyGroup):
+    """Properties for export function."""
     fGlobalScale: FloatProperty(
         name='Scale',
         description='Scale all data',
@@ -93,6 +102,7 @@ class ExportFbxOptions(bpy.types.PropertyGroup):
 
 
 class EXPORT_OT_Run_Button(bpy.types.Operator, ExportHelper):
+    """Operator for export function."""
     bl_idname = "export_as_fbx.run_button"
     bl_label = "Export as fbx"
     bl_description = (
@@ -109,6 +119,7 @@ class EXPORT_OT_Run_Button(bpy.types.Operator, ExportHelper):
     )
 
     def draw(self, context):
+        """Draw options for file picker."""
         layout = self.layout
         col = layout.column()
         col.use_property_split = True
@@ -118,9 +129,11 @@ class EXPORT_OT_Run_Button(bpy.types.Operator, ExportHelper):
             col.prop(export_options, key)
 
     def invoke(self, context, event):
+        """Invoke."""
         return ExportHelper.invoke(self, context, event)
 
     def execute(self, context):
+        """Export selected objects to a selected file."""
         try:
             armature, meshes = bpy_util.get_selected_armature_and_meshes()
             if armature is None and meshes == []:
@@ -131,7 +144,7 @@ class EXPORT_OT_Run_Button(bpy.types.Operator, ExportHelper):
 
             # main
             export_as_fbx(file, armature, meshes, export_options)
-            self.report({'INFO'}, 'Success! Saved {}.'.format(file))
+            self.report({'INFO'}, f'Success! Saved {file}.')
 
         except Exception as e:
             self.report({'ERROR'}, str(e))
@@ -140,6 +153,7 @@ class EXPORT_OT_Run_Button(bpy.types.Operator, ExportHelper):
 
 
 class EXPORT_PT_Panel(bpy.types.Panel):
+    """UI panel for export function."""
     bl_space_type = 'VIEW_3D'
     bl_idname = 'VIEW3D_PT_export_as_fbx'
     bl_region_type = 'UI'
@@ -147,8 +161,8 @@ class EXPORT_PT_Panel(bpy.types.Panel):
     bl_label = "Export as fbx"
     bl_options = {'DEFAULT_CLOSED'}
 
-    # --- draw ---#
     def draw(self, context):
+        """Draw UI panel."""
         layout = self.layout
         col = layout.column()
         col.use_property_split = True
@@ -167,7 +181,7 @@ classes = (
 
 
 def register():
-    from bpy.utils import register_class
+    """Regist UI panel, operator, and properties."""
     for cls in classes:
         register_class(cls)
 
@@ -175,7 +189,7 @@ def register():
 
 
 def unregister():
-    from bpy.utils import unregister_class
+    """Unregist UI panel, operator, and properties."""
     for cls in classes:
         unregister_class(cls)
 

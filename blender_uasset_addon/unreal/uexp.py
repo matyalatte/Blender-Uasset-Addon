@@ -1,20 +1,27 @@
+"""Class for .uexp file."""
+
 import os
 
 from ..util import io_util as io
-from ..util.cipher import Cipher
+from ..util import cipher
 from .mesh import StaticMesh, SkeletalMesh
 from .skeleton import SkeletonAsset
 from .texture import Texture
 
 
 class Uexp:
+    """Class for .uexp file."""
 
     UNREAL_SIGNATURE = b'\xC1\x83\x2A\x9E'
 
     def __init__(self, file, uasset, verbose=False):
+        """Load .uexp."""
+        self.author = ''
+        self.meta = ''
         self.load(file, uasset, verbose=verbose)
 
     def load(self, file, uasset, verbose=False):
+        """Load .uexp."""
         if file[-4:] != 'uexp':
             raise RuntimeError('Not .uexp! ({})'.format(file))
         if not os.path.exists(file):
@@ -75,19 +82,21 @@ class Uexp:
             offset = f.tell()
             size = io.get_size(f)
             self.meta = f.read(size - offset - 4)
-            self.author = Cipher.decrypt(self.meta)
+            self.author = cipher.decrypt(self.meta)
 
             if self.author != '' and verbose:
-                print('Author: {}'.format(self.author))
+                print(f'Author: {self.author}')
             self.foot = f.read()
             io.check(self.foot, Uexp.UNREAL_SIGNATURE, f, 'Parse failed. (foot)')
 
     def load_material_asset(self):
+        """Load material files and store texture paths."""
         if self.mesh is not None:
-            for m in self.mesh.materials:
-                m.load_asset(self.uasset.actual_path, self.asset_path, version=self.version)
+            for mat in self.mesh.materials:
+                mat.load_asset(self.uasset.actual_path, self.asset_path, version=self.version)
 
     def save(self, file):
+        """Save .uexp file."""
         print('Saving ' + file + '...')
         with open(file, 'wb') as f:
             for export in self.exports:
@@ -116,9 +125,7 @@ class Uexp:
             uexp_size = f.tell()
         return uexp_size
 
-    def remove_LODs(self):
-        self.mesh.remove_LODs()
-
+    """
     def import_LODs(self, mesh_uexp, only_mesh=False, only_phy_bones=False,
                     dont_remove_KDI=False):
         if self.asset_type != mesh_uexp.asset_type and self.asset_type != 'Skeleton':
@@ -138,8 +145,10 @@ class Uexp:
                                            only_phy_bones=only_phy_bones)
             else:
                 raise RuntimeError('ue4_18_file should have skeleton.')
+    """
 
     def import_from_blender(self, primitives, only_mesh=True):
+        """Import asset data from Blender."""
         if self.skeleton is None and self.mesh is None:
             raise RuntimeError('Injection is not supported for {}'.format(self.asset_type))
         if self.mesh is None and only_mesh:
@@ -150,27 +159,21 @@ class Uexp:
             self.mesh.import_from_blender(primitives, self.imports, self.name_list,
                                           self.uasset.file_data_ids, only_mesh=only_mesh)
 
-    def remove_KDI(self):
-        if self.asset_type == 'SkeletalMesh':
-            self.mesh.remove_KDI()
-        else:
-            raise RuntimeError('Unsupported feature for static mesh')
-
-    def dump_buffers(self, save_folder):
-        self.mesh.dump_buffers(save_folder)
-
     def embed_string(self, string):
+        """Embed string to .uexp."""
         self.author = string
-        self.meta = Cipher.encrypt(string)
+        self.meta = cipher.encrypt(string)
         print('A string has been embedded into uexp.')
-        print('  string: {}'.format(string))
-        print('  size: {}'.format(len(self.meta)))
+        print(f'  string: {string}')
+        print(f'  size: {len(self.meta)}')
 
     def get_author(self):
+        """Get embedded data."""
         return self.author
 
     def add_material_slot(self):
+        """Add material slot to asset."""
         if self.asset_type != 'SkeletalMesh':
             raise RuntimeError('Unsupported feature for static mesh')
-        self.mesh.add_material_slot(self.imports, self.name_list, self.uasset.file_data_ids)
+        self.mesh.add_material_slot(self.imports, self.name_list, self.uasset.file_data_ids, material=None)
         print('Added a new material slot')

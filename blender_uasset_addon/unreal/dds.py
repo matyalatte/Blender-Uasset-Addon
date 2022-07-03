@@ -1,9 +1,9 @@
+"""Class for DDS files."""
+
+import ctypes as c
 import os
 from ..util import io_util as io
-import ctypes as c
 from .texture import BYTE_PER_PIXEL
-
-# classes for dds
 
 
 # https://docs.microsoft.com/en-us/windows/win32/api/dxgiformat/ne-dxgiformat-dxgi_format
@@ -22,15 +22,16 @@ DDS_FORMAT = {
 }
 
 
-def get_dds_format(form):
-    for k in DDS_FORMAT:
-        if form in DDS_FORMAT[k]:
+def get_dds_format(fmt):
+    """Convert raw format data to string."""
+    for k, val in DDS_FORMAT.items():
+        if fmt in val:
             return k
-    raise RuntimeError('Unsupported DDS format. ({})'.format(form))
+    raise RuntimeError(f'Unsupported DDS format. ({fmt})')
 
 
-# header of .dds
 class DDSHeader(c.LittleEndianStructure):
+    """Class for dds header."""
     MAGIC = b'\x44\x44\x53\x20'
     _pack_ = 1
     _fields_ = [
@@ -55,6 +56,7 @@ class DDSHeader(c.LittleEndianStructure):
     ]
 
     def init(self, width, height, mipmap_num, format_name, texture_type):
+        """Constructor."""
         self.width = width
         self.height = height
         self.mipmap_num = mipmap_num
@@ -63,6 +65,7 @@ class DDSHeader(c.LittleEndianStructure):
         self.update()
 
     def update(self):
+        """Update attributes."""
         has_mips = self.mipmap_num > 1
         is_cube = self.texture_type == 'Cube'
         self.byte_per_pixel = BYTE_PER_PIXEL[self.format_name]
@@ -88,8 +91,8 @@ class DDSHeader(c.LittleEndianStructure):
         else:
             self.fourCC = b'DX10'
 
-    # read header
     def read(f):
+        """Read dds header."""
         head = DDSHeader()
         f.readinto(head)
         io.check(head.magic, DDSHeader.MAGIC, msg='Not DDS.')
@@ -112,8 +115,8 @@ class DDSHeader(c.LittleEndianStructure):
         head.texture_type = ['2D', 'Cube'][cube_flag]
         return head
 
-    # write header
     def write(f, header):
+        """Write dds header."""
         header.update()
         f.write(header)
 
@@ -124,22 +127,25 @@ class DDSHeader(c.LittleEndianStructure):
             io.write_uint32(f, 0)
 
     def print(self):
-        print('  height: {}'.format(self.height))
-        print('  width: {}'.format(self.width))
-        print('  format: {}'.format(self.format_name))
-        print('  mipmap num: {}'.format(self.mipmap_num))
-        print('  texture type: {}'.format(self.texture_type))
+        """Print meta data."""
+        print(f'  height: {self.height}')
+        print(f'  width: {self.width}')
+        print(f'  format: {self.format_name}')
+        print(f'  mipmap num: {self.mipmap_num}')
+        print(f'  texture type: {self.texture_type}')
 
 
 # .dds
 class DDS:
+    """Class for .dds files."""
     def __init__(self, header, mipmap_data, mipmap_size):
+        """Constructor."""
         self.header = header
         self.mipmap_data = mipmap_data
         self.mipmap_size = mipmap_size
 
-    # load dds file
     def load(file, verbose=False):
+        """Load .dds file."""
         if file[-3:] not in ['dds', 'DDS']:
             raise RuntimeError('Not DDS. ({})'.format(file))
         print('load: ' + file)
@@ -182,17 +188,17 @@ class DDS:
             if verbose:
                 # print mipmap info
                 for i in range(mipmap_num):
-                    print('  Mipmap {}'.format(i))
+                    print(f'  Mipmap {i}')
                     width, height = mipmap_size[i]
-                    print('    size (w, h): ({}, {})'.format(width, height))
+                    print(f'    size (w, h): ({width}, {height})')
 
             header.print()
             io.check(f.tell(), io.get_size(f), msg='Parse Failed. This is unexpected.')
 
         return DDS(header, mipmap_data, mipmap_size)
 
-    # texture asset to dds
     def asset_to_DDS(asset):
+        """Convert uasset to dds."""
         # make dds header
         header = DDSHeader()
         header.init(0, 0, 0, asset.format_name, asset.texture_type)
@@ -211,8 +217,8 @@ class DDS:
 
         return DDS(header, mipmap_data, mipmap_size)
 
-    # save as dds
     def save(self, file):
+        """Save .dds file."""
         folder = os.path.dirname(file)
         if folder not in ['.', ''] and not os.path.exists(folder):
             io.mkdir(folder)
@@ -223,6 +229,6 @@ class DDS:
 
             # write mipmap data
             for i in range(1 + (self.header.texture_type == 'Cube') * 5):
-                for d in self.mipmap_data:
-                    stride = len(d) // (1 + (self.header.texture_type == 'Cube') * 5)
-                    f.write(d[i * stride: (i + 1) * stride])
+                for data in self.mipmap_data:
+                    stride = len(data) // (1 + (self.header.texture_type == 'Cube') * 5)
+                    f.write(data[i * stride: (i + 1) * stride])

@@ -1,9 +1,10 @@
+"""Class for mipmaps."""
 from ..util import io_util as io
 import ctypes as c
 
 
-# mipmap class for texture asset
 class Mipmap(c.LittleEndianStructure):
+    """Mipmap class for texture asset."""
     _pack_ = 1
     _fields_ = [
         # ("one", c.c_uint32), #1
@@ -20,9 +21,12 @@ class Mipmap(c.LittleEndianStructure):
     ]
 
     def __init__(self, version):
+        """Constructor."""
+        super().__init__()
         self.version = version
 
     def update(self, data, size, uexp):
+        """Update attributes."""
         self.uexp = uexp
         self.meta = False
         self.data_size = len(data)
@@ -35,6 +39,7 @@ class Mipmap(c.LittleEndianStructure):
         self.one = 1
 
     def read(f, version):
+        """Read function."""
         mip = Mipmap(version)
         if version != '5.0':
             io.read_const_uint32(f, 1)
@@ -53,15 +58,8 @@ class Mipmap(c.LittleEndianStructure):
         mip.pixel_num = mip.width * mip.height
         return mip
 
-    def print(self, padding=2):
-        pad = ' ' * padding
-        print(pad + 'file: ' + 'uexp' * self.uexp + 'ubluk' * (not self.uexp))
-        print(pad + 'data size: {}'.format(self.data_size))
-        print(pad + 'offset: {}'.format(self.offset))
-        print(pad + 'width: {}'.format(self.width))
-        print(pad + 'height: {}'.format(self.height))
-
     def write(self, f):
+        """Write function."""
         if self.uexp:
             if self.meta:
                 self.ubulk_flag = 32
@@ -87,7 +85,17 @@ class Mipmap(c.LittleEndianStructure):
             io.write_uint32(f, 1)
 
     def rewrite_offset(self, f):
+        """Rewrite offset data."""
         current_offset = f.tell()
         f.seek(self.offset_to_offset_data)
         io.write_uint64(f, self.offset)
         f.seek(current_offset)
+
+    def print(self, padding=2):
+        """Print meta data."""
+        pad = ' ' * padding
+        print(pad + 'file: ' + 'uexp' * self.uexp + 'ubluk' * (not self.uexp))
+        print(pad + 'data size: {}'.format(self.data_size))
+        print(pad + 'offset: {}'.format(self.offset))
+        print(pad + 'width: {}'.format(self.width))
+        print(pad + 'height: {}'.format(self.height))
