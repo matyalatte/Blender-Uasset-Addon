@@ -15,6 +15,7 @@ class Buffer:
         self.offset = offset
         self.name = name
 
+    @staticmethod
     def read(f, name=''):
         """Read function."""
         stride = io.read_uint32(f)
@@ -23,6 +24,7 @@ class Buffer:
         buf = f.read(stride * size)
         return Buffer(stride, size, buf, offset, name)
 
+    @staticmethod
     def write(f, buffer):
         """Write function."""
         io.write_uint32(f, buffer.stride)
@@ -37,6 +39,7 @@ class Buffer:
         print(pad + f'  stride: {stride}')
         print(pad + f'  size: {size}')
 
+    @staticmethod
     def dump(file, buffer):
         """Write buffer."""
         with open(file, 'wb') as f:
@@ -54,6 +57,7 @@ class VertexBuffer(Buffer):
         self.vertex_num = size
         super().__init__(stride, size, buf, offset, name)
 
+    @staticmethod
     def read(f, name=''):
         """Read function."""
         buf = Buffer.read(f, name=name)
@@ -62,6 +66,7 @@ class VertexBuffer(Buffer):
 
 class PositionVertexBuffer(VertexBuffer):
     """Positions for static mesh and UE5 skeletal mesh."""
+    @staticmethod
     def read(f, name=''):
         """Read function."""
         stride = io.read_uint32(f)
@@ -72,6 +77,7 @@ class PositionVertexBuffer(VertexBuffer):
 
         return PositionVertexBuffer(buf.stride, buf.size, buf.buf, buf.offset, name)
 
+    @staticmethod
     def write(f, vb):
         """Write function."""
         io.write_uint32(f, vb.stride)
@@ -95,12 +101,14 @@ class PositionVertexBuffer(VertexBuffer):
 
 class NormalVertexBuffer(VertexBuffer):
     """Normals for UE5 skeletal mesh."""
+    @staticmethod
     def read(f, name=''):
         """Read function."""
         buf = Buffer.read(f, name=name)
         io.check(buf.stride, 8)
         return NormalVertexBuffer(buf.stride, buf.size, buf.buf, buf.offset, name)
 
+    @staticmethod
     def write(f, vb):
         """Write function."""
         Buffer.write(f, vb)
@@ -135,12 +143,14 @@ class UVVertexBuffer(VertexBuffer):
         self.use_float32UV = use_flaot32UV
         super().__init__(stride, size, buf, offset, name)
 
+    @staticmethod
     def read(f, uv_num, use_float32UV, name=''):
         """Read function."""
         buf = Buffer.read(f, name=name)
         io.check(buf.stride, 4 * (1 + use_float32UV))
         return UVVertexBuffer(uv_num, use_float32UV, buf.stride, buf.size, buf.buf, buf.offset, name)
 
+    @staticmethod
     def write(f, vb):
         """Write function."""
         Buffer.write(f, vb)
@@ -180,6 +190,7 @@ class StaticMeshVertexBuffer(VertexBuffer):
         self.use_float32 = use_float32
         super().__init__(stride, size, buf, offset, name)
 
+    @staticmethod
     def read(f, name=''):
         """Read function."""
         one = io.read_uint16(f)
@@ -195,6 +206,7 @@ class StaticMeshVertexBuffer(VertexBuffer):
         io.check(stride, 8 + uv_num * 4 * (1 + use_float32), f)
         return StaticMeshVertexBuffer(uv_num, use_float32, buf.stride, buf.size, buf.buf, buf.offset, name)
 
+    @staticmethod
     def write(f, vb):
         """Write function."""
         io.write_uint16(f, 1)
@@ -235,6 +247,7 @@ class StaticMeshVertexBuffer(VertexBuffer):
 
 class ColorVertexBuffer(VertexBuffer):
     """Vertex colors."""
+    @staticmethod
     def read(f, name=''):
         """Read function."""
         one = io.read_uint16(f)
@@ -249,6 +262,7 @@ class ColorVertexBuffer(VertexBuffer):
         else:
             return ColorVertexBuffer(stride, vertex_num, None, f.tell(), name)
 
+    @staticmethod
     def write(f, vb):
         """Write function."""
         io.write_uint16(f, 1)
@@ -279,6 +293,7 @@ class SkeletalMeshVertexBuffer(VertexBuffer):
         self.scale = scale
         super().__init__(stride, size, buf, offset, name)
 
+    @staticmethod
     def read(f, name=''):
         """Read function."""
         one = io.read_uint16(f)
@@ -291,6 +306,7 @@ class SkeletalMeshVertexBuffer(VertexBuffer):
         buf = Buffer.read(f, name=name)
         return SkeletalMeshVertexBuffer(uv_num, use_float32UV, scale, buf.stride, buf.size, buf.buf, buf.offset, name)
 
+    @staticmethod
     def write(f, vb):
         """Write function."""
         io.write_uint16(f, 1)
@@ -352,6 +368,7 @@ class SkinWeightVertexBuffer4(VertexBuffer):
         self.extra_bone_flag = extra_bone_flag
         super().__init__(stride, size, buf, offset, name)
 
+    @staticmethod
     def read(f, name=''):
         """Read function."""
         one = io.read_uint16(f)
@@ -363,6 +380,7 @@ class SkinWeightVertexBuffer4(VertexBuffer):
         io.check(extra_bone_flag, buf.stride == 16, f)
         return SkinWeightVertexBuffer4(extra_bone_flag, buf.stride, buf.size, buf.buf, buf.offset, name)
 
+    @staticmethod
     def write(f, vb):
         """Write function."""
         io.write_uint16(f, 1)
@@ -395,6 +413,7 @@ class SkinWeightVertexBuffer5(VertexBuffer):
         self.influence_count = influence_count
         super().__init__(stride, size, buf, offset, name)
 
+    @staticmethod
     def read(f, name=''):
         """Read function."""
         one = io.read_uint16(f)
@@ -408,6 +427,7 @@ class SkinWeightVertexBuffer5(VertexBuffer):
         buf = Buffer.read(f, name=name)
         return SkinWeightVertexBuffer5(influence_count, buf.stride, buf.size, buf.buf, buf.offset, name)
 
+    @staticmethod
     def write(f, vb):
         """Write function."""
         io.write_uint16(f, 1)
@@ -438,23 +458,30 @@ class SkinWeightVertexBuffer5(VertexBuffer):
 
 class StaticIndexBuffer(Buffer):
     """Index buffer for static mesh."""
-    def __init__(self, uint32_flag, stride, size, ib, offset, name):
+    def __init__(self, uint32_flag, stride, size, ib, offset, name, version):
         """Constructor."""
         self.uint32_flag = uint32_flag
+        self.version = version
         super().__init__(stride, size, ib, offset, name)
 
-    def read(f, name=''):
+    @staticmethod
+    def read(f, version, name=''):
         """Read function."""
         uint32_flag = io.read_uint32(f)  # 0: uint16 id, 1: uint32 id
         buf = Buffer.read(f, name=name)
+        if version >= '4.27':
+            io.read_null(f)
         # buf.stride==1
         # buf.size==index_count*(2+2*uint32_flag)
-        return StaticIndexBuffer(uint32_flag, buf.stride, buf.size, buf.buf, buf.offset, name)
+        return StaticIndexBuffer(uint32_flag, buf.stride, buf.size, buf.buf, buf.offset, name, version)
 
+    @staticmethod
     def write(f, ib):
         """Write function."""
         io.write_uint32(f, ib.uint32_flag)
         Buffer.write(f, ib)
+        if ib.version >= '4.27':
+            io.write_null(f)
 
     def get_meta(self):
         """Get meta data."""
@@ -486,6 +513,8 @@ class StaticIndexBuffer(Buffer):
 
 class SkeletalIndexBuffer(Buffer):
     """Index buffer for skeletal mesh."""
+
+    @staticmethod
     def read(f, name=''):
         """Read function."""
         stride = io.read_uint8(f)  # 2: uint16 id, 4: uint32 id
@@ -493,6 +522,7 @@ class SkeletalIndexBuffer(Buffer):
         io.check(stride, buf.stride)
         return SkeletalIndexBuffer(buf.stride, buf.size, buf.buf, buf.offset, name)
 
+    @staticmethod
     def write(f, ib):
         """Write function."""
         io.write_uint8(f, ib.stride)
@@ -518,6 +548,7 @@ class SkeletalIndexBuffer(Buffer):
 
 class KDIBuffer(Buffer):
     """KDI buffers."""
+    @staticmethod
     def read(f, name=''):
         """Read function."""
         one = io.read_uint16(f)
@@ -525,6 +556,7 @@ class KDIBuffer(Buffer):
         buf = Buffer.read(f, name=name)
         return KDIBuffer(buf.stride, buf.size, buf.buf, buf.offset, name)
 
+    @staticmethod
     def write(f, vb):
         """Write function."""
         io.write_uint16(f, 1)

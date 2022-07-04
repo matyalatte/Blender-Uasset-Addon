@@ -388,7 +388,7 @@ class InjectToUasset(Operator):
 
             asset.save(asset_path + '.uasset')
 
-            elapsed_s = '{:.2f}s'.format(time.time() - start_time)
+            elapsed_s = f'{(time.time() - start_time):.2f}s'
             msg = f'Success! Injected {asset_type} in {elapsed_s}'
             print(msg)
             self.report({'INFO'}, msg)

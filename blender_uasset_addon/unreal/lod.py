@@ -19,36 +19,14 @@ from .buffer import (PositionVertexBuffer,
 
 class LOD:
     """Base class for LOD."""
-    def __init__(self, vb, vb2, ib, ib2, color_vb=None):
+    def __init__(self, vb, vb2, ib, ib2, sections, color_vb=None):
         """Constructor."""
         self.vb = vb
         self.vb2 = vb2
         self.ib = ib
         self.ib2 = ib2
+        self.sections = sections
         self.color_vb = color_vb
-
-    """
-    def import_LOD(self, lod, name=''):
-        # if len(self.sections)<len(lod.sections):
-        #     raise RuntimeError('too many materials')
-        f_num1 = self.ib.size // 3
-        f_num2 = lod.ib.size // 3
-        v_num1 = self.vb.vertex_num
-        v_num2 = lod.vb.vertex_num
-        uv_num1 = self.uv_num
-        uv_num2 = lod.uv_num
-        self.ib = lod.ib
-        self.vb = lod.vb
-        self.vb2 = lod.vb2
-        self.ib2 = lod.ib2
-        if self.color_vb is not None:
-            self.color_vb = lod.color_vb
-        self.uv_num = lod.uv_num
-        print('LOD{} has been imported.'.format(name))
-        print('  faces: {} -> {}'.format(f_num1, f_num2))
-        print('  vertices: {} -> {}'.format(v_num1, v_num2))
-        print('  uv maps: {} -> {}'.format(uv_num1, uv_num2))
-    """
 
     # Todo: Generalize this function for all LOD classes.
     def get_buffers(self):
@@ -83,51 +61,75 @@ def flatten(array):
 
 class StaticLOD(LOD):
     """LOD for static mesh."""
-    def __init__(self, offset, sections, flags, vb, vb2, color_vb,
-                 ib, ib2, reversed_ib, reversed_ib2, adjacency_ib, unk):
+    def __init__(self, offset, version, sections, flags, vb, vb2, normal_vb, color_vb,
+                 ib, ib2, reversed_ib, reversed_ib2, adjacency_ib, unk, unk2):
         """Constructor."""
         self.offset = offset
-        self.sections = sections
+        self.version = version
         self.flags = flags
         self.uv_num = vb2.uv_num
-        super().__init__(vb, vb2, ib, ib2, color_vb=color_vb)
+        super().__init__(vb, vb2, ib, ib2, sections, color_vb=color_vb)
+        self.normal_vb = normal_vb
         self.reversed_ib = reversed_ib
         self.reversed_ib2 = reversed_ib2
         self.adjacency_ib = adjacency_ib
         self.unk = unk
+        self.unk2 = unk2
         self.face_num = 0
         for section in self.sections:
             self.face_num += section.face_num
 
-    def read(f):
+    @staticmethod
+    def read(f, version):
         """Read function."""
         offset = f.tell()
-        one = io.read_uint16(f)
+        one = io.read_uint8(f)
         io.check(one, 1, f)
-        sections = io.read_array(f, StaticLODSection.read)
+        unk = io.read_uint8(f)
+        sections = [StaticLODSection.read(f, version) for i in range(io.read_uint32(f))]
 
-        flags = f.read(4)
-
+        flags = f.read(4 + 10 * (version >= '4.27'))
         vb = PositionVertexBuffer.read(f, name='VB0')  # xyz
-        vb2 = StaticMeshVertexBuffer.read(f, name='VB2')  # normals+uv_maps
+        if version >= '4.27':
+            io.check(io.read_uint16(f), 1)
+            uv_num = io.read_uint32(f)
+            _ = io.read_uint32(f)  # vertex num
+            use_float32UV = io.read_uint32(f)
+            io.read_null(f)  # use high precision tangent basis?
+            normal_vb = NormalVertexBuffer.read(f, name='Normal_VB')
+            vb2 = UVVertexBuffer.read(f, uv_num, use_float32UV, name='UV_VB')
+        else:
+            normal_vb = None
+            vb2 = StaticMeshVertexBuffer.read(f, name='VB2')  # normals+uv_maps
 
         color_vb = ColorVertexBuffer.read(f, name='ColorVB')
-        ib = StaticIndexBuffer.read(f, name='IB')  # IndexBuffer
-        reversed_ib = StaticIndexBuffer.read(f, name='Reversed_IB')  # ReversedIndexBuffer
-        ib2 = StaticIndexBuffer.read(f, name='IB2')  # DepathOnlyIndexBuffer
-        reversed_ib2 = StaticIndexBuffer.read(f, name='Reversed_IB2')  # ReversedDepthOnlyIndexBuffer
-        adjacency_ib = StaticIndexBuffer.read(f, name='Adjacency_IB')  # AdjacencyIndexBuffer
-        unk = f.read(24)
-        return StaticLOD(offset, sections, flags, vb, vb2, color_vb, ib, ib2,
-                         reversed_ib, reversed_ib2, adjacency_ib, unk)
+        ib = StaticIndexBuffer.read(f, version, name='IB')  # IndexBuffer
+        reversed_ib = StaticIndexBuffer.read(f, version, name='Reversed_IB')  # ReversedIndexBuffer
+        ib2 = StaticIndexBuffer.read(f, version, name='IB2')  # DepathOnlyIndexBuffer
+        reversed_ib2 = StaticIndexBuffer.read(f, version, name='Reversed_IB2')  # ReversedDepthOnlyIndexBuffer
+        adjacency_ib = StaticIndexBuffer.read(f, version, name='Adjacency_IB')  # AdjacencyIndexBuffer
+        unk2 = f.read(24)
+        return StaticLOD(offset, version, sections, flags, vb, vb2, normal_vb, color_vb, ib, ib2,
+                         reversed_ib, reversed_ib2, adjacency_ib, unk, unk2)
 
+    @staticmethod
     def write(f, lod):
         """Write function."""
-        io.write_uint16(f, 1)
+        io.write_uint8(f, 1)
+        io.write_uint8(f, lod.unk)
         io.write_array(f, lod.sections, StaticLODSection.write, with_length=True)
         f.write(lod.flags)
         PositionVertexBuffer.write(f, lod.vb)
-        StaticMeshVertexBuffer.write(f, lod.vb2)
+        if lod.version >= '4.27':
+            io.write_uint16(f, 1)
+            io.write_uint32(f, lod.vb2.uv_num)
+            io.write_uint32(f, lod.vb.vertex_num)
+            io.write_uint32(f, lod.vb2.use_float32UV)
+            io.write_null(f)
+            NormalVertexBuffer.write(f, lod.normal_vb)
+            UVVertexBuffer.write(f, lod.vb2)
+        else:
+            StaticMeshVertexBuffer.write(f, lod.vb2)
 
         ColorVertexBuffer.write(f, lod.color_vb)
 
@@ -136,7 +138,7 @@ class StaticLOD(LOD):
         StaticIndexBuffer.write(f, lod.ib2)
         StaticIndexBuffer.write(f, lod.reversed_ib2)
         StaticIndexBuffer.write(f, lod.adjacency_ib)
-        f.write(lod.unk)
+        f.write(lod.unk2)
 
     def print(self, i, padding=0):
         """Print meta data."""
@@ -153,7 +155,11 @@ class StaticLOD(LOD):
     def parse_buffers_for_blender(self):
         """Get mesh data for Blender."""
         pos = self.vb.parse()
-        normal, texcoords = self.vb2.parse()
+        if self.version >= '4.27':
+            normal = self.normal_vb.parse()
+            texcoords = self.vb2.parse()
+        else:
+            normal, texcoords = self.vb2.parse()
         first_vertex_ids = [section.first_vertex_id for section in self.sections]
 
         ary = [normal, pos]
@@ -258,6 +264,7 @@ class SkeletalLOD4(SkeletalLOD):
     # bone_ids: active bone ids?
     # uv_num: the number of uv maps
 
+    @staticmethod
     def read(f, version):
         """Read function."""
         return SkeletalLOD4(f, version)
@@ -312,6 +319,7 @@ class SkeletalLOD4(SkeletalLOD):
             io.check(self.KDI_buffer.size, self.KDI_buffer_size, f)
             self.KDI_VB = KDIBuffer.read(f, name='KDI_VB')
 
+    @staticmethod
     def write(f, lod):
         """Write function."""
         io.write_uint8(f, 1)
@@ -435,6 +443,7 @@ class SkeletalLOD4(SkeletalLOD):
 class SkeletalLOD5(SkeletalLOD):
     """Skeletal LOD for UE5."""
 
+    @staticmethod
     def read(f, version):
         """Read function."""
         return SkeletalLOD5(f, version)
@@ -478,6 +487,7 @@ class SkeletalLOD5(SkeletalLOD):
             io.read_null(f)
         io.check(f.tell() - buffer_block_start_offset, buffer_block_size)
 
+    @staticmethod
     def write(f, lod):
         """Write function."""
         io.write_uint16(f, 1)

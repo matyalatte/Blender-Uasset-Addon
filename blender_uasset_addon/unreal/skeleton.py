@@ -24,7 +24,11 @@ class Bone:
         self.name = None
         self.parent_name = None
         self.children = []
+        self.trans = None
+        self.rot = None
+        self.scale = None
 
+    @staticmethod
     def read(f):
         """Read function."""
         name_id = io.read_uint32(f)
@@ -42,12 +46,14 @@ class Bone:
         self.trans = ary[4:7]
         self.scale = ary[7:]
 
+    @staticmethod
     def write(f, bone):
         """Write function."""
         io.write_uint32(f, bone.name_id)
         io.write_int32(f, bone.instance)
         io.write_int32(f, bone.parent)
 
+    @staticmethod
     def write_pos(f, bone, version):
         """Write TRS."""
         if version >= '5.0':
@@ -72,6 +78,7 @@ class Bone:
             # print("added name {}: {}".format(len(name_list), self.name))
             name_list.append(self.name)
 
+    @staticmethod
     def print_bones(bones, padding=2):
         """Print bone data."""
         pad = ' ' * padding
@@ -80,6 +87,7 @@ class Bone:
             print(pad + f'id: {i}, name: {bone.name}, parent: {bone.parent_name}')
             i += 1
 
+    @staticmethod
     def name_bones(bones, name_list):
         """Convert name ids to bone names."""
         def name(bone):
@@ -93,6 +101,7 @@ class Bone:
                 parent_name = 'None'
             b.parent_name = parent_name
 
+    @staticmethod
     def get_bone_id(bones, bone_name):
         """Get bone ids from name."""
         index = -1
@@ -104,6 +113,7 @@ class Bone:
             i += 1
         return index
 
+    @staticmethod
     def record_children(bones):
         """Store child bone ids."""
         children = [[] for i in range(len(bones))]
@@ -114,17 +124,6 @@ class Bone:
             children[bone_names.index(b.parent_name)].append(bone_names.index(b.name))
         for b, c in zip(bones, children):
             b.children = c
-
-    '''
-    def copy(self):
-        bone = Bone(self.name_id, self.instance, self.parent)
-        bone.name = self.name
-        bone.trans = self.trans
-        bone.rot = self.rot
-        bone.scale = self.scale
-        bone.parent_name = self.parent_name
-        return bone
-    '''
 
     def update_parent_id(self, bones):
         """Convert parent ids to bone names."""
@@ -161,10 +160,12 @@ class Skeleton:
 
         # self.name_to_index_map=read_array(f, Bone.read)
 
+    @staticmethod
     def read(f, version):
         """Read function."""
         return Skeleton(f, version)
 
+    @staticmethod
     def write(f, skeleton):
         """Write function."""
         io.write_array(f, skeleton.bones, Bone.write, with_length=True)
@@ -251,10 +252,12 @@ class SkeletonAsset:
         if verbose:
             self.print()
 
+    @staticmethod
     def read(f, version, name_list, verbose=False):
         """Read function."""
         return SkeletonAsset(f, version, name_list, verbose=verbose)
 
+    @staticmethod
     def write(f, skeleton):
         """Write function."""
         f.write(skeleton.unk)

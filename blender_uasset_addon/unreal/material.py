@@ -7,20 +7,37 @@ from . import uasset
 
 class Material:
     """Base class for material."""
-    def __init__(self, import_id, slot_name_id, bin):
+    def __init__(self, import_id, slot_name_id, unk):
         """Constructor."""
         self.import_id = import_id
         self.slot_name_id = slot_name_id
-        self.bin = bin
+        self.unk = unk
+        self.import_name = None
+        self.slot_name = None
+        self.asset_path = None
+        self.texture_asset_paths = []
+        self.texture_actual_paths = []
 
-    def read(f):
+    @staticmethod
+    def read(f, version, skeletal=False):
         """Read function."""
-        pass
+        import_id = io.read_int32(f)
+        slot_name_id = io.read_uint32(f)
+        unk = f.read(28 + 4 * (skeletal and (version >= '4.27')))  # cast shadow, uv density?
+        return Material(import_id, slot_name_id, unk)
 
+    @staticmethod
     def write(f, material):
         """Write function."""
-        pass
+        io.write_int32(f, material.import_id)
+        io.write_uint32(f, material.slot_name_id)
+        f.write(material.unk)
 
+    def copy(self):
+        """Copy itself."""
+        return Material(self.import_id, self.slot_name_id, self.unk)
+
+    @staticmethod
     def update_material_data(materials, name_list, imports):
         """Get meta data from .uasset files."""
         for material in materials:
@@ -37,6 +54,7 @@ class Material:
         print(pad + f'  slot name: {self.slot_name}')
         print(pad + f'  asset path: {self.asset_path}')
 
+    @staticmethod
     def assign_materials(materials1, materials2):
         """Assign material ids."""
         # if len(materials1)!=len(materials2):
@@ -45,7 +63,7 @@ class Material:
         print('Assigning materials...')
 
         def get_range(num):
-            return [i for i in range(num)]
+            return list(range(num))
 
         new_material_ids = get_range(len(materials2))
 
@@ -132,45 +150,3 @@ class Material:
             print(m)
             self.texture_asset_paths = [m]
             self.texture_actual_paths = []
-
-
-class StaticMaterial(Material):
-    """Material for static mesh."""
-    def read(f):
-        """Read function."""
-        f.seek(2, 1)
-        import_id = io.read_int32(f)
-        slot_name_id = io.read_uint32(f)
-        # bin=f.read(24)
-        return StaticMaterial(import_id, slot_name_id, None)
-
-    def write(f, material):
-        """Write function."""
-        f.write(b'\x00\x07')
-        io.write_int32(f, material.import_id)
-        io.write_uint32(f, material.slot_name_id)
-        f.write(material.bin)
-
-    def copy(self):
-        """Copy itself."""
-        return StaticMaterial(self.import_id, self.slot_name_id, b''.join([self.bin]))
-
-
-class SkeletalMaterial(Material):
-    """Material for skeletal mesh."""
-    def read(f, version):
-        """Read function."""
-        import_id = io.read_int32(f)
-        slot_name_id = io.read_uint32(f)
-        bin = f.read(28 + 4 * (version >= '4.27'))  # cast shadow, uv density?
-        return SkeletalMaterial(import_id, slot_name_id, bin)
-
-    def write(f, material):
-        """Write function."""
-        io.write_int32(f, material.import_id)
-        io.write_uint32(f, material.slot_name_id)
-        f.write(material.bin)
-
-    def copy(self):
-        """Copy itself."""
-        return SkeletalMaterial(self.import_id, self.slot_name_id, b''.join([self.bin]))

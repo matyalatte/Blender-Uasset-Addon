@@ -23,10 +23,10 @@ class Uexp:
     def load(self, file, uasset, verbose=False):
         """Load .uexp."""
         if file[-4:] != 'uexp':
-            raise RuntimeError('Not .uexp! ({})'.format(file))
+            raise RuntimeError(f'Not .uexp! ({file})')
         if not os.path.exists(file):
             msg = 'FileNotFound: You should put .uexp in the same directory as .uasset.'
-            raise RuntimeError(msg + '({})'.format(file))
+            raise RuntimeError(msg + f'({file})')
 
         # get name list and export data from .uasset
         self.uasset = uasset
@@ -39,7 +39,7 @@ class Uexp:
         self.asset_type = self.uasset.asset_type
 
         if verbose:
-            print('Asset type: {}'.format(self.asset_type))
+            print(f'Asset type: {self.asset_type}')
 
         # check materials
         if self.asset_type in ['SkeletalMesh', 'StaticMesh']:
@@ -62,8 +62,8 @@ class Uexp:
 
                 if export.ignore:
                     if verbose:
-                        print('{} (offset: {})'.format(export.name, f.tell()))
-                        print('  size: {}'.format(export.size))
+                        print(f'{export.name} (offset: {f.tell()})')
+                        print(f'  size: {export.size}')
                     export.read_uexp(f)
 
                 else:
@@ -114,7 +114,7 @@ class Uexp:
                     elif 'Texture' in self.asset_type:
                         self.texture.write(f)
                     else:
-                        raise RuntimeError('Unsupported asset. ({})'.format(self.asset_type))
+                        raise RuntimeError(f'Unsupported asset. ({self.asset_type})')
                     f.write(self.unknown2)
                     size = f.tell() - offset
 
@@ -125,39 +125,16 @@ class Uexp:
             uexp_size = f.tell()
         return uexp_size
 
-    """
-    def import_LODs(self, mesh_uexp, only_mesh=False, only_phy_bones=False,
-                    dont_remove_KDI=False):
-        if self.asset_type != mesh_uexp.asset_type and self.asset_type != 'Skeleton':
-            raise RuntimeError('Asset types are not the same. ({}, {})'.format(self.asset_type, mesh_uexp.asset_type))
-        if self.asset_type == 'SkeletalMesh':
-            self.mesh.import_LODs(mesh_uexp.mesh, self.imports, self.name_list, self.uasset.file_data_ids,
-                                  only_mesh=only_mesh,
-                                  only_phy_bones=only_phy_bones, dont_remove_KDI=dont_remove_KDI)
-        elif self.asset_type == 'StaticMesh':
-            self.mesh.import_LODs(mesh_uexp.mesh, self.imports, self.name_list, self.uasset.file_data_ids)
-        elif self.asset_type == 'Skeleton':
-            if mesh_uexp.asset_type == 'SkeletalMesh':
-                self.skeleton.import_bones(mesh_uexp.mesh.skeleton.bones, self.name_list,
-                                           only_phy_bones=only_phy_bones)
-            elif mesh_uexp.asset_type == 'Skeleton':
-                self.skeleton.import_bones(mesh_uexp.skeleton.bones, self.name_list,
-                                           only_phy_bones=only_phy_bones)
-            else:
-                raise RuntimeError('ue4_18_file should have skeleton.')
-    """
-
     def import_from_blender(self, primitives, only_mesh=True):
         """Import asset data from Blender."""
         if self.skeleton is None and self.mesh is None:
-            raise RuntimeError('Injection is not supported for {}'.format(self.asset_type))
+            raise RuntimeError(f'Injection is not supported for {self.asset_type}')
         if self.mesh is None and only_mesh:
-            raise RuntimeError("Enabled 'Only Mesh' option, but the asset have no meshes. ({})".format(self.asset_type))
+            raise RuntimeError(f"Enabled 'Only Mesh' option, but the asset have no meshes. ({self.asset_type}")
         if not only_mesh and self.skeleton is not None:
             self.skeleton.import_bones(primitives['BONES'], self.name_list)
         if self.mesh is not None:
-            self.mesh.import_from_blender(primitives, self.imports, self.name_list,
-                                          self.uasset.file_data_ids, only_mesh=only_mesh)
+            self.mesh.import_from_blender(primitives, only_mesh=only_mesh)
 
     def embed_string(self, string):
         """Embed string to .uexp."""

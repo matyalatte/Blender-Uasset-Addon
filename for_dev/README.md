@@ -15,7 +15,7 @@ Then, type `flake8` in the same directory as `blender_uasset_addon` and `setup.c
 You should get no messages from flake8.
 
 ## pydocstyle
-[pydocstyle](http://www.pydocstyle.org/en/stable/) is a tool for docsting style enforcement.<br>
+[pydocstyle](http://www.pydocstyle.org/en/stable/) is a tool for docstring style enforcement.<br>
 It will check if you are following [Google Python Style Guide](https://google.github.io/styleguide/pyguide.html) for docstrings.<br>
 Install it with `pip install pydocstyle`.<br>
 Then, type `pydocstyle` in the same directory as `blender_uasset_addon` and `setup.cfg`.<br>

@@ -60,6 +60,7 @@ class Texture:
     UNREAL_SIGNATURE = b'\xC1\x83\x2A\x9E'
     UBULK_FLAG = [0, 16384]
 
+    @staticmethod
     def read(f, uasset, verbose=False):
         """Read function."""
         return Texture(f, uasset, verbose=verbose)

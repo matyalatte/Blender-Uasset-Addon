@@ -46,7 +46,7 @@ def deselect_all():
 
 
 def select_objects(objs):
-    """Select some objects."""
+    """Select objects."""
     for obj in objs:
         if obj is None:
             continue
@@ -64,7 +64,7 @@ def get_meshes(armature):
 
 
 def get_armature(mesh):
-    """Get an parent armanture form a mesh."""
+    """Get a parent armanture from a mesh."""
     parent = mesh.parent
     if parent is not None and parent.type != 'ARMATURE':
         raise RuntimeError('Not an armature.')
@@ -79,9 +79,9 @@ def get_selected_armature_and_meshes():
         meshes (list[bpy.types.Mesh]): selected meshes
 
     Notes:
-        It will also parent armature and child meshes.
-        like this
-        select an armature -> return the armature and its meshes
+        It will also get parent armature and child meshes.
+        e.g.
+        select an armature -> return the selected armature and its meshes
         select meshes -> return their armature and the selected meshes
         select an armature and meshes -> return themselves
     """
@@ -262,7 +262,7 @@ def get_vertex_weight(vertex, vg_id_to_bone_id):
 
 # Todo: too slow (it will take 75% of runtime)
 def get_weights(mesh, bone_names):
-    """Get skinning data form a mesh.
+    """Get skinning data from a mesh.
 
     Args:
         mesh (bpy.types.Mesh): A mesh
@@ -359,8 +359,8 @@ def add_empty_mesh(amt, name, collection=None):
     collection.objects.link(obj)
     if amt is not None:
         obj.parent = amt
-    m = obj.matrix_world.copy()
-    obj.matrix_local @= m
+    matrix = obj.matrix_world.copy()
+    obj.matrix_local @= matrix
     return obj
 
 
@@ -390,11 +390,11 @@ def construct_mesh(mesh_data, positions, indices, uv_maps):
     mesh_data.polygons.foreach_set('loop_start', loop_starts)
     mesh_data.polygons.foreach_set('loop_total', loop_totals)
 
-    for j in range(len(uv_maps)):
-        name = 'UVMap{}'.format(j)
+    for uv_map, i in zip(uv_maps, range(len(uv_maps))):
+        name = f'UVMap{i}'
         layer = mesh_data.uv_layers.new(name=name)
-        uv = uv_maps[j][indices]
-        layer.data.foreach_set('uv', uv.flatten())
+        uv_map = uv_map[indices]
+        layer.data.foreach_set('uv', uv_map.flatten())
     return mesh_data
 
 
@@ -553,8 +553,8 @@ def load_dds(file, name, tex_type='COLOR',
         print('Reconstructing normal map...')
         pix = np.array(tex.pixels, dtype=np.float32)
         pix = pix.reshape((-1, 4))
-        xy = pix[:, [0, 1]] * 2 - 1  # (0~1)->(-1~1)
-        squared = np.square(xy)
+        pix_xy = pix[:, [0, 1]] * 2 - 1  # (0~1)->(-1~1)
+        squared = np.square(pix_xy)
         z = np.sqrt(np.clip(1 - squared[:, 0] - squared[:, 1], 0, None))
         pix[:, 2] = (z + 1) * 0.5  # (-1~1)->(0~1)
         if invert_normals:

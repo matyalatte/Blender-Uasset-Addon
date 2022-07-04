@@ -31,20 +31,18 @@ class VersionInfo:
     def __eq__(self, item):  # self == item
         """Equal operator."""
         if isinstance(item, str):
-            return self.base == item or self.custom == item
-        elif isinstance(item, list):
+            return item in [self.base, self.custom]
+        if isinstance(item, list):
             return self.base in item or self.custom in item
-        else:
-            raise RuntimeError("Comparison method doesn't support {}.".format(type(item)))
+        raise RuntimeError(f"Comparison method doesn't support {type(item)}.")
 
     def __nq__(self, item):  # self != item
         """Neq operator."""
         if isinstance(item, str):
             return self.base != item and self.custom != self.custom
-        elif isinstance(item, list):
+        if isinstance(item, list):
             return (self.base not in item) and (self.custom not in item)
-        else:
-            raise RuntimeError("Comparison method doesn't support {}.".format(type(item)))
+        raise RuntimeError(f"Comparison method doesn't support {type(item)}.")
 
     def __lt__(self, v):  # self < string
         """Less than."""
@@ -66,13 +64,12 @@ class VersionInfo:
         """To string."""
         if self.custom is not None:
             return self.custom
-        else:
-            return self.base
+        return self.base
 
 
 def version_as_int(ver):  # ver (string): like "x.x.x"
     """Convert a string to int."""
     ver_str = [int(s) for s in ver.split('.')]
     if len(ver_str) > 3:
-        raise RuntimeError('Unsupported version info.({})'.format(ver))
-    return sum([s * (10 ** ((2 - i) * 2)) for s, i in zip(ver_str, range(len(ver_str)))])
+        raise RuntimeError(f'Unsupported version info.({ver})')
+    return sum(s * (10 ** ((2 - i) * 2)) for s, i in zip(ver_str, range(len(ver_str))))

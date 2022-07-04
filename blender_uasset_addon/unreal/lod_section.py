@@ -15,8 +15,9 @@ class LODSection:
 
 class StaticLODSection(LODSection):
     """LOD section for static mesh."""
-    def __init__(self, f):
+    def __init__(self, f, version):
         """Read function."""
+        self.version = version
         self.material_id = io.read_uint32(f)
         self.first_ib_id = io.read_uint32(f)
         self.face_num = io.read_uint32(f)
@@ -24,11 +25,16 @@ class StaticLODSection(LODSection):
         self.last_vertex_id = io.read_uint32(f)
         self.enable_collision = io.read_uint32(f)
         self.cast_shadow = io.read_uint32(f)
+        if version >= '4.27':
+            self.unk = io.read_uint32(f)  # ForceOpaque?
+            self.unk2 = io.read_uint32(f)  # VisibleInRayTracing?
 
-    def read(f):
+    @staticmethod
+    def read(f, version):
         """Read function."""
-        return StaticLODSection(f)
+        return StaticLODSection(f, version)
 
+    @staticmethod
     def write(f, section):
         """Write function."""
         io.write_uint32(f, section.material_id)
@@ -38,6 +44,9 @@ class StaticLODSection(LODSection):
         io.write_uint32(f, section.last_vertex_id)
         io.write_uint32(f, section.enable_collision)
         io.write_uint32(f, section.cast_shadow)
+        if section.version >= '4.27':
+            io.write_uint32(f, section.unk)
+            io.write_uint32(f, section.unk2)
 
     def import_section(self, section):
         """Import section data."""
@@ -48,6 +57,9 @@ class StaticLODSection(LODSection):
         self.last_vertex_id = section.last_vertex_id
         self.enable_collision = section.enable_collision
         self.cast_shadow = section.cast_shadow
+        if section.version >= '4.27':
+            self.unk = section.unk
+            self.unk2 = section.unk2
 
     def print(self, i, padding=2):
         """Print meta data."""
@@ -77,6 +89,7 @@ class SkeletalLODSection(LODSection):
         self.unk1 = 0
         self.unk2 = []
 
+    @staticmethod
     def bone_ids_to_name(bone_ids, bones):
         """Convert bone ids to bone names."""
         bone_name_list = [bones[id].name for id in bone_ids]
@@ -84,7 +97,11 @@ class SkeletalLODSection(LODSection):
 
 
 class SkeletalLODSection4(SkeletalLODSection):
-    """LOD section of skeletal mesh for old UE versions."""
+    """LOD section of skeletal mesh for old UE versions.
+
+    Notes:
+        There is .ubulk for UE5 static mesh but maybe no need it.
+    """
     # material_id: material id
     # first_ib_id: Where this section start in face data.
     # face_num: the number of faces in this section
@@ -109,6 +126,7 @@ class SkeletalLODSection4(SkeletalLODSection):
         self.unk1 = unk1
         self.unk2 = unk2
 
+    @staticmethod
     def read(f, version):
         """Read function."""
         io.check(io.read_uint16(f), 1, f)
@@ -139,7 +157,7 @@ class SkeletalLODSection4(SkeletalLODSection):
             unk1 = io.read_uint32(f)
             num = io.read_uint32(f)
             io.check(unk1 == 1, num > 0, f)
-            unk2 = io.read_uint8_array(f, len=num * 16)
+            unk2 = io.read_uint8_array(f, length=num * 16)
         else:
             unk1 = None
             unk2 = None
@@ -156,6 +174,7 @@ class SkeletalLODSection4(SkeletalLODSection):
                                    self.vertex_num, self.max_bone_influences,
                                    0, [])
 
+    @staticmethod
     def write(f, section):
         """Write function."""
         io.write_uint16(f, 1)
@@ -241,6 +260,7 @@ class SkeletalLODSection5(LODSection):
         self.cast_shadow = cast_shadow
         self.ray_tracing = ray_tracing
 
+    @staticmethod
     def read(f, version):
         """Read function."""
         io.check(io.read_uint16(f), 1)
@@ -277,6 +297,7 @@ class SkeletalLODSection5(LODSection):
                                    self.max_bone_influences,
                                    self.unk_ids, self.unk_ids2, self.cast_shadow, self.ray_tracing)
 
+    @staticmethod
     def write(f, section):
         """Write function."""
         io.write_uint16(f, 1)

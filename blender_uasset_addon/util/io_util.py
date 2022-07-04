@@ -11,9 +11,8 @@ def make_temp_file(suffix=None):
     Notes:
         You need to delete the file by your self.
     """
-    temp = tempfile.NamedTemporaryFile(suffix=suffix, delete=False)
-    temp_path = temp.name
-    temp.close()
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as temp:
+        temp_path = temp.name
     return temp_path
 
 
@@ -88,11 +87,11 @@ def read_float16(file):
     return struct.unpack('<e', binary)[0]
 
 
-def read_array(file, read_func, len=None):
+def read_array(file, read_func, length=None):
     """Read an array."""
-    if len is None:
-        len = read_uint32(file)
-    ary = [read_func(file) for i in range(len)]
+    if length is None:
+        length = read_uint32(file)
+    ary = [read_func(file) for i in range(length)]
     return ary
 
 
@@ -100,54 +99,54 @@ st_list = ['b', 'B', 'h', 'H', 'i', 'I', 'l', 'L', 'e', 'f', 'd']
 st_size = [1, 1, 2, 2, 4, 4, 8, 8, 2, 4, 8]
 
 
-def read_num_array(file, st, len=None):
+def read_num_array(file, structure, length=None):
     """Read an array of numbers."""
-    if st not in st_list:
-        raise RuntimeError('Structure not found. {}'.format(st))
-    if len is None:
-        len = read_uint32(file)
-    binary = file.read(st_size[st_list.index(st)] * len)
-    return list(struct.unpack(st * len, binary))
+    if structure not in st_list:
+        raise RuntimeError(f'Structure not found. {structure}')
+    if length is None:
+        length = read_uint32(file)
+    binary = file.read(st_size[st_list.index(structure)] * length)
+    return list(struct.unpack(structure * length, binary))
 
 
-def read_uint32_array(file, len=None):
+def read_uint32_array(file, length=None):
     """Read an array of uint32."""
-    return read_num_array(file, 'I', len=len)
+    return read_num_array(file, 'I', length=length)
 
 
-def read_uint16_array(file, len=None):
+def read_uint16_array(file, length=None):
     """Read an array of uint16."""
-    return read_num_array(file, 'H', len=len)
+    return read_num_array(file, 'H', length=length)
 
 
-def read_uint8_array(file, len=None):
+def read_uint8_array(file, length=None):
     """Read an array of uint8."""
-    return read_num_array(file, 'B', len=len)
+    return read_num_array(file, 'B', length=length)
 
 
-def read_int32_array(file, len=None):
+def read_int32_array(file, length=None):
     """Read an array of int32."""
-    return read_num_array(file, 'i', len=len)
+    return read_num_array(file, 'i', length=length)
 
 
-def read_float64_array(file, len=None):
+def read_float64_array(file, length=None):
     """Read an array of float64."""
-    return read_num_array(file, 'd', len=len)
+    return read_num_array(file, 'd', length=length)
 
 
-def read_float32_array(file, len=None):
+def read_float32_array(file, length=None):
     """Read an array of float32."""
-    return read_num_array(file, 'f', len=len)
+    return read_num_array(file, 'f', length=length)
 
 
-def read_float16_array(file, len=None):
+def read_float16_array(file, length=None):
     """Read an array of float16."""
-    return read_num_array(file, 'e', len=len)
+    return read_num_array(file, 'e', length=length)
 
 
 def read_vec3_f32(file):
     """Read 3 float numbers."""
-    return read_float32_array(file, len=3)
+    return read_float32_array(file, length=3)
 
 
 def read_vec3_f32_array(file):
@@ -187,17 +186,17 @@ def read_null(f, msg='Not NULL!'):
     read_const_uint32(f, 0, msg)
 
 
-def read_null_array(f, len, msg='Not NULL!'):
+def read_null_array(f, length, msg='Not NULL!'):
     """Read an array of 0s."""
-    null = read_uint32_array(f, len=len)
-    check(null, [0] * len, f, msg)
+    null = read_uint32_array(f, length=length)
+    check(null, [0] * length, f, msg)
 
 
-def read_struct_array(f, obj, len=None):
+def read_struct_array(f, obj, length=None):
     """Read an array of ctypes objects."""
-    if len is None:
-        len = read_uint32(f)
-    objects = [obj() for i in range(len)]
+    if length is None:
+        length = read_uint32(f)
+    objects = [obj() for i in range(length)]
     list(map(f.readinto, objects))
     return objects
 
@@ -323,25 +322,22 @@ def write_null(f):
     write_uint32(f, 0)
 
 
-def write_null_array(f, len):
+def write_null_array(f, length):
     """Write an array of 0s."""
-    write_uint32_array(f, [0] * len)
+    write_uint32_array(f, [0] * length)
 
 
 def compare(file1, file2):
     """Check if 2 files have the same binary data."""
-    f_1 = open(file1, 'rb')
-    f_2 = open(file2, 'rb')
     print(f'Comparing {file1} and {file2}...')
+    with open(file1, 'rb') as f_1, open(file2, 'rb') as f_2:
 
-    f1_size = get_size(f_1)
-    f2_size = get_size(f_2)
+        f1_size = get_size(f_1)
+        f2_size = get_size(f_2)
 
-    i = 0
-    f1_bin = f_1.read()
-    f2_bin = f_2.read()
-    f_1.close()
-    f_2.close()
+        i = 0
+        f1_bin = f_1.read()
+        f2_bin = f_2.read()
 
     if f1_size == f2_size and f1_bin == f2_bin:
         print('Same data!')
@@ -353,4 +349,4 @@ def compare(file1, file2):
         if b_1 != b_2:
             break
 
-    raise RuntimeError('Not same :{}'.format(i))
+    raise RuntimeError(f'Not same :{i}')

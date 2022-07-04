@@ -49,6 +49,7 @@ class UassetHeader(c.LittleEndianStructure):
         self.unversioned = False
         self.unk_count = 0
 
+    @staticmethod
     def read(f):
         """Read function."""
         header = UassetHeader()
@@ -65,6 +66,7 @@ class UassetHeader(c.LittleEndianStructure):
             io.check(io.read_int32(f), -1)
         return header
 
+    @staticmethod
     def write(f, header):
         """Write function."""
         f.write(UassetHeader.HEAD)
@@ -114,6 +116,7 @@ class UassetImport(c.LittleEndianStructure):
         self.parent_dir = None
         self.unk2 = None
 
+    @staticmethod
     def read(f, version):
         """Read function."""
         imp = UassetImport()
@@ -122,11 +125,12 @@ class UassetImport(c.LittleEndianStructure):
             imp.unk2 = io.read_uint32(f)
         return imp
 
-    def write(self, f, version):
+    @staticmethod
+    def write(f, imp, version):
         """Write function."""
-        f.write(self)
+        f.write(imp)
         if version == '5.0':
-            io.write_uint32(f, self.unk2)
+            io.write_uint32(f, imp.unk2)
 
     def name_import(self, name_list):
         """Convert ids to strings."""
@@ -188,6 +192,13 @@ class UassetExport(c.LittleEndianStructure):
     MAIN_EXPORTS = ['SkeletalMesh', 'StaticMesh', 'Skeleton',
                     'Texture2D', 'TextureCube', 'Material', 'MaterialInstanceConstant']
 
+    def __init__(self):
+        """Constructor."""
+        super().__init__()
+        self.unk2 = None
+        self.bin = None
+
+    @staticmethod
     def read(f, version):
         """Read function."""
         exp = UassetExport()
@@ -196,17 +207,19 @@ class UassetExport(c.LittleEndianStructure):
             exp.unk2 = io.read_uint32(f)
         return exp
 
-    def write(self, f, version):
+    @staticmethod
+    def write(f, exp, version):
         """Write function."""
-        f.write(self)
+        f.write(exp)
         if version == '5.0':
-            io.write_uint32(f, self.unk2)
+            io.write_uint32(f, exp.unk2)
 
     def update(self, size, offset):
         """Update attributes."""
         self.size = size
         self.offset = offset
 
+    @staticmethod
     def name_exports(exports, imports, name_list):
         """Convert ids to strings."""
         asset_type = None
@@ -249,9 +262,8 @@ class Uasset:
         base = file[:-len(ext)]
         if ext != 'uasset':
             if ext != 'uexp':
-                raise RuntimeError('Not .uasset! ({})'.format(file))
-            else:
-                file = base + 'uasset'
+                raise RuntimeError(f'Not .uasset! ({file})')
+            file = base + 'uasset'
 
         print('Loading ' + file + '...')
 
@@ -280,10 +292,10 @@ class Uasset:
             # read name table
             def read_names(f, i):
                 name = io.read_str(f)
-                hash = f.read(4)
+                hash_ = f.read(4)
                 if verbose:
                     print(f'  {i}: {name}')
-                return name, hash
+                return name, hash_
             names = [read_names(f, i) for i in range(self.header.name_count)]
             self.name_list = [x[0] for x in names]
             self.hash_list = [x[1] for x in names]
@@ -324,7 +336,7 @@ class Uasset:
             io.check(self.header.padding_offset, f.tell())
             io.read_null(f)
             io.check(self.header.file_data_offset, f.tell())
-            self.file_data_ids = io.read_int32_array(f, len=self.header.file_data_count)
+            self.file_data_ids = io.read_int32_array(f, length=self.header.file_data_count)
 
             io.check(f.tell(), self.size)
             io.check(self.header.uasset_size, self.size)
@@ -340,9 +352,8 @@ class Uasset:
         base = file[:-len(ext)]
         if ext != 'uasset':
             if ext != 'uexp':
-                raise RuntimeError('Not .uasset! ({})'.format(file))
-            else:
-                file = base + 'uasset'
+                raise RuntimeError(f'Not .uasset! ({file})')
+            file = base + 'uasset'
 
         directory = os.path.dirname(file)
         if not os.path.exists(directory):
@@ -362,19 +373,19 @@ class Uasset:
             # write name table
             if len(self.name_list) > len(self.hash_list):
                 self.hash_list += [b'\x00' * 4] * (len(self.name_list) - len(self.hash_list))
-            for name, hash in zip(self.name_list, self.hash_list):
+            for name, hash_ in zip(self.name_list, self.hash_list):
                 io.write_str(f, name)
-                f.write(hash)
+                f.write(hash_)
 
             # write imports
             self.header.import_offset = f.tell()
             self.header.import_count = len(self.imports)
-            list(map(lambda x: x.write(f, self.version), self.imports))
+            list(map(lambda x: UassetImport.write(f, x, self.version), self.imports))
 
             # skip exports part
             self.header.export_offset = f.tell()
             self.header.export_count = len(self.exports)
-            list(map(lambda x: x.write(f, self.version), self.exports))
+            list(map(lambda x: UassetExport.write(f, x, self.version), self.exports))
             self.header.end_to_export = f.tell()
 
             # file data ids
@@ -396,4 +407,4 @@ class Uasset:
             for export in self.exports:
                 export.update(export.size, offset)
                 offset += export.size
-            list(map(lambda x: x.write(f, self.version), self.exports))
+            list(map(lambda x: UassetExport.write(f, x, self.version), self.exports))

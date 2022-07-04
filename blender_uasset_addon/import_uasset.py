@@ -1,5 +1,5 @@
 """UI panel and operator to import .uasset files."""
-# Todo: Write args to docstrings.
+
 import os
 import time
 
@@ -205,15 +205,15 @@ def generate_materials(asset, version, load_textures=False,
             names = []
             material_name = os.path.basename(ue_m.asset_path)
             for tex_path, asset_path in zip(ue_m.texture_actual_paths, ue_m.texture_asset_paths):
-                print('[{}/{}]'.format(progress, texture_num), end='')
+                print(f'[{progress}/{texture_num}]', end='')
                 progress += 1
                 name = os.path.basename(asset_path)
                 if name in texs:
-                    print('Texture is already loaded ({})'.format(tex_path))
+                    print(f'Texture is already loaded ({tex_path})')
                     names.append(name)
                     continue
                 if not os.path.exists(tex_path):
-                    print('Texture not found ({})'.format(tex_path))
+                    print(f'Texture not found ({tex_path})')
                     continue
                 tex, tex_type = load_utexture(tex_path, os.path.basename(asset_path),
                                               version, invert_normals=invert_normal_maps)
@@ -285,8 +285,7 @@ def generate_mesh(amt, asset, materials, material_names, rescale=1.0,
 
     sections = []
     collection = bpy.context.view_layer.active_layer_collection.collection
-    for i in range(len(material_ids)):
-        material_id = material_ids[i]
+    for material_id, i in zip(material_ids, range(len(material_ids))):
         name = material_names[material_id]
         section = bpy_util.add_empty_mesh(amt, name, collection=collection)
         sections.append(section)
@@ -679,8 +678,8 @@ class ImportUasset(Operator, ImportHelper):
 
             context.scene.general_options.source_file = file
 
-            elapsed_s = '{:.2f}s'.format(time.time() - start_time)
-            m = 'Success! Imported {} in {}'.format(asset_type, elapsed_s)
+            elapsed_s = f'{(time.time() - start_time):.2f}s'
+            m = f'Success! Imported {asset_type} in {elapsed_s}'
             print(m)
             self.report({'INFO'}, m)
             ret = {'FINISHED'}

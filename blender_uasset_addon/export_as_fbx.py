@@ -101,7 +101,7 @@ class ExportFbxOptions(bpy.types.PropertyGroup):
     )
 
 
-class EXPORT_OT_Run_Button(bpy.types.Operator, ExportHelper):
+class EXPORT_OT_run_button(bpy.types.Operator, ExportHelper):
     """Operator for export function."""
     bl_idname = "export_as_fbx.run_button"
     bl_label = "Export as fbx"
@@ -152,7 +152,7 @@ class EXPORT_OT_Run_Button(bpy.types.Operator, ExportHelper):
         return {'FINISHED'}
 
 
-class EXPORT_PT_Panel(bpy.types.Panel):
+class EXPORT_PT_panel(bpy.types.Panel):
     """UI panel for export function."""
     bl_space_type = 'VIEW_3D'
     bl_idname = 'VIEW3D_PT_export_as_fbx'
@@ -167,7 +167,7 @@ class EXPORT_PT_Panel(bpy.types.Panel):
         col = layout.column()
         col.use_property_split = True
         col.use_property_decorate = False
-        col.operator(EXPORT_OT_Run_Button.bl_idname, icon='MESH_DATA')
+        col.operator(EXPORT_OT_run_button.bl_idname, icon='MESH_DATA')
         export_options = context.scene.uasset_addon_fbx_export_options
         for key in ['fGlobalScale', 'smooth_type', 'bExportTangent', 'bUseCustomProps']:
             col.prop(export_options, key)
@@ -175,8 +175,8 @@ class EXPORT_PT_Panel(bpy.types.Panel):
 
 classes = (
     ExportFbxOptions,
-    EXPORT_PT_Panel,
-    EXPORT_OT_Run_Button
+    EXPORT_PT_panel,
+    EXPORT_OT_run_button
 )
 
 

@@ -91,6 +91,7 @@ class DDSHeader(c.LittleEndianStructure):
         else:
             self.fourCC = b'DX10'
 
+    @staticmethod
     def read(f):
         """Read dds header."""
         head = DDSHeader()
@@ -115,6 +116,7 @@ class DDSHeader(c.LittleEndianStructure):
         head.texture_type = ['2D', 'Cube'][cube_flag]
         return head
 
+    @staticmethod
     def write(f, header):
         """Write dds header."""
         header.update()
@@ -144,6 +146,7 @@ class DDS:
         self.mipmap_data = mipmap_data
         self.mipmap_size = mipmap_size
 
+    @staticmethod
     def load(file, verbose=False):
         """Load .dds file."""
         if file[-3:] not in ['dds', 'DDS']:
@@ -197,6 +200,7 @@ class DDS:
 
         return DDS(header, mipmap_data, mipmap_size)
 
+    @staticmethod
     def asset_to_DDS(asset):
         """Convert uasset to dds."""
         # make dds header

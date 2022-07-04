@@ -1,6 +1,6 @@
 """Class for mipmaps."""
-from ..util import io_util as io
 import ctypes as c
+from ..util import io_util as io
 
 
 class Mipmap(c.LittleEndianStructure):
@@ -38,6 +38,7 @@ class Mipmap(c.LittleEndianStructure):
         self.pixel_num = self.width * self.height
         self.one = 1
 
+    @staticmethod
     def read(f, version):
         """Read function."""
         mip = Mipmap(version)
@@ -95,7 +96,7 @@ class Mipmap(c.LittleEndianStructure):
         """Print meta data."""
         pad = ' ' * padding
         print(pad + 'file: ' + 'uexp' * self.uexp + 'ubluk' * (not self.uexp))
-        print(pad + 'data size: {}'.format(self.data_size))
-        print(pad + 'offset: {}'.format(self.offset))
-        print(pad + 'width: {}'.format(self.width))
-        print(pad + 'height: {}'.format(self.height))
+        print(pad + f'data size: {self.data_size}')
+        print(pad + f'offset: {self.offset}')
+        print(pad + f'width: {self.width}')
+        print(pad + f'height: {self.height}')
