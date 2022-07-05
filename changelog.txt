@@ -1,9 +1,11 @@
 v0.1.6
-- Static mesh support for UE4.27 and UE5.0
-- Introduced flake8, pydocstyle, and pylint to review codes
+- Static mesh support for UE4.27 and UE5.0.
+- Added "No Change" to unit scale option as default.
+- Fixed a bug it can't get asset paths for some assets.
+- Introduced flake8, pydocstyle, and pylint to review codes.
 
 v0.1.5
-- Fixed a bug it won't work for Blender 2.8x
+- Fixed a bug it won't work for Blender 2.8x.
 - Fixed an error when importing some skeleton assets.
 - Added support for some UE5 and UE4.27 assets.
 - Refined codes

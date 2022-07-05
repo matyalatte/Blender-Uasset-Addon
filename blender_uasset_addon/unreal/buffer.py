@@ -117,13 +117,14 @@ class NormalVertexBuffer(VertexBuffer):
         """Parse buffer."""
         def unpack(i):
             mask8bit = 0xff
+            i = i ^ 0x80808080
             x = i & mask8bit
             y = (i >> 8) & mask8bit
             z = (i >> 16) & mask8bit
             return [x, y, z]
 
         parsed = struct.unpack('<' + 'I' * 2 * self.size, self.buf)
-        normal = [unpack(parsed[i * 2 + 1] ^ 0x80808080) for i in range(self.size)]
+        normal = [unpack(parsed[i * 2 + 1]) for i in range(self.size)]
         return normal
 
     def import_from_blender(self, normal):
@@ -219,15 +220,20 @@ class StaticMeshVertexBuffer(VertexBuffer):
 
     def parse(self):
         """Parse buffer."""
+        def unpack(i):
+            mask8bit = 0xff
+            x = i & mask8bit
+            y = (i >> 8) & mask8bit
+            z = (i >> 16) & mask8bit
+            return [x, y, z]
         uv_type = 'f' * self.use_float32 + 'e' * (not self.use_float32)
-        parsed = struct.unpack('<' + ('B' * 8 + uv_type * 2 * self.uv_num) * self.size, self.buf)
-        stride = 8 + 2 * self.uv_num
-        normals = [parsed[i * stride: i * stride + 8] for i in range(self.size)]
-        normal = [n[4:7] for n in normals]
-        # tangent = [n[0:4] for n in normals]
+        parsed = struct.unpack('<' + ('I' * 2 + uv_type * 2 * self.uv_num) * self.size, self.buf)
+        stride = 2 + 2 * self.uv_num
+        normals = [parsed[i * stride: i * stride + 1] for i in range(self.size)]
+        normal = [unpack(n) for n in normals]
         texcoords = []
         for j in range(self.uv_num):
-            texcoord = [parsed[i * stride + 8 + j * 2: i * stride + 8 + j * 2 + 2] for i in range(self.size)]
+            texcoord = [parsed[i * stride + 2 + j * 2: i * stride + 2 + j * 2 + 2] for i in range(self.size)]
             texcoords.append(texcoord)
         return normal, texcoords
 
@@ -318,16 +324,22 @@ class SkeletalMeshVertexBuffer(VertexBuffer):
 
     def parse(self):
         """Parse buffer."""
+        def unpack(i):
+            mask8bit = 0xff
+            x = i & mask8bit
+            y = (i >> 8) & mask8bit
+            z = (i >> 16) & mask8bit
+            return [x, y, z]
         uv_type = 'f' * self.use_float32 + 'e' * (not self.use_float32)
-        parsed = struct.unpack('<' + ('B' * 8 + 'fff' + uv_type * 2 * self.uv_num) * self.size, self.buf)
-        stride = 11 + 2 * self.uv_num
-        normals = [parsed[i * stride: i * stride + 8] for i in range(self.size)]
-        normal = [n[4:7] for n in normals]
+        parsed = struct.unpack('<' + ('I' * 2 + 'fff' + uv_type * 2 * self.uv_num) * self.size, self.buf)
+        stride = 5 + 2 * self.uv_num
+        normals = [parsed[i * stride + 1] for i in range(self.size)]
+        normal = [unpack(n) for n in normals]
         # tangent = [n[0:4] for n in normals]
-        position = [parsed[i * stride + 8: i * stride + 11] for i in range(self.size)]
+        position = [parsed[i * stride + 2: i * stride + 5] for i in range(self.size)]
         texcoords = []
         for j in range(self.uv_num):
-            texcoord = [parsed[i * stride + 11 + j * 2: i * stride + 11 + j * 2 + 2] for i in range(self.size)]
+            texcoord = [parsed[i * stride + 5 + j * 2: i * stride + 5 + j * 2 + 2] for i in range(self.size)]
             texcoords.append(texcoord)
         return normal, position, texcoords
 

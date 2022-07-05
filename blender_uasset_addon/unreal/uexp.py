@@ -7,6 +7,7 @@ from ..util import cipher
 from .mesh import StaticMesh, SkeletalMesh
 from .skeleton import SkeletonAsset
 from .texture import Texture
+from .animation import AnimSequence
 
 
 class Uexp:
@@ -60,10 +61,10 @@ class Uexp:
                 if f.tell() + self.uasset.size != export.offset:
                     raise RuntimeError('Parse failed.')
 
+                if verbose:
+                    print(f'{export.name} (offset: {f.tell()})')
+                    print(f'  size: {export.size}')
                 if export.ignore:
-                    if verbose:
-                        print(f'{export.name} (offset: {f.tell()})')
-                        print(f'  size: {export.size}')
                     export.read_uexp(f)
 
                 else:
@@ -77,6 +78,8 @@ class Uexp:
                         self.skeleton = SkeletonAsset.read(f, self.version, self.name_list, verbose=verbose)
                     elif 'Texture' in self.asset_type:
                         self.texture = Texture.read(f, self.uasset, verbose=verbose)
+                    elif self.asset_type == 'AnimSequence':
+                        self.anim = AnimSequence.read(f, self.uasset, verbose=verbose)
                     self.unknown2 = f.read(export.offset + export.size - f.tell() - self.uasset.size)
 
             offset = f.tell()
@@ -113,6 +116,8 @@ class Uexp:
                         SkeletonAsset.write(f, self.skeleton)
                     elif 'Texture' in self.asset_type:
                         self.texture.write(f)
+                    elif self.asset_type == 'AnimSequence':
+                        self.anim.write(f)
                     else:
                         raise RuntimeError(f'Unsupported asset. ({self.asset_type})')
                     f.write(self.unknown2)

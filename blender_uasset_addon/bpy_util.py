@@ -14,6 +14,8 @@ UNIT = {
 def set_unit_scale(unit_scale):
     """Change unit scale to unit_scale."""
     if isinstance(unit_scale, str):
+        if unit_scale == 'NONE':
+            return
         if unit_scale not in UNIT:
             raise RuntimeError(f'Unsupported unit. ({unit_scale})')
         unit_scale = UNIT[unit_scale]
@@ -428,6 +430,7 @@ def join_meshes(meshes):
     Returns:
         mesh: joined mesh
     """
+    # deselect_all() need this?
     if len(meshes) == 0:
         return None
     if len(meshes) == 1:

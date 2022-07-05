@@ -189,7 +189,7 @@ class UassetExport(c.LittleEndianStructure):
         ("unk", c.c_ubyte * 64),
     ]
 
-    MAIN_EXPORTS = ['SkeletalMesh', 'StaticMesh', 'Skeleton',
+    MAIN_EXPORTS = ['SkeletalMesh', 'StaticMesh', 'Skeleton', 'AnimSequence',
                     'Texture2D', 'TextureCube', 'Material', 'MaterialInstanceConstant']
 
     def __init__(self):
@@ -309,12 +309,8 @@ class Uasset:
                 list(map(lambda x, i: x.print(str(i)), self.imports, range(len(self.imports))))
 
             paths = [n for n in self.name_list if n[0] == '/']
-            import_names = list(set([imp.name for imp in self.imports] + [imp.parent_dir for imp in self.imports]))
-            for imp in import_names:
-                if imp in paths:
-                    paths.remove(imp)
+            paths = [p for p in paths if p.split('/')[-1] in self.file]
             if len(paths) != 1:
-                print(paths)
                 raise RuntimeError('Failed to get asset path.')
             self.asset_path = paths[0]
 

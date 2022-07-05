@@ -307,15 +307,12 @@ def generate_mesh(amt, asset, materials, material_names, rescale=1.0,
             # skinning
             vg_names = [bone_names[vg] for vg in vertex_groups[i]]
             joint = np.array(joints[i], dtype=np.uint32)
-            weight = np.array(weights[i], dtype=np.float32) / 255
+            weight = np.array(weights[i], dtype=np.float32) / 255  # Should we use float64 like normals?
             bpy_util.skinning(section, vg_names, joint, weight)
 
         # smoothing
-        norm = (np.array(normals[i], dtype=np.float32)) / 127 - 1
-        norm = norm / np.linalg.norm(norm, axis=1)[:, np.newaxis]
-
-        norm = bpy_util.flip_y_for_3d_vectors(norm)
-        bpy_util.smoothing(mesh_data, len(indice) // 3, norm, enable_smoothing=smoothing)
+        normal = np.array(normals[i], dtype=np.float64) / 127 - 1  # Got broken normals with float32
+        bpy_util.smoothing(mesh_data, len(indice) // 3, normal, enable_smoothing=smoothing)
 
     if not keep_sections:
         # join meshes
@@ -555,9 +552,10 @@ class ImportOptions(PropertyGroup):
     unit_scale: EnumProperty(
         name='Unit Scale',
         items=(('CENTIMETERS', 'Centimeters', 'UE standard'),
-               ('METERS', 'Meters', 'Blender standard')),
+               ('METERS', 'Meters', 'Blender standard'),
+               ('NONE', 'No Change', 'Use the current uint scale')),
         description='Change unit scale to',
-        default='METERS'
+        default='NONE'
     )
 
     rescale: FloatProperty(
