@@ -1,40 +1,17 @@
 name: linting
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - '**.py'    
+  pull_request:
+    types: [opened, closed]
+
   workflow_dispatch:
-      
+
 env:
   GIST_ID: f1a5f45e1346698f50387619ff6c5bf7
   JSON_NAME: blender_uasset_addon_pylint_badge.json
-  
+   
 jobs:
-  flake8:
-    runs-on: windows-latest
-    steps:
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: 3.7.x
-          architecture: x64
-          
-      - uses: actions/checkout@v3
-      
-      - name: Install flake8
-        run: pip install flake8
-        
-      - name: Run flake8
-        uses: suo/flake8-github-action@releases/v1
-        with:
-          checkName: 'flake8'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          
-  pylint:
+  linting:
     runs-on: windows-latest
     steps:
       - name: Setup Python
@@ -46,15 +23,29 @@ jobs:
       - uses: actions/checkout@v3
       
       - name: Install
-        run: pip install pylint pydocstyle
+        if: ${{github.event.pull_request.merged != true}}
+        run: pip install flake8 pydocstyle
+        
+      - name: Run flake8
+        if: ${{github.event.pull_request.merged != true}}
+        uses: suo/flake8-github-action@releases/v1
+        with:
+          checkName: 'flake8'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: Run pydocstyle
+        if: ${{github.event.pull_request.merged != true}}
+        run: pydocstyle
+
+      - name: Install
+        run: pip install pylint
         
       - name: Run pylint
-        run: |
-          pydocstyle
-          python for_dev/lint.py --path=blender_uasset_addon --threshold=3 --file_name=${{ env.JSON_NAME }}
+        run: python for_dev/lint.py --path=addons/blender_uasset_addon --file_name=${{ env.JSON_NAME }}
 
-      - name: Deploy
-        continue-on-error: true
+      - name: Update pylint badge status
+        if: ${{ github.event.pull_request.merged == true && github.ref == 'refs/heads/main' }}
         uses: exuanbo/actions-deploy-gist@v1
         with:
           token: ${{ secrets.GIST_TOKEN }}

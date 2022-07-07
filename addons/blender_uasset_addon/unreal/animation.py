@@ -84,15 +84,16 @@ class UnkData:
 
 class RawAnimData:
     """Raw animation binary data."""
-    def __init__(self, size, unk, bone_count, unk_int, unk2, frame_count, fps, rest):
+    def __init__(self, size, unk, bone_count, track_count, unk2, frame_count, fps, unk3, rest):
         """Constructor."""
         self.size = size
         self.unk = unk
         self.bone_count = bone_count
-        self.unk_int = unk_int
+        self.track_count = track_count
         self.unk2 = unk2
         self.frame_count = frame_count
         self.fps = fps
+        self.unk3 = unk3
         self.rest = rest
 
     @staticmethod
@@ -102,22 +103,24 @@ class RawAnimData:
         unk = f.read(8)
         io.read_const_uint32(f, 3)
         bone_count = io.read_uint16(f)
-        unk_int = io.read_uint16(f)
+        track_count = io.read_uint16(f)
         unk2 = f.read(8)
         frame_count = io.read_uint32(f)
         fps = io.read_uint32(f)
+        unk3 = f.read(12)
         rest = f.read(size - (f.tell() - offset))
-        return RawAnimData(size, unk, bone_count, unk_int, unk2, frame_count, fps, rest)
+        return RawAnimData(size, unk, bone_count, track_count, unk2, frame_count, fps, unk3, rest)
 
     def write(self, f):
         """Write function."""
         f.write(self.unk)
         io.write_uint32(f, 3)
         io.write_uint16(f, self.bone_count)
-        io.write_uint16(f, self.unk_int)
+        io.write_uint16(f, self.track_count)
         f.write(self.unk2)
         io.write_uint32(f, self.frame_count)
         io.write_uint32(f, self.fps)
+        f.write(self.unk3)
         f.write(self.rest)
 
 

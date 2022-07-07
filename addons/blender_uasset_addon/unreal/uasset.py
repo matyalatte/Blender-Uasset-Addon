@@ -311,7 +311,9 @@ class Uasset:
             paths = [n for n in self.name_list if n[0] == '/']
             paths = [p for p in paths if p.split('/')[-1] in self.file]
             if len(paths) != 1:
-                raise RuntimeError('Failed to get asset path.')
+                paths = [p for p in paths if self.file in p.split('/')[-1]]
+                if len(paths) != 1:
+                    raise RuntimeError('Failed to get asset path.')
             self.asset_path = paths[0]
 
             # read exports
@@ -352,7 +354,7 @@ class Uasset:
             file = base + 'uasset'
 
         directory = os.path.dirname(file)
-        if not os.path.exists(directory):
+        if directory != '' and not os.path.exists(directory):
             io.mkdir(directory)
 
         uexp_file = base + 'uexp'

@@ -252,6 +252,62 @@ def get_primitives(asset, armature, meshes, rescale=1.0, only_mesh=False):
     return primitives
 
 
+def inject_uasset(source_file, directory, ue_version='4.18',
+                  rescale=1.0, only_mesh=True,
+                  duplicate_folder_structure=True,
+                  mod_name='mod_name_here',
+                  content_folder='End\\Content'):
+    """Inject selected objects to uasset file."""
+    # get selected objects
+    armature, meshes = bpy_util.get_selected_armature_and_meshes()
+
+    # check uv count
+    uv_counts = [len(mesh.data.uv_layers) for mesh in meshes]
+    if len(list(set(uv_counts))) > 1:
+        raise RuntimeError('All meshes should have the same number of uv maps')
+
+    # load source file
+
+    version = ue_version
+    if version not in ['ff7r', '4.18']:
+        raise RuntimeError(f'Injection is unsupported for {version}')
+    asset = unreal.uasset.Uasset(source_file, version=version)
+    asset_type = asset.asset_type
+
+    if armature is None and 'Skelet' in asset_type:
+        raise RuntimeError('Select an armature.')
+    if meshes == [] and 'Mesh' in asset_type:
+        raise RuntimeError('Select meshes.')
+    if 'Mesh' not in asset_type and asset_type != 'Skeleton':
+        raise RuntimeError(f'Unsupported asset. ({asset_type})')
+
+    if asset_type == 'Skeleton':
+        meshes = []
+
+    primitives = get_primitives(asset, armature, meshes,
+                                rescale=rescale,
+                                only_mesh=only_mesh)
+    bpy_util.deselect_all()
+    bpy_util.select_objects([armature] + meshes)
+
+    print('Editing asset data...')
+    asset.uexp.import_from_blender(primitives, only_mesh=only_mesh)
+    if duplicate_folder_structure:
+        dirs = asset.asset_path.split('/')
+        if dirs[0] == '':
+            dirs = dirs[2:]
+        else:
+            dirs = dirs[1:]
+        dirs = '\\'.join(dirs)
+        asset_path = os.path.join(directory, mod_name,
+                                  content_folder, dirs)
+    else:
+        asset_path = os.path.join(directory, asset.name)
+
+    asset.save(asset_path + '.uasset')
+    return asset_type
+
+
 class InjectOptions(PropertyGroup):
     """Properties for inject options."""
     only_mesh: BoolProperty(
@@ -340,54 +396,16 @@ class InjectToUasset(Operator):
             bpy.ops.wm.console_toggle()
             bpy.ops.wm.console_toggle()
         try:
-            # get selected objects
-            armature, meshes = bpy_util.get_selected_armature_and_meshes()
-
-            # check uv count
-            uv_counts = [len(mesh.data.uv_layers) for mesh in meshes]
-            if len(list(set(uv_counts))) > 1:
-                raise RuntimeError('All meshes should have the same number of uv maps')
-
-            # load source file
             general_options = context.scene.general_options
             inject_options = context.scene.inject_options
-            version = general_options.ue_version
-            if version not in ['ff7r', '4.18']:
-                raise RuntimeError(f'Injection is unsupported for {version}')
-            asset = unreal.uasset.Uasset(general_options.source_file, version=version)
-            asset_type = asset.asset_type
-
-            if armature is None and 'Skelet' in asset_type:
-                raise RuntimeError('Select an armature.')
-            if meshes == [] and 'Mesh' in asset_type:
-                raise RuntimeError('Select meshes.')
-            if 'Mesh' not in asset_type and asset_type != 'Skeleton':
-                raise RuntimeError(f'Unsupported asset. ({asset_type})')
-
-            if asset_type == 'Skeleton':
-                meshes = []
-
-            primitives = get_primitives(asset, armature, meshes, rescale=inject_options.rescale,
-                                        only_mesh=inject_options.only_mesh)
-            bpy_util.deselect_all()
-            bpy_util.select_objects([armature] + meshes)
-
-            print('Editing asset data...')
-            asset.uexp.import_from_blender(primitives, only_mesh=inject_options.only_mesh)
-            if inject_options.duplicate_folder_structure:
-                dirs = asset.asset_path.split('/')
-                if dirs[0] == '':
-                    dirs = dirs[2:]
-                else:
-                    dirs = dirs[1:]
-                dirs = '\\'.join(dirs)
-                asset_path = os.path.join(self.directory, inject_options.mod_name,
-                                          inject_options.content_folder, dirs)
-            else:
-                asset_path = os.path.join(self.directory, asset.name)
-
-            asset.save(asset_path + '.uasset')
-
+            asset_type = inject_uasset(general_options.source_file,
+                                       self.directory,
+                                       ue_version=general_options.ue_version,
+                                       rescale=inject_options.rescale,
+                                       only_mesh=inject_options.only_mesh,
+                                       duplicate_folder_structure=inject_options.duplicate_folder_structure,
+                                       mod_name=inject_options.mod_name,
+                                       content_folder=inject_options.content_folder)
             elapsed_s = f'{(time.time() - start_time):.2f}s'
             msg = f'Success! Injected {asset_type} in {elapsed_s}'
             print(msg)

@@ -47,6 +47,11 @@ def deselect_all():
     bpy.ops.object.select_all(action='DESELECT')
 
 
+def get_selected_objects():
+    """Get selected objects."""
+    return [ob for ob in bpy.context.scene.objects if ob.select_get()]
+
+
 def select_objects(objs):
     """Select objects."""
     for obj in objs:
@@ -435,7 +440,7 @@ def join_meshes(meshes):
         return None
     if len(meshes) == 1:
         return meshes[0]
-    mesh_data_list = [mesh.data for mesh in meshes]
+    mesh_data_list = [mesh.data for mesh in meshes[1:]]
     ctx = bpy.context.copy()
     ctx['active_object'] = meshes[0]
     ctx['selected_editable_objects'] = meshes
@@ -443,7 +448,7 @@ def join_meshes(meshes):
 
     # remove unnecessary mesh data
     deselect_all()
-    for mesh_data in mesh_data_list[1:]:
+    for mesh_data in mesh_data_list:
         bpy.data.meshes.remove(mesh_data)
     return meshes[0]
 
@@ -457,7 +462,7 @@ def smoothing(mesh_data, face_count, normals, enable_smoothing=True):
         normals (numpy.ndarray): 2d numpy array of normals (vertex_count, 3)
         enable_smoothing (bool): apply smooth shading or not
     """
-    smooth = np.empty(face_count, dtype=np.bool)
+    smooth = np.empty(face_count, dtype=bool)
     smooth.fill(enable_smoothing)
     mesh_data.polygons.foreach_set('use_smooth', smooth)
     mesh_data.validate()

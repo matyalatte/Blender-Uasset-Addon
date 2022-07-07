@@ -164,7 +164,6 @@ class StaticMesh(Mesh):
         if verbose:
             for lod, i in zip(LODs, range(len(LODs))):
                 lod.print(i)
-        print(f.tell())
         # seek and read materials
         unk2, materials = Mesh.read_materials(f, version, imports, name_list, skeletal=False, verbose=verbose)
 

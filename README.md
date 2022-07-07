@@ -1,7 +1,8 @@
 [![discord](https://badgen.net/badge/icon/discord?icon=discord&label)](https://discord.gg/Qx2Ff3MByF)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-![packaging](https://github.com/matyalatte/Blender-Uasset-Addon/actions/workflows/main.yml/badge.svg)
+![test](https://github.com/matyalatte/Blender-Uasset-Addon/actions/workflows/test.yml/badge.svg)
 ![linting](https://github.com/matyalatte/Blender-Uasset-Addon/actions/workflows/lint.yml/badge.svg)
+![packaging](https://github.com/matyalatte/Blender-Uasset-Addon/actions/workflows/main.yml/badge.svg)
 ![pylint](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/matyalatte/f1a5f45e1346698f50387619ff6c5bf7/raw/blender_uasset_addon_pylint_badge.json)
 
 # Blender Uasset Addon v0.1.6

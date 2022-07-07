@@ -327,7 +327,7 @@ def write_null_array(f, length):
     write_uint32_array(f, [0] * length)
 
 
-def compare(file1, file2):
+def compare(file1, file2, no_err=False):
     """Check if 2 files have the same binary data."""
     print(f'Comparing {file1} and {file2}...')
     with open(file1, 'rb') as f_1, open(file2, 'rb') as f_2:
@@ -341,7 +341,7 @@ def compare(file1, file2):
 
     if f1_size == f2_size and f1_bin == f2_bin:
         print('Same data!')
-        return
+        return True
 
     i = -1
     for b_1, b_2 in zip(f1_bin, f2_bin):
@@ -349,4 +349,6 @@ def compare(file1, file2):
         if b_1 != b_2:
             break
 
+    if no_err:
+        return False
     raise RuntimeError(f'Not same :{i}')

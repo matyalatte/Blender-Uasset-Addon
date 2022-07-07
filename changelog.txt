@@ -3,6 +3,7 @@ v0.1.6
 - Added "No Change" to unit scale option as default.
 - Fixed a bug it can't get asset paths for some assets.
 - Introduced flake8, pydocstyle, and pylint to review codes.
+- Introduced pytest to test the addon.
 
 v0.1.5
 - Fixed a bug it won't work for Blender 2.8x.

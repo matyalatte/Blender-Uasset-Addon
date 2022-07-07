@@ -229,7 +229,7 @@ class StaticMeshVertexBuffer(VertexBuffer):
         uv_type = 'f' * self.use_float32 + 'e' * (not self.use_float32)
         parsed = struct.unpack('<' + ('I' * 2 + uv_type * 2 * self.uv_num) * self.size, self.buf)
         stride = 2 + 2 * self.uv_num
-        normals = [parsed[i * stride: i * stride + 1] for i in range(self.size)]
+        normals = [parsed[i * stride + 1] for i in range(self.size)]
         normal = [unpack(n) for n in normals]
         texcoords = []
         for j in range(self.uv_num):

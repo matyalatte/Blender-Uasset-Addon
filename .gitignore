@@ -1,7 +1,11 @@
-*__pycache__*
+*__pycache__
+*.pytest_cache
 *.zip
 *.uasset
 *.uexp
 *.ubulk
 *.bat
+.coverage
+htmlcov
+Matya-Uasset-Samples
 todo.txt

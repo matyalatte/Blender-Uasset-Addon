@@ -72,6 +72,7 @@ def generate_armature(name, bones, normalize_bones=True, rotate_bones=False,
     list(map(lambda b: cal_length(b, bones), bones))
 
     if rotate_bones:  # looks fine in blender, but bad in UE4
+        # Todo: still looks bad for some assets
         local_bone_vec = Vector((1, 0, 0))
         z_axis = Vector((0, 1, 0))
     else:  # looks fine in UE4, but bad in blender

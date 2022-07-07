@@ -1,0 +1,2 @@
+[run]
+omit = tests/*, */bpy/*.py, */bpy_types.py

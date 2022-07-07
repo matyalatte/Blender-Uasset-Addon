@@ -1,0 +1,76 @@
+# Most code is from pytest-blender's workflow by mondeja.
+# https://github.com/mondeja/pytest-blender/blob/master/.github/workflows/ci.yml
+
+name: test
+
+on:
+  pull_request:
+    types: [opened]
+
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Test
+    runs-on: ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Test in Windows
+          - platform: windows-latest
+            pytest-version: '7.1.2'
+            blender-version: '3.0.1'
+            # Using 3.10 in Windows due to PIP encoding errors:
+            # https://github.com/pypa/pip/issues/11066
+            python-version: '3.10'
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python v${{ matrix.python-version }}
+        uses: actions/setup-python@v3
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Upgrade PIP
+        run: python -m pip install --upgrade pip
+        
+      - name: Cache Blender ${{ matrix.blender-version }}
+        uses: actions/cache@v3
+        id: cache-blender
+        with:
+          path: |
+            blender-*
+            _blender-executable-path.txt
+          key: ${{ runner.os }}-${{ matrix.blender-version }}-test2
+          
+      # Download Blender on Windows
+      - name: Download Blender ${{ matrix.blender-version }}
+        if: |
+          steps.cache-blender.outputs.cache-hit != 'true'
+        run: |
+          python -m pip install --upgrade blender-downloader
+          python -m pip list
+          blender-downloader ${{ matrix.blender-version }} --extract --remove-compressed --print-blender-executable --quiet | Out-File -FilePath _blender-executable-path.txt
+          get-content _blender-executable-path.txt
+          
+      # Install dependencies on Windows
+      - name: Install dependencies
+        id: install-dependencies-windows
+        run: |
+          python -m pip install pytest-blender pytest pytest-cov
+          $BLENDER_EXECUTABLE = get-content _blender-executable-path.txt
+          echo "BLENDER_EXECUTABLE: $BLENDER_EXECUTABLE"
+          pytest-blender --blender-executable $(Get-Variable -Name BLENDER_EXECUTABLE -ValueOnly)
+          $PYTHON_BLENDER_EXECUTABLE = pytest-blender --blender-executable "$(Get-Variable -Name BLENDER_EXECUTABLE -ValueOnly)"
+          echo "PYTHON_BLENDER_EXECUTABLE: $PYTHON_BLENDER_EXECUTABLE"
+          Invoke-Expression "$PYTHON_BLENDER_EXECUTABLE -m pip install pytest==${{ matrix.pytest-version }} pytest-cov"
+          echo "::set-output name=blender-executable::$BLENDER_EXECUTABLE"
+
+      - name: Unit tests
+        # - Can't get coverage with blender-addons-dirs?
+        #   Seems to need to add current dir to script path in preferences.
+        # - Idk why, but need "cmd.exe /c" for blender.exe.
+        run: |
+          $BLENDER_EXECUTABLE = get-content _blender-executable-path.txt
+          cmd.exe /c "$BLENDER_EXECUTABLE" -b --python for_dev\regist_cd_to_script_path.py
+          pytest tests\ --cov -svv --blender-executable "$BLENDER_EXECUTABLE" --cov-config .coveragerc --cov-report term-missing
