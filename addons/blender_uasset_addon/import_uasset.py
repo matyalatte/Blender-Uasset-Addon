@@ -413,7 +413,7 @@ class GeneralOptions(PropertyGroup):
         name='UE version',
         items=(('ff7r', 'FF7R', ''),
                ('4.18', '4.18 (Experimental!)', 'Not Recommended'),
-               ('4.27', '4.27 (Experimental!)', 'Not Recommended'),
+               ('4.27', '4.26, 4.27 (Experimental!)', 'Not Recommended'),
                ('5.0', '5.0 (Experimental!)', 'Not Recommended')),
         description='UE version of assets',
         default='ff7r'

@@ -2,6 +2,7 @@ v0.1.6
 - Static mesh support for UE4.27 and UE5.0.
 - Added "No Change" to unit scale option as default.
 - Fixed a bug it can't get asset paths for some assets.
+- Fixed a bug some textures won't be connected to shaders.
 - Introduced flake8, pydocstyle, and pylint to review codes.
 - Introduced pytest-blender to test the addon.
 

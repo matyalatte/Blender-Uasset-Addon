@@ -29,7 +29,7 @@ Most of the source code is from [my mesh tool](https://github.com/matyalatte/FF7
 | :---: |:---:|:---:|:---:|:---:|:---:|:---:|
 | FF7R | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :x: | :heavy_check_mark: |
 | 4.18 | :warning: | :warning: | :heavy_check_mark:  | :heavy_check_mark: | :x: | :warning: |
-| 4.27 | :warning: | :warning: | :heavy_check_mark: | :heavy_check_mark: | :x: | :x: |
+| 4.26, 4.27| :warning: | :warning: | :heavy_check_mark: | :heavy_check_mark: | :x: | :x: |
 | 5.0 | :warning: | :warning: | :heavy_check_mark: | :heavy_check_mark: | :x: | :x: |
 
 ## Getting Started

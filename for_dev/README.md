@@ -4,7 +4,6 @@
 There are some python scripts to test the addon.
 
 - `regist_without_installing.py`: Script to use the addon without installing it in Blender.
-- `regist_cd_to_script_path.py`: Script to add the project path to script path in preferences.
 - `test.py`: Script to check if the addon can reconstract .uasset files.
 - `lint.py`: Script to run pylint
 
@@ -31,16 +30,37 @@ You will get results like `PyLint Passed | Score:...`.<br>
 The score should be more than 7.<br>
 
 ## pytest-blender
-[pytest-blender](https://github.com/mondeja/pytest-blender) is a pytest plugin for Blender testing.
-You can use bpy with pytest.
+[pytest-blender](https://github.com/mondeja/pytest-blender) is a pytest plugin for Blender testing.<br>
+You can use bpy with pytest.<br>
+First, install requirements in your python environment like this.<br>
+
+```
+pip install pytest pytest-blender pytest-cov
+```
+
+Then, install pytest and pytest-cov in Blender's python environment like this.<br>
+```
+REM This is for Windows. See pytest-blender's document for linux and mac.
+set BLENDER=C:\Program Files\Blender Foundation\Blender 3.0
+set PYTHON_PATH=%BLENDER%\3.0\python\bin\python.exe
+set SITE_PACK=%BLENDER%\3.0\python\lib\site-packages
+
+"%PYTHON_PATH%" -m ensurepip
+"%PYTHON_PATH%" -m pip install pytest pytest-cov -t "%SITE_PACK%" --upgrade
+```
+
+And then, you can use pytest with bpy.
+```
+set BLENDER_EXE=C:\Program Files\Blender Foundation\Blender 3.0\blender.exe
+pytest tests\ -svv --blender-executable "%BLENDER_EXE%" --cov-report html --cov-report term:skip-covered
+```
 
 ## Github Actions
 [Github Actions](https://docs.github.com/en/actions) is an automation tool for development workflows.<br>
 You can run scripts on remote servers for your repositories.<br>
-There are 3 workflows for the addon.
+There are 2 workflows for the addon.
 
-- test: Download Blender and run pytest to test the addon.
-- linting: Run flake8, pydocstring, and pylint to check your coding style.
+- CI: Run flake8, pydocstring, pylint, and pytest to check your codes.
 - packaging: Pack only necessary files and upload them to the release page.
 
 See here if you want to use the workflows.<br>
