@@ -5,11 +5,17 @@ Notes:
 """
 import json
 import os
+
 import pytest
+import shutil
+
+import blender_uasset_addon
+from blender_uasset_addon import bpy_util
 from blender_uasset_addon.util.io_util import compare
 from blender_uasset_addon import unreal
 from blender_uasset_addon.import_uasset import load_uasset
 from blender_uasset_addon.inject_to_uasset import inject_uasset
+from blender_uasset_addon.export_as_fbx import export_as_fbx
 
 RED = '\033[31m'
 GREEN = '\033[32m'
@@ -57,15 +63,68 @@ def test_uasset_import(version, file, asset_type):
     assert asset_t == asset_type
 
 
-TEST_CASE_418 = [tc for tc in TEST_CASES if tc[0] == '4.18' and tc[2] == 'SkeletalMesh']
+TEST_CASE_418 = [tc for tc in TEST_CASES if tc[0] == '4.18' and tc[2] in ['SkeletalMesh', 'StaticMesh']]
 
 
 @pytest.mark.parametrize('version, file, asset_type', TEST_CASE_418)
 def test_uasset_injection(version, file, asset_type):
     """Test for injection."""
-    imported, asset_t = load_uasset(file, load_textures=True, ue_version=version)
-    from blender_uasset_addon.bpy_util import deselect_all
-    deselect_all()
+    imported, asset_t = load_uasset(file, load_textures=True, ue_version=version,
+                                    rotate_bones=True, keep_sections=True)
+    bpy_util.deselect_all()
     imported.select_set(True)
     asset_t = inject_uasset(file, os.path.dirname(file), ue_version=version, only_mesh=False)
+    shutil.rmtree(os.path.join(os.path.dirname(file), 'mod_name_here'))
     assert asset_t == asset_type
+
+
+@pytest.mark.parametrize('version, file, asset_type', TEST_CASE_418)
+def test_export_as_fbx(version, file, asset_type):
+    """Test export function."""
+    imported, asset_t = load_uasset(file, load_textures=True, invert_normal_maps=True,
+                                    normalize_bones=False, ue_version=version)
+    assert asset_t == asset_type
+    bpy_util.deselect_all()
+    imported.select_set(True)
+    armature, meshes = bpy_util.get_selected_armature_and_meshes()
+    fbx = file[:-6] + 'fbx'
+    export_as_fbx(fbx, armature, meshes)
+    assert os.path.exists(fbx)
+    os.remove(fbx)
+
+
+@pytest.mark.parametrize('version, file, asset_type', TEST_CASE_418)
+def test_uasset_verbose(version, file, asset_type):
+    """Test for verbose option."""
+    asset = unreal.uasset.Uasset(file, version=version, verbose=True)
+    assert asset.asset_type == asset_type
+
+
+TEST_CASE_TEX = [tc for tc in TEST_CASES if tc[2] == 'Texture2D']
+
+
+@pytest.mark.parametrize('version, file, asset_type', TEST_CASE_TEX)
+def test_dds(version, file, asset_type):
+    """Test for verbose option."""
+    asset = unreal.uasset.Uasset(file, version=version)
+    assert asset.asset_type == asset_type
+    dds = unreal.dds.DDS.asset_to_DDS(asset)
+    dds_path = file[:-6]+'dds'
+    dds.save(dds_path)
+    dds = unreal.dds.DDS.load(dds_path, verbose=True)
+    asset.uexp.texture.inject_dds(dds)
+    temp = file[:-6]+'_temp_.uasset'
+    asset.save(temp)
+    assert compare(file, temp, no_err=True)
+    os.remove(dds_path)
+    os.remove(temp)
+    os.remove(temp[:-6]+'uexp')
+    bulk = temp[:-6]+'ubulk'
+    if os.path.exists(bulk):
+        os.remove(bulk)
+
+
+def test_register():
+    """Test for register() and unregister()."""
+    blender_uasset_addon.register()
+    blender_uasset_addon.unregister()

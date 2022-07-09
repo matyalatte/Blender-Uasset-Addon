@@ -143,9 +143,9 @@ class Material:
                 self.texture_actual_paths = [get_actual_path(p) for p in self.texture_asset_paths]
                 m = None
             except Exception:
-                m = 'Failed to load the material asset. This is unexpected. ({})'.format(file_path)
+                m = f'Failed to load the material asset. This is unexpected. ({file_path})'
         else:
-            m = 'File not found. ({})'.format(file_path)
+            m = f'File not found. ({file_path})'
         if m is not None:
             print(m)
             self.texture_asset_paths = [m]

@@ -37,7 +37,7 @@ You can use bpy with pytest.
 ## Github Actions
 [Github Actions](https://docs.github.com/en/actions) is an automation tool for development workflows.<br>
 You can run scripts on remote servers for your repositories.<br>
-There are 2 workflows for the addon.
+There are 3 workflows for the addon.
 
 - test: Download Blender and run pytest to test the addon.
 - linting: Run flake8, pydocstring, and pylint to check your coding style.

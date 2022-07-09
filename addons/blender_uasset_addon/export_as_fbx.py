@@ -17,7 +17,10 @@ if "bpy" in locals():
         importlib.reload(bpy_util)
 
 
-def export_as_fbx(file, armature, meshes, export_options):
+def export_as_fbx(file, armature, meshes, global_scale=1.0,
+                  smooth_type='FACE',
+                  export_tangent=False,
+                  use_custom_props=False):
     """Export an armature and meshed as fbx."""
     mode = bpy.context.object.mode
     bpy.ops.object.mode_set(mode='OBJECT')
@@ -38,11 +41,6 @@ def export_as_fbx(file, armature, meshes, export_options):
 
     # select objects
     bpy_util.select_objects([armature] + meshes)
-
-    global_scale = export_options.fGlobalScale
-    smooth_type = export_options.smooth_type
-    export_tangent = export_options.bExportTangent
-    use_custom_props = export_options.bUseCustomProps
 
     # export as fbx
     bpy.ops.export_scene.fbx(
@@ -143,7 +141,11 @@ class EXPORT_OT_run_button(bpy.types.Operator, ExportHelper):
             export_options = context.scene.uasset_addon_fbx_export_options
 
             # main
-            export_as_fbx(file, armature, meshes, export_options)
+            export_as_fbx(file, armature, meshes,
+                          global_scale=export_options.fGlobalScale,
+                          smooth_type=export_options.smooth_type,
+                          export_tangent=export_options.bExportTangent,
+                          use_custom_props=export_options.bUseCustomProps)
             self.report({'INFO'}, f'Success! Saved {file}.')
 
         except Exception as e:

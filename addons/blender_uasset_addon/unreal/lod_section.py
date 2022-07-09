@@ -48,19 +48,6 @@ class StaticLODSection(LODSection):
             io.write_uint32(f, section.unk)
             io.write_uint32(f, section.unk2)
 
-    def import_section(self, section):
-        """Import section data."""
-        self.material_id = section.material_id
-        self.first_ib_id = section.first_ib_id
-        self.face_num = section.face_num
-        self.first_vertex_id = section.first_vertex_id
-        self.last_vertex_id = section.last_vertex_id
-        self.enable_collision = section.enable_collision
-        self.cast_shadow = section.cast_shadow
-        if section.version >= '4.27':
-            self.unk = section.unk
-            self.unk2 = section.unk2
-
     def print(self, i, padding=2):
         """Print meta data."""
         pad = ' ' * padding
@@ -198,17 +185,6 @@ class SkeletalLODSection4(SkeletalLODSection):
             io.write_uint32(f, len(section.unk2) // 16)
             io.write_uint8_array(f, section.unk2)
 
-    def import_section(self, section):
-        """Import section data."""
-        self.material_id = section.material_id
-        self.first_ib_id = section.first_ib_id
-        self.face_num = section.face_num
-        self.vertex_group = section.vertex_group
-        self.first_vertex_id = section.first_vertex_id
-        self.vertex_num = section.vertex_num
-        self.max_bone_influences = section.max_bone_influences
-        self.unk = section.unk
-
     def print(self, name, bones, padding=2):
         """Print meta data."""
         pad = ' ' * padding
@@ -320,16 +296,6 @@ class SkeletalLODSection5(LODSection):
         io.write_uint32(f, section.vertex_num)
         f.write(section.unk_ids2)
         io.write_null(f)
-
-    def import_section(self, section):
-        """Import section data."""
-        self.material_id = section.material_id
-        self.first_ib_id = section.first_ib_id
-        self.face_num = section.face_num
-        self.vertex_group = section.vertex_group
-        self.first_vertex_id = section.first_vertex_id
-        self.vertex_num = section.vertex_num
-        self.max_bone_influences = section.max_bone_influences
 
     def print(self, name, bones, padding=2):
         """Print meta data."""

@@ -36,10 +36,10 @@ class VersionInfo:
             return self.base in item or self.custom in item
         raise RuntimeError(f"Comparison method doesn't support {type(item)}.")
 
-    def __nq__(self, item):  # self != item
+    def __ne__(self, item):  # self != item
         """Neq operator."""
         if isinstance(item, str):
-            return self.base != item and self.custom != self.custom
+            return self.base != item and self.custom != item
         if isinstance(item, list):
             return (self.base not in item) and (self.custom not in item)
         raise RuntimeError(f"Comparison method doesn't support {type(item)}.")

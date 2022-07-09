@@ -1,9 +1,9 @@
 [![discord](https://badgen.net/badge/icon/discord?icon=discord&label)](https://discord.gg/Qx2Ff3MByF)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-![test](https://github.com/matyalatte/Blender-Uasset-Addon/actions/workflows/test.yml/badge.svg)
-![linting](https://github.com/matyalatte/Blender-Uasset-Addon/actions/workflows/lint.yml/badge.svg)
+![ci](https://github.com/matyalatte/Blender-Uasset-Addon/actions/workflows/ci.yml/badge.svg)
 ![packaging](https://github.com/matyalatte/Blender-Uasset-Addon/actions/workflows/main.yml/badge.svg)
 ![pylint](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/matyalatte/f1a5f45e1346698f50387619ff6c5bf7/raw/blender_uasset_addon_pylint_badge.json)
+![coverage](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/matyalatte/0ca588aa8786d78c95ce2acdeb90635c/raw/blender_uasset_addon_pytest_badge.json)
 
 # Blender Uasset Addon v0.1.6
 Blender addon to import .uasset files
@@ -37,4 +37,3 @@ Most of the source code is from [my mesh tool](https://github.com/matyalatte/FF7
 
 ## FAQ
 [FAQ · matyalatte/Blender-Uasset-Addon Wiki](https://github.com/matyalatte/Blender-Uasset-Addon/wiki/FAQ)
-

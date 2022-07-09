@@ -150,7 +150,7 @@ class DDS:
     def load(file, verbose=False):
         """Load .dds file."""
         if file[-3:] not in ['dds', 'DDS']:
-            raise RuntimeError('Not DDS. ({})'.format(file))
+            raise RuntimeError(f'Not DDS. ({file})')
         print('load: ' + file)
         with open(file, 'rb') as f:
             # read header
@@ -204,19 +204,20 @@ class DDS:
     def asset_to_DDS(asset):
         """Convert uasset to dds."""
         # make dds header
+        texture = asset.uexp.texture
         header = DDSHeader()
-        header.init(0, 0, 0, asset.format_name, asset.texture_type)
+        header.init(0, 0, 0, texture.format_name, texture.texture_type)
 
         mipmap_data = []
         mipmap_size = []
 
         # get mipmaps
-        for mip in asset.mipmaps:
+        for mip in texture.mipmaps:
             mipmap_data.append(mip.data)
             mipmap_size.append([mip.width, mip.height])
 
         # update header
-        header.width, header.height = asset.get_max_size()
+        header.width, header.height = texture.get_max_size()
         header.mipmap_num = len(mipmap_data)
 
         return DDS(header, mipmap_data, mipmap_size)

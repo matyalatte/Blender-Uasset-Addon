@@ -1,7 +1,7 @@
 """Tests for bpy_util."""
 # Todo: Write more tests.
-
 import os
+
 import pytest
 import bpy
 from blender_uasset_addon import bpy_util
@@ -94,3 +94,52 @@ def test_select_objects():
     bpy_util.select_objects(meshes)
     selected = bpy_util.get_selected_objects()
     assert len(selected) == 2
+
+
+def test_join_meshes_empty():
+    """Test join_meshs with empty list."""
+    meshes = bpy_util.join_meshes([])
+    assert meshes is None
+
+
+def test_join_meshes_one():
+    """Test join_meshs with a mesh."""
+    bpy.ops.mesh.primitive_cube_add()
+    meshes = bpy_util.get_selected_objects()
+    joined = bpy_util.join_meshes(meshes)
+    assert meshes[0] == joined
+
+
+def test_join_meshes_some():
+    """Test join_meshs with meshes."""
+    bpy.ops.mesh.primitive_cube_add()
+    bpy.ops.mesh.primitive_cube_add()
+    meshes = [ob for ob in bpy.context.scene.objects if ob.type == 'MESH']
+    bpy_util.join_meshes(meshes)
+    meshes = [ob for ob in bpy.context.scene.objects if ob.type == 'MESH']
+    assert len(meshes) == 1
+
+
+def test_split_mesh():
+    """Test split_mesh_by_materials."""
+    color_gen = bpy_util.ColorGenerator()
+    meshes = []
+    for i in range(3):
+        bpy.ops.mesh.primitive_cube_add()
+        mesh = bpy_util.get_selected_objects()[0]
+        material = bpy_util.add_material(f'mat{i}', color_gen=color_gen)
+        mesh.data.materials.append(material)
+        meshes.append(mesh)
+
+    mesh = bpy_util.join_meshes(meshes)
+    meshes = bpy_util.split_mesh_by_materials(mesh)
+    assert len(meshes) == 3
+
+
+def test_split_mesh_with_no_mat():
+    """Test split_mesh_by_materials."""
+    with pytest.raises(Exception) as e:
+        bpy.ops.mesh.primitive_cube_add()
+        mesh = bpy_util.get_selected_objects()
+        bpy_util.split_mesh_by_materials(mesh[0])
+    assert str(e.value) == "Mesh have no materials."

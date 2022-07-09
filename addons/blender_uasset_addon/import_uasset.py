@@ -113,7 +113,7 @@ def generate_armature(name, bones, normalize_bones=True, rotate_bones=False,
     return amt
 
 
-def load_utexture(file, name, version, asset=None, invert_normals=False):
+def load_utexture(file, name, version, asset=None, invert_normals=False, no_err=True):
     """Import a texture form .uasset file.
 
     Args:
@@ -146,10 +146,12 @@ def load_utexture(file, name, version, asset=None, invert_normals=False):
             tex_type = 'GRAY'
         else:
             tex_type = 'COLOR'
-        dds = unreal.dds.DDS.asset_to_DDS(utex)
+        dds = unreal.dds.DDS.asset_to_DDS(asset)
         dds.save(temp)
         tex = bpy_util.load_dds(temp, name=name, tex_type=tex_type, invert_normals=invert_normals)
-    except Exception:
+    except Exception as e:
+        if not no_err:
+            raise e
         print(f'Failed to load {file}')
         tex = None
         tex_type = None
@@ -224,28 +226,35 @@ def generate_materials(asset, version, load_textures=False,
 
             types = [texs[n][1] for n in names]
 
+            # Todo: refine codes
             def search_suffix(suffix, tex_type, new_type_suffix, types, names, material_name, need_suffix=False):
+                """Search main textures that shuold be connected to shaders."""
                 if tex_type not in types:
-                    return
+                    return types
                 index = None
                 type_names = [n for n, t in zip(names, types) if t == tex_type]
                 new_id = contain_suffix(material_name, type_names, suffix)
                 if new_id != -1:
-                    index = new_id
+                    # exist "material_name + suffix" in texture names.
+                    index = names.index(type_names[new_id])
                 if index is None:
                     names_has_suf = [n for n in type_names if has_suffix(n, suffix)]
                     if len(names_has_suf) > 0:
+                        # exist textures has the suffix.
                         index = names.index(names_has_suf[0])
                     elif need_suffix:
-                        return
+                        # not found suffix and no need main textures.
+                        return types
                 if index is None:
+                    # not found suffix but need a main texture.
                     index = names.index(type_names[0])
-                if index is not None:
-                    types[index] += new_type_suffix
-                    print(f'{types[index]}: {names[index]}')
-            search_suffix(suffix_list[0], 'COLOR', '_MAIN', types, names, material_name)
-            search_suffix(suffix_list[1], 'NORMAL', '_MAIN', types, names, material_name)
-            search_suffix(suffix_list[2], 'GRAY', '_ALPHA', types, names, material_name, need_suffix=True)
+                types[index] += new_type_suffix
+                print(f'{types[index]}: {names[index]}')
+                return types
+
+            types = search_suffix(suffix_list[0], 'COLOR', '_MAIN', types, names, material_name)
+            types = search_suffix(suffix_list[1], 'NORMAL', '_MAIN', types, names, material_name)
+            types = search_suffix(suffix_list[2], 'GRAY', '_ALPHA', types, names, material_name, need_suffix=True)
 
             height = 300
             for name, tex_type in zip(names, types):
@@ -342,7 +351,7 @@ def load_uasset(file, rename_armature=True, keep_sections=False,
     print(f'Asset type: {asset_type}')
 
     if 'Texture' in asset_type:
-        tex, _ = load_utexture('', '', ue_version, asset=asset, invert_normals=invert_normal_maps)
+        tex, _ = load_utexture('', '', ue_version, asset=asset, invert_normals=invert_normal_maps, no_err=False)
         return tex, asset_type
     if 'Material' in asset_type:
         raise RuntimeError(f'Unsupported asset. ({asset.asset_type})')
