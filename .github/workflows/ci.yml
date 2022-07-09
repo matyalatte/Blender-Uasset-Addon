@@ -1,0 +1,142 @@
+name: CI
+
+on:
+  push:
+    paths: ['**.py']
+
+  workflow_dispatch:
+
+env:
+  LINT_GIST_ID: f1a5f45e1346698f50387619ff6c5bf7
+  LINT_JSON_NAME: blender_uasset_addon_pylint_badge.json
+  TEST_GIST_ID: 0ca588aa8786d78c95ce2acdeb90635c
+  TEST_JSON_NAME: blender_uasset_addon_pytest_badge.json
+   
+jobs:
+  linting:
+    name: Linting
+    runs-on: windows-latest
+    steps:
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.7.x
+          architecture: x64
+          
+      - uses: actions/checkout@v3
+      
+      - name: Install
+        run: pip install flake8 pydocstyle
+        
+      - name: Run flake8
+        uses: suo/flake8-github-action@releases/v1
+        with:
+          checkName: 'flake8'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: Run pydocstyle
+        run: pydocstyle
+
+      - name: Install
+        run: pip install pylint
+        
+      - name: Run pylint
+        run: python for_dev/lint.py --path=addons/blender_uasset_addon --file_name=${{ env.LINT_JSON_NAME }}
+
+      - name: Update pylint badge status
+        if: ${{ github.repository_owner == github.actor && github.ref == 'refs/heads/main' }}
+        uses: exuanbo/actions-deploy-gist@v1
+        with:
+          token: ${{ secrets.GIST_TOKEN }}
+          gist_id: ${{ env.LINT_GIST_ID }}
+          file_path: ${{ env.LINT_JSON_NAME }}
+          file_type: binary
+
+  test:
+    # Most code is from pytest-blender's workflow by mondeja.
+    # https://github.com/mondeja/pytest-blender/blob/master/.github/workflows/ci.yml
+    name: Test
+    runs-on: ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Test in Windows
+          - platform: windows-latest
+            pytest-version: '7.1.2'
+            blender-version: '3.0.1'
+            # Using 3.10 in Windows due to PIP encoding errors:
+            # https://github.com/pypa/pip/issues/11066
+            python-version: '3.10'
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: true
+      - name: Set up Python v${{ matrix.python-version }}
+        uses: actions/setup-python@v3
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Upgrade PIP
+        run: python -m pip install --upgrade pip
+        
+      - name: Cache Blender ${{ matrix.blender-version }}
+        uses: actions/cache@v3
+        id: cache-blender
+        with:
+          path: |
+            blender-*
+            _blender-executable-path.txt
+          key: blender-${{ runner.os }}-${{ matrix.blender-version }}
+
+      # Download Blender on Windows
+      - name: Download Blender ${{ matrix.blender-version }}
+        if: |
+          steps.cache-blender.outputs.cache-hit != 'true'
+        run: |
+          python -m pip install --upgrade blender-downloader
+          python -m pip list
+          blender-downloader ${{ matrix.blender-version }} --extract --remove-compressed --print-blender-executable --quiet | Out-File -FilePath _blender-executable-path.txt
+          get-content _blender-executable-path.txt
+          
+      # Install dependencies on Windows
+      - name: Install dependencies
+        id: install-dependencies-windows
+        run: |
+          python -m pip install pytest-blender pytest pytest-cov
+          $BLENDER_EXECUTABLE = get-content _blender-executable-path.txt
+          echo "BLENDER_EXECUTABLE: $BLENDER_EXECUTABLE"
+          pytest-blender --blender-executable $(Get-Variable -Name BLENDER_EXECUTABLE -ValueOnly)
+          $PYTHON_BLENDER_EXECUTABLE = pytest-blender --blender-executable "$(Get-Variable -Name BLENDER_EXECUTABLE -ValueOnly)"
+          echo "PYTHON_BLENDER_EXECUTABLE: $PYTHON_BLENDER_EXECUTABLE"
+          Invoke-Expression "$PYTHON_BLENDER_EXECUTABLE -m pip install pytest==${{ matrix.pytest-version }} pytest-cov"
+          echo "::set-output name=blender-executable::$BLENDER_EXECUTABLE"
+
+      - name: Unit tests
+        # - Can't get coverage with blender-addons-dirs?
+        #   Seems to need to add current dir to script path in preferences.
+        # - Idk why, but need "cmd.exe /c" for blender.exe.
+        run: |
+          $BLENDER_EXECUTABLE = get-content _blender-executable-path.txt
+          pytest tests\ -svv --blender-executable "$BLENDER_EXECUTABLE" --junitxml=pytest.xml --cov-report=term-missing:skip-covered > pytest-coverage.txt
+          echo pytest-coverage.txt
+      
+      - name: Create Coverage Comment
+        id: coverageComment
+        uses: MishaKav/pytest-coverage-comment@main
+        with:
+            pytest-coverage-path: pytest-coverage.txt
+            junitxml-path: ./pytest.xml
+
+      - name: Create Coverage Badge
+        if: ${{ github.repository_owner == github.actor && github.ref == 'refs/heads/main' }}
+        uses: schneegans/dynamic-badges-action@v1.3.0
+        with:
+            auth: ${{ secrets.GIST_TOKEN }}
+            gistID: ${{ env.TEST_GIST_ID }}
+            filename: ${{ env.TEST_JSON_NAME }}
+            label: Coverage
+            message: ${{ steps.coverageComment.outputs.coverage }}
+            color: ${{ steps.coverageComment.outputs.color }}
+            namedLogo: python
