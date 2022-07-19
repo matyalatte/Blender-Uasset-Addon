@@ -3,6 +3,7 @@ name: CI
 on:
   push:
     paths: ['**.py']
+    tags-ignore: ['v*']
 
   workflow_dispatch:
 

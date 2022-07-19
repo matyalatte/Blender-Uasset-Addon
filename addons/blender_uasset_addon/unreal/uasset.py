@@ -222,7 +222,7 @@ class UassetExport(c.LittleEndianStructure):
     @staticmethod
     def name_exports(exports, imports, name_list):
         """Convert ids to strings."""
-        asset_type = None
+        asset_type, asset_name = None, None
         for export in exports:
             export_import = imports[-export.import_id - 1]
             export.import_name = export_import.name
@@ -230,10 +230,11 @@ class UassetExport(c.LittleEndianStructure):
             export.class_name = export_import.class_name
             if export.class_name in UassetExport.MAIN_EXPORTS:
                 asset_type = export.class_name
+                asset_name = export.name
                 export.ignore = False
             else:
                 export.ignore = True
-        return asset_type
+        return asset_type, asset_name
 
     def read_uexp(self, f):
         """Read .uexp and store export data as it is."""
@@ -308,26 +309,29 @@ class Uasset:
                 print('Import')
                 list(map(lambda x, i: x.print(str(i)), self.imports, range(len(self.imports))))
 
-            paths = [n for n in self.name_list if n[0] == '/']
-            paths = [p for p in paths if p.split('/')[-1] in self.file]
-            if len(paths) != 1:
-                paths = [p for p in paths if self.file in p.split('/')[-1]]
-                if len(paths) != 1:
-                    raise RuntimeError('Failed to get asset path.')
-            self.asset_path = paths[0]
-
             # read exports
             io.check(self.header.export_offset, f.tell(), f)
             self.exports = [UassetExport.read(f, self.version) for i in range(self.header.export_count)]
-            self.asset_type = UassetExport.name_exports(self.exports, self.imports, self.name_list)
-            if self.asset_type is None:
-                raise RuntimeError('Unsupported asset')
-            if asset_type not in self.asset_type:
-                raise RuntimeError(f'Not {asset_type}.')
+            self.asset_type, asset_name = UassetExport.name_exports(self.exports, self.imports, self.name_list)
 
             if verbose:
                 print('Export')
                 list(map(lambda x: x.print(), self.exports))
+
+            if self.asset_type is None:
+                raise RuntimeError(f'Unsupported asset ({self.asset_type})')
+            if asset_type not in self.asset_type:
+                raise RuntimeError(f'Not {asset_type}. ({self.asset_type})')
+
+            import_names = [imp.name for imp in self.imports]
+            paths = [n for n in self.name_list if n[0] == '/' and n not in import_names]
+            paths = [p for p in paths if p.split('/')[-1] in asset_name]
+            if len(paths) != 1:
+                paths = [p for p in paths if asset_name in p.split('/')[-1]]
+                if len(paths) != 1:
+                    raise RuntimeError('Failed to get asset path.')
+            self.asset_path = paths[0]
+
             io.check(self.header.end_to_export, f.tell())
 
             io.read_null_array(f, self.header.padding_count)

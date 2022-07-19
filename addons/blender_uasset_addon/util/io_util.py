@@ -327,6 +327,14 @@ def write_null_array(f, length):
     write_uint32_array(f, [0] * length)
 
 
+def write_struct_array(file, ary, with_length=False):
+    """Write an array."""
+    if with_length:
+        write_uint32(file, len(ary))
+    for a in ary:
+        file.write(a)
+
+
 def compare(file1, file2, no_err=False):
     """Check if 2 files have the same binary data."""
     print(f'Comparing {file1} and {file2}...')
