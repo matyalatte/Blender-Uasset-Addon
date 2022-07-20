@@ -1,4 +1,5 @@
-v0.1.7
+v0.1.6-hotfix
+- Fixed a bug y axis will be inverted for vertex normals.
 - Fixed a bug it can't get asset paths for some assets.
 
 v0.1.6

@@ -42,6 +42,14 @@ def move_to_object_mode():
         bpy.ops.object.mode_set(mode='OBJECT')
 
 
+def move_to_pose_mode(armature):
+    """Activate an armature and move to the pose mode."""
+    deselect_all()
+    armature.select_set(True)
+    bpy.context.view_layer.objects.active = armature
+    bpy.ops.object.mode_set(mode='POSE')
+
+
 def deselect_all():
     """Deselect all objects."""
     bpy.ops.object.select_all(action='DESELECT')

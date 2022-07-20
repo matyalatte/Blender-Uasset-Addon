@@ -207,24 +207,26 @@ class BoneTrack:
         """Get binary size for valiable tracks."""
         return sum(bits for bits in self.bit_rates) * 3
 
-    def set_track_data(self, track_data_bin, track_data_id, num_samples):
+    def set_track_data(self, track_data_bin_, track_data_id):
         """Set track data."""
-        track_data_size = self.get_track_data_size() * num_samples
-        track_data_bin = track_data_bin[track_data_id: track_data_id + track_data_size]
+        num_samples = len(track_data_bin_)
+        frame_size = sum(bits for bits in self.bit_rates)
+        track_data_size = frame_size * 3
+        track_data_bin = [b[track_data_id: track_data_id + track_data_size] for b in track_data_bin_]
         track_data = []
         offset = 0
         for bit_rate, range_data in zip(self.bit_rates, self.range_list):
-            bin_size = bit_rate * 3 * num_samples
-            binary = track_data_bin[offset: offset + bin_size]
-            binary = [binary[i * bit_rate: (i + 1) * bit_rate] for i in range(3 * num_samples)]
+            frame_data_bin = ''.join([b[offset: offset + bit_rate * 3] for b in track_data_bin])
+            binary = [frame_data_bin[i * bit_rate: (i + 1) * bit_rate] for i in range(3 * num_samples)]
+            print(binary)
             max_int = (1 << bit_rate) - 1
             ints = [int(b, 2) for b in binary]
             floats = [i / max_int for i in ints]
+            # print(max(floats))
             xyzs = [floats[i * 3: (i + 1) * 3] for i in range(num_samples)]
             xyzs = [range_data.unpack(xyz) for xyz in xyzs]
             track_data.append(xyzs)
-            offset += bin_size
-            range_data.print()
+            offset += bit_rate * 3
         self.track_data = track_data
         return track_data_size
 
@@ -335,16 +337,17 @@ class CompressedClip:
             range_count += track.set_ranges(range_data, bit_rates, range_count)
             track_data_size += track.get_track_data_size()
 
-        track_data_size = math.ceil(track_data_size * clip_header.num_samples / 32)
-        track_data = io.read_uint32_array(f, length=track_data_size)
+        track_data = io.read_uint32_array(f, length=math.ceil(track_data_size * clip_header.num_samples / 32))
 
-        track_data_bin = ''
+        binary = ''
         for i in track_data:
-            track_data_bin += format(i, "b").zfill(32)
+            binary += format(i, "b").zfill(32)
 
         track_data_id = 0
+        num_samples = clip_header.num_samples
+        track_data_bin = [binary[i * track_data_size: (i + 1) * track_data_size] for i in range(num_samples)]
         for track in bone_tracks:
-            track_data_id += track.set_track_data(track_data_bin, track_data_id, clip_header.num_samples)
+            track_data_id += track.set_track_data(track_data_bin, track_data_id)
 
         return CompressedClip(offset, size, data_hash, clip_header, segment_headers,
                               default_tracks_bitset, constant_tracks_bitset,

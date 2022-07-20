@@ -4,6 +4,7 @@ Notes:
     It can't parse animation data yet.
     It'll just get frame count, bone ids, and compressed binary.
 """
+import os
 from ..util import io_util as io
 from .acl import CompressedClip
 
@@ -230,3 +231,19 @@ class AnimSequence:
     def print(self):
         """Print meta data."""
         self.compressed_data.print(['bone id: ' + str(i) for i in self.bone_ids])
+
+    def get_skeleton_path(self):
+        """Get path to skeleton asset."""
+        skeleton_path = [imp.parent_name for imp in self.uasset.imports if imp.class_name == 'Skeleton'][0]
+
+        def get_actual_path(target_asset_path, source_asset_path, source_actual_path):
+            source_asset_dir = os.path.dirname(source_asset_path)
+            rel_path = os.path.relpath(os.path.dirname(target_asset_path), start=source_asset_dir)
+            base = os.path.basename(target_asset_path) + '.uasset'
+            return os.path.normpath(os.path.join(os.path.dirname(source_actual_path), rel_path, base))
+
+        return get_actual_path(skeleton_path, self.uasset.asset_path, self.uasset.actual_path)
+
+    def get_animation_path(self):
+        """Get path to animation asset."""
+        return self.uasset.actual_path
