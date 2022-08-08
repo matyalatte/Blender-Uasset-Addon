@@ -2,6 +2,8 @@ v0.1.7
 - Added support for ACL v1.1.0
 - Added verbose option
 - Added "actual path" (the actual file path to .uasset) to custom properties
+- Fixed an error when multiple bones have the same name
+- Fixed an error when mateirals have no references to material assets
 
 v0.1.6-hotfix
 - Fixed a bug y axis will be inverted for vertex normals.

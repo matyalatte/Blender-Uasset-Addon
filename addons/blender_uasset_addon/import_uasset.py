@@ -619,6 +619,7 @@ class GeneralOptions(PropertyGroup):
         default=False,
     )
 
+
 class ImportOptions(PropertyGroup):
     """Properties for import options."""
     rename_armature: BoolProperty(

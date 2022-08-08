@@ -46,8 +46,12 @@ class Mesh:
             json.dump(logs, f, indent=4)
 
     @staticmethod
-    def seek_materials(f, imports, seek_import=False):
+    def seek_materials(f, imports, material_size):
         """Read binary data until find material import ids."""
+        has_material = False
+        for imp in imports:
+            if imp.material:
+                has_material = True
         # offset = f.tell()
         buf = f.read(3)
         size = io.get_size(f)
@@ -61,24 +65,38 @@ class Mesh:
                     raise RuntimeError('Material properties not found. This is an unexpected error.')
             f.seek(-4, 1)
             import_id = -io.read_int32(f) - 1
-            if import_id < len(imports) and (imports[import_id].material or seek_import):
+            if import_id < len(imports) and imports[import_id].material:
+                break
+            if import_id == 0 and not has_material:
                 break
             # print(imports[import_id].name)
-            buf = f.read(3)
+            buf = b''.join([buf[1:], f.read(1)])
+        if has_material:
+            f.seek(-8, 1)
+        else:
+            f.seek(-20, 1)
+            num = 0
+            while io.read_uint32(f) != num or num == 0:
+                f.seek(-4 - material_size, 1)
+                num += 1
+            f.seek(-4, 1)
         return
 
     @staticmethod
     def read_materials(f, version, imports, name_list, skeletal=False, verbose=False):
         """Seeek and read material data."""
         offset = f.tell()
-        Mesh.seek_materials(f, imports)
-        f.seek(-8, 1)
+        material_size = Material.get_size(version, skeletal)
+        Mesh.seek_materials(f, imports, material_size)
         unk_size = f.tell() - offset
         f.seek(offset)
         unk = f.read(unk_size)
 
         material_offset = f.tell()
         materials = [Material.read(f, version, skeletal=skeletal) for i in range(io.read_uint32(f))]
+        if len(materials) == 0:
+            msg = 'Material slot is empty. Be sure materials are assigned correctly in UE4.'
+            raise RuntimeError(msg)
         Material.update_material_data(materials, name_list, imports)
         if verbose:
             print(f'Materials (offset: {material_offset})')

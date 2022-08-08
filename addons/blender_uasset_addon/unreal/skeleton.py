@@ -91,7 +91,10 @@ class Bone:
     def name_bones(bones, name_list):
         """Convert name ids to bone names."""
         def name(bone):
-            bone.name = name_list[bone.name_id]
+            bone_name = name_list[bone.name_id]
+            if bone.instance != 0:
+                bone_name += '.' + str(bone.instance).zfill(3)
+            bone.name = bone_name
         list(map(name, bones))
         for b in bones:
             parent_id = b.parent
@@ -149,19 +152,19 @@ class Skeleton:
         self.offset = f.tell()
         self.version = version
         self.bones = io.read_array(f, Bone.read)
+
         # read position
         bone_num = io.read_uint32(f)
         io.check(bone_num, len(self.bones), f)
         for bone in self.bones:
             bone.read_pos(f, version)
 
+        # read NameToIndexMap
         io.read_const_uint32(f, len(self.bones))
         for bone, i in zip(self.bones, range(len(self.bones))):
             io.read_const_uint32(f, bone.name_id)
-            io.read_null(f)
+            io.read_const_uint32(f, bone.instance)
             io.read_const_uint32(f, i)
-
-        # self.name_to_index_map=read_array(f, Bone.read)
 
     @staticmethod
     def read(f, version):
@@ -178,7 +181,7 @@ class Skeleton:
         io.write_uint32(f, len(skeleton.bones))
         for bone, i in zip(skeleton.bones, range(len(skeleton.bones))):
             io.write_uint32(f, bone.name_id)
-            io.write_null(f)
+            io.write_uint32(f, bone.instance)
             io.write_uint32(f, i)
 
     def name_bones(self, name_list):

@@ -41,17 +41,6 @@ class Uexp:
 
         if verbose:
             print(f'Asset type: {self.asset_type}')
-
-        # check materials
-        if self.asset_type in ['SkeletalMesh', 'StaticMesh']:
-            has_material = False
-            for imp in self.imports:
-                if imp.material:
-                    has_material = True
-            if not has_material:
-                msg = 'Material slot is empty. Be sure materials are assigned correctly in UE4.'
-                raise RuntimeError(msg)
-
         # print('Loading '+file+'...', ignore_verbose=True)
         # open .uexp
         self.mesh = None

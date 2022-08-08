@@ -33,6 +33,11 @@ class Material:
         io.write_uint32(f, material.slot_name_id)
         f.write(material.unk)
 
+    @staticmethod
+    def get_size(version, skeletal):
+        """Get binary size of a material."""
+        return 36 + 4 * (skeletal and (version >= '4.27'))
+
     def copy(self):
         """Copy itself."""
         return Material(self.import_id, self.slot_name_id, self.unk)
@@ -42,10 +47,15 @@ class Material:
         """Get meta data from .uasset files."""
         for material in materials:
             material.slot_name = name_list[material.slot_name_id]
-            material_import = imports[-material.import_id - 1]
-            material.import_name = material_import.name
-            material.class_name = material_import.class_name
-            material.asset_path = material_import.parent_name
+            if material.import_id != 0:
+                material_import = imports[-material.import_id - 1]
+                material.import_name = material_import.name
+                material.class_name = material_import.class_name
+                material.asset_path = material_import.parent_name
+            else:
+                material.import_name = material.slot_name
+                material.class_name = 'None'
+                material.asset_path = 'None'
 
     def print(self, padding=2):
         """Print meta data."""
@@ -125,6 +135,8 @@ class Material:
 
     def load_asset(self, main_file_path, main_asset_path, version):
         """Load material assets and store texture paths."""
+        if self.asset_path == 'None':
+            return self.asset_path
 
         def get_actual_path(target_asset_path):
             main_asset_dir = os.path.dirname(main_asset_path)
