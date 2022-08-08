@@ -182,7 +182,7 @@ def generate_materials(asset, version, load_textures=False,
     material_names = [m.import_name for m in asset.uexp.mesh.materials]
     color_gen = bpy_util.ColorGenerator()
     materials = [bpy_util.add_material(name, color_gen) for name in material_names]
-    texture_num = sum([len(m.texture_asset_paths) for m in asset.uexp.mesh.materials])
+    texture_num = sum(len(m.texture_asset_paths) for m in asset.uexp.mesh.materials)
     progress = 1
     texs = {}
 
@@ -438,6 +438,15 @@ def load_animation(anim, armature, ue_version, rescale=1.0, ignore_missing_bones
     num_samples = compressed_clip.clip_header.num_samples
     print(f'frame count: {num_samples}')
 
+    # Check required bones
+    if not ignore_missing_bones:
+        for bone_id in bone_ids:
+            if bone_id >= len(bones):
+                raise RuntimeError(f'Bone index out of range. (anim bone id: {bone_id}, num bones: {len(bones)})')
+            bone = bones[bone_id]
+            if bone.name not in pose_bones:
+                raise RuntimeError(f'A required bone not found in the selected armature. ({bone.name})')
+
     # Check fps
     scene_fps = bpy_util.get_fps()
     anim_fps = compressed_clip.clip_header.sample_rate
@@ -455,12 +464,8 @@ def load_animation(anim, armature, ue_version, rescale=1.0, ignore_missing_bones
         start_frame = scene.frame_start
     else:
         start_frame = 1
-    # scene.frame_start = min(scene.frame_start, start_frame)
-    # scene.frame_end = max(scene.frame_end, scene.frame_start + num_samples - 1)
 
-    # Intert key frames
-    print('Inserting key frames...')
-    rescale_factor = get_rescale_factor(rescale)
+    # Get action
     anim_name = anim.get_animation_name()
     if import_as_nla:
         action = bpy.data.actions.new(name=anim_name)
@@ -476,9 +481,11 @@ def load_animation(anim, armature, ue_version, rescale=1.0, ignore_missing_bones
             armature.animation_data.action = action
         else:
             action = armature.animation_data.action
+
+    # Intert key frames to the action
+    print('Inserting key frames...')
+    rescale_factor = get_rescale_factor(rescale)
     for track, bone_id in zip(compressed_clip.bone_tracks, bone_ids):
-        if bone_id >= len(bones):
-            raise RuntimeError(f'Bone index out of range. (anim bone id: {bone_id}, num bones: {len(bones)})')
         bone = bones[bone_id]
         if bone_id == 0 and ignore_root_bone:
             print(f'Tracks for {bone.name} have been ignored.')
@@ -487,7 +494,6 @@ def load_animation(anim, armature, ue_version, rescale=1.0, ignore_missing_bones
             if ignore_missing_bones:
                 print(f'Found a missing bone. Tracks for {bone.name} have been ignored.')
                 continue
-            # raise RuntimeError(f'A required bone not found in the selected armature. ({bone.name})')
         pb = pose_bones[bone.name]
         load_acl_bone_track(pb, bone, track, action, start_frame=start_frame, interval=interval,
                             rescale_factor=rescale_factor, rotation_format=rotation_format)
@@ -502,14 +508,14 @@ def load_uasset(file, rename_armature=True, keep_sections=False,
                 suffix_list=(['_C', '_D'], ['_N'], ['_A']),
                 ignore_missing_bones=False, start_frame_option='DEFAULT',
                 rotation_format='QUATERNION', ignore_root_bone=False,
-                import_as_nla=False):
+                import_as_nla=False, verbose=False):
     """Import assets form .uasset file.
 
     Notes:
         See property groups for the description of arguments
     """
     # load .uasset
-    asset = unreal.uasset.Uasset(file, version=ue_version)
+    asset = unreal.uasset.Uasset(file, version=ue_version, verbose=verbose)
     asset_type = asset.asset_type
     print(f'Asset type: {asset_type}')
 
@@ -604,6 +610,14 @@ class GeneralOptions(PropertyGroup):
         default='',
     )
 
+    verbose: BoolProperty(
+        name='Verbose',
+        description=(
+            "Show the parsing result in the console.\n"
+            'Note that "print()" is a very slow function.'
+        ),
+        default=False,
+    )
 
 class ImportOptions(PropertyGroup):
     """Properties for import options."""
@@ -824,7 +838,7 @@ class ImportUasset(Operator, ImportHelper):
         ]
         labels = ['ui_general', 'ui_mesh', 'ui_texture', 'ui_armature', 'ui_animation', 'ui_scale']
         props = [
-            ['ue_version'],
+            ['ue_version', 'verbose'],
             ['load_textures', 'keep_sections', 'smoothing'],
             ['invert_normal_maps', 'suffix_for_color', 'suffix_for_normal', 'suffix_for_alpha'],
             ['rotate_bones', 'minimal_bone_length', 'normalize_bones',
@@ -894,7 +908,8 @@ class ImportUasset(Operator, ImportHelper):
                 ignore_root_bone=import_options.ignore_root_bone,
                 start_frame_option=import_options.start_frame_option,
                 rotation_format=import_options.rotation_format,
-                import_as_nla=import_options.import_as_nla
+                import_as_nla=import_options.import_as_nla,
+                verbose=general_options.verbose
             )
 
             context.scene.general_options.source_file = file

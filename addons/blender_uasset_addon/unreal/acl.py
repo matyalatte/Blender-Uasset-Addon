@@ -428,6 +428,6 @@ class CompressedClip:
         self.clip_header.print()
         for seg in self.segment_headers:
             seg.print()
-        # print('  Track Settings')
-        # for track, name in zip(self.bone_tracks, bone_names):
-        #    track.print(name)
+        print('  Track Settings')
+        for track, name in zip(self.bone_tracks, bone_names):
+            track.print(name)
