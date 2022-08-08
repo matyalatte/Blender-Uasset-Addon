@@ -334,7 +334,8 @@ def generate_mesh(amt, asset, materials, material_names, rescale=1.0,
     return sections[0]
 
 
-def load_acl_track(pose_bone, ue_bone, data_path, values, start_frame=0, rescale_factor=1.0):
+def load_acl_track(pose_bone, ue_bone, data_path, values, action, start_frame=0, interval=1,
+                   rescale_factor=1.0, rotation_format='QUATERNION'):
     """Load acl track for an element."""
     def vec_sub(a, b):
         return [a_ - b_ for a_, b_ in zip(a, b)]
@@ -342,40 +343,47 @@ def load_acl_track(pose_bone, ue_bone, data_path, values, start_frame=0, rescale
     def vec_div(a, b):
         return [a_ / b_ for a_, b_ in zip(a, b)]
 
+    path_from_pb = pose_bone.path_from_id(data_path)
+    fcurves = bpy_util.get_fcurves(action, path_from_pb, 3 + (rotation_format == 'QUATERNION'))
+
     frame = start_frame
     for val in values:
-        bpy.context.scene.frame_set(frame)
-        if data_path == 'rotation_quaternion':
+        if 'rotation' in data_path:
             val[1] = - val[1]
             norm = sum(x*x for x in val)
             if norm > 1:
-                print(norm)
                 quat = [0] + val
-                # quat = val + [0]
             else:
                 quat = [- np.sqrt(1 - norm)] + val
-                # quat = val + [-np.sqrt(1 - norm)]
             anim_quat = Quaternion(quat)
             quat = ue_bone.rot
-            bone_quat = Quaternion([-quat[3], quat[0], -quat[1], quat[2]])
-            quat = bone_quat.rotation_difference(anim_quat)
-            # quat = anim_quat.rotation_difference(bone_quat)
-            pose_bone.rotation_quaternion = list(quat)
+            default_quat = Quaternion([-quat[3], quat[0], -quat[1], quat[2]])
+            quat_diff = default_quat.rotation_difference(anim_quat)
+            if rotation_format == 'QUATERNION':
+                new_val = quat_diff
+            else:
+                new_val = quat_diff.to_euler()
         elif data_path == 'location':
-            val = vec_sub(val, ue_bone.trans)
-            val[1] = - val[1]
-            val = [v * rescale_factor for v in val]
-            pose_bone.location = val
+            trans_diff = vec_sub(val, ue_bone.trans)
+            trans_diff = Vector([trans_diff[0], -trans_diff[1], trans_diff[2]])
+            trans_diff *= rescale_factor
+            quat = ue_bone.rot
+            default_quat = Quaternion([-quat[3], quat[0], -quat[1], quat[2]])
+            rotated_trans_diff = default_quat.conjugated() @ trans_diff
+            new_val = rotated_trans_diff
         elif data_path == 'scale':
-            val = vec_div(val, ue_bone.scale)
-            pose_bone.scale = val
-        pose_bone.keyframe_insert(data_path=data_path, group=pose_bone.name)
-        frame += 1
+            scale_diff = vec_div(val, ue_bone.scale)
+            new_val = scale_diff
+        bpy_util.set_vector_to_fcurves(fcurves, new_val, frame)
+        frame += interval
 
 
-def load_acl_bone_track(pose_bone, ue_bone, track, start_frame=0, rescale_factor=1.0):
+def load_acl_bone_track(pose_bone, ue_bone, track, action, start_frame=0, interval=1,
+                        rescale_factor=1.0, rotation_format='QUATERNION'):
     """Load acl track for a bone."""
     data_paths = ['rotation_quaternion', 'location', 'scale']
+    if rotation_format != 'QUATERNION':
+        data_paths[0] = 'rotation_euler'
     constant_id = 0
     track_data_id = 0
     for use_default, use_constant, data_path in zip(track.use_default, track.use_constant, data_paths):
@@ -387,46 +395,102 @@ def load_acl_bone_track(pose_bone, ue_bone, track, start_frame=0, rescale_factor
         else:
             frames = track.track_data[track_data_id]
             track_data_id += 1
-        load_acl_track(pose_bone, ue_bone, data_path, frames, start_frame=start_frame, rescale_factor=rescale_factor)
+        load_acl_track(pose_bone, ue_bone, data_path, frames, action, start_frame=start_frame, interval=interval,
+                       rescale_factor=rescale_factor, rotation_format=rotation_format)
 
 
-def load_animation(anim, armature, ue_version, rescale=1.0, ignore_missing_bones=False):
+def load_animation(anim, armature, ue_version, rescale=1.0, ignore_missing_bones=False,
+                   start_frame_option='DEFAULT', rotation_format='QUATERNION',
+                   ignore_root_bone=False, import_as_nla=False):
     """Import animation data."""
+    # Get skeleton asset
     anim_path = anim.get_animation_path()
     skel_path = anim.get_skeleton_path()
-    if not os.path.exists(skel_path):
-        print(f'Skeleton asset NOT found by asset path. ({skel_path})')
-        skel_path = os.path.join(os.path.dirname(anim_path), os.path.basename(skel_path))
-    else:
-        print(f'Skeleton asset NOT found by asset path. ({skel_path})')
-    if not os.path.exists(skel_path):
-        print(f'Skeleton asset NOT found in the same directory as animation asset. ({skel_path})')
-        raise RuntimeError('Skeleton asset for animation not found.')
-    else:
-        print(f'Skeleton asset found in the same directory as animation asset. ({skel_path})')
+    skel_basename = os.path.basename(skel_path)
+    skel_search_paths = [skel_path, anim_path]
+    if 'actual_path' in armature:
+        skel_search_paths.append(armature['actual_path'])
+    skel_path = None
+    for path in skel_search_paths:
+        path = os.path.join(os.path.dirname(path), skel_basename)
+        if os.path.exists(path):
+            skel_path = path
+            print(f'Skeleton asset found ({path})')
+            break
+        print(f'Skeleton asset NOT found ({path})')
+    if skel_path is None:
+        raise RuntimeError('Skeleton asset not found.')
     bones = unreal.uasset.Uasset(skel_path, version=ue_version).uexp.skeleton.bones
+
     if ue_version != 'ff7r':
         raise RuntimeError(f'Animations are unsupported for this verison. ({ue_version})')
 
+    # Get pose bones
     bpy_util.move_to_object_mode()
     bpy_util.move_to_pose_mode(armature)
     pose_bones = armature.pose.bones
     for pb in pose_bones:
-        pb.rotation_mode = 'QUATERNION'
+        pb.rotation_mode = rotation_format
 
+    # Get animation data
     bone_ids = anim.bone_ids
     compressed_clip = anim.compressed_data.compressed_clip
-    start_frame = bpy.context.scene.frame_current
-    rescale_factor = get_rescale_factor(rescale)
+    num_samples = compressed_clip.clip_header.num_samples
+    print(f'frame count: {num_samples}')
 
+    # Check fps
+    scene_fps = bpy_util.get_fps()
+    anim_fps = compressed_clip.clip_header.sample_rate
+    interval = max(scene_fps // anim_fps, 1)
+    if scene_fps % anim_fps != 0:
+        new_fps = interval * anim_fps
+        print(f'Changed FPS from {scene_fps} to {new_fps}.')
+        bpy_util.set_fps(new_fps)
+
+    # Set frame info
+    scene = bpy.context.scene
+    if start_frame_option == 'CURRENT':
+        start_frame = scene.frame_current
+    elif start_frame_option == 'DEFAULT':
+        start_frame = scene.frame_start
+    else:
+        start_frame = 1
+    # scene.frame_start = min(scene.frame_start, start_frame)
+    # scene.frame_end = max(scene.frame_end, scene.frame_start + num_samples - 1)
+
+    # Intert key frames
+    print('Inserting key frames...')
+    rescale_factor = get_rescale_factor(rescale)
+    anim_name = anim.get_animation_name()
+    if import_as_nla:
+        action = bpy.data.actions.new(name=anim_name)
+        nla_track = bpy_util.add_nla_track(armature, name=anim_name)
+        end_frame = max((num_samples - 1) * interval, 1)
+        _ = bpy_util.add_nla_strip(nla_track, anim_name, start_frame, action, end=end_frame)
+        start_frame = 0
+    else:
+        if armature.animation_data is None:
+            armature.animation_data_create()
+        if armature.animation_data.action is None:
+            action = bpy.data.actions.new(name=armature.name)
+            armature.animation_data.action = action
+        else:
+            action = armature.animation_data.action
     for track, bone_id in zip(compressed_clip.bone_tracks, bone_ids):
         if bone_id >= len(bones):
             raise RuntimeError(f'Bone index out of range. (anim bone id: {bone_id}, num bones: {len(bones)})')
         bone = bones[bone_id]
-        if (not ignore_missing_bones) and (bone.name not in pose_bones):
-            raise RuntimeError(f'A required bone not found in the selected armature. ({bone.name})')
+        if bone_id == 0 and ignore_root_bone:
+            print(f'Tracks for {bone.name} have been ignored.')
+            continue
+        if bone.name not in pose_bones:
+            if ignore_missing_bones:
+                print(f'Found a missing bone. Tracks for {bone.name} have been ignored.')
+                continue
+            # raise RuntimeError(f'A required bone not found in the selected armature. ({bone.name})')
         pb = pose_bones[bone.name]
-        load_acl_bone_track(pb, bone, track, start_frame=start_frame, rescale_factor=rescale_factor)
+        load_acl_bone_track(pb, bone, track, action, start_frame=start_frame, interval=interval,
+                            rescale_factor=rescale_factor, rotation_format=rotation_format)
 
 
 def load_uasset(file, rename_armature=True, keep_sections=False,
@@ -435,7 +499,10 @@ def load_uasset(file, rename_armature=True, keep_sections=False,
                 smoothing=True, only_skeleton=False,
                 show_axes=False, bone_display_type='OCTAHEDRAL', show_in_front=True,
                 load_textures=False, invert_normal_maps=False, ue_version='4.18',
-                suffix_list=(['_C', '_D'], ['_N'], ['_A']), ignore_missing_bones=False):
+                suffix_list=(['_C', '_D'], ['_N'], ['_A']),
+                ignore_missing_bones=False, start_frame_option='DEFAULT',
+                rotation_format='QUATERNION', ignore_root_bone=False,
+                import_as_nla=False):
     """Import assets form .uasset file.
 
     Notes:
@@ -452,14 +519,16 @@ def load_uasset(file, rename_armature=True, keep_sections=False,
     if 'Material' in asset_type:
         raise RuntimeError(f'Unsupported asset. ({asset.asset_type})')
     if 'AnimSequence' in asset_type:
-        raise RuntimeError('Sorry! animations are unsupported yet.')
         anim = asset.uexp.anim
         selected = bpy.context.selected_objects
         amt_list = [obj for obj in selected if obj.type == 'ARMATURE']
         if len(amt_list) != 1:
             raise RuntimeError('Select an armature to import an animation.')
         armature = amt_list[0]
-        load_animation(anim, armature, ue_version, rescale=rescale, ignore_missing_bones=ignore_missing_bones)
+        load_animation(anim, armature, ue_version, rescale=rescale,
+                       ignore_missing_bones=ignore_missing_bones, start_frame_option=start_frame_option,
+                       rotation_format=rotation_format, ignore_root_bone=ignore_root_bone,
+                       import_as_nla=import_as_nla)
         return armature, asset_type
 
     if asset_type not in ['SkeletalMesh', 'Skeleton', 'StaticMesh']:
@@ -501,6 +570,7 @@ def load_uasset(file, rename_armature=True, keep_sections=False,
         root = amt
     root['class'] = asset.asset_type
     root['asset_path'] = asset.asset_path
+    root['actual_path'] = asset.actual_path
     return root, asset.asset_type
 
 
@@ -681,11 +751,44 @@ class ImportOptions(PropertyGroup):
         default=1, min=0.01, max=100, step=0.01, precision=2,
     )
 
+    start_frame_option: EnumProperty(
+        name='Start Frame',
+        items=(('DEFAULT', 'Default', 'Use the start frame of the scene'),
+               ('CURRENT', 'Current', 'Use the current frame'),
+               ('FIRST', '1', 'Use 1 for the start frame')),
+        description='Start frame for the animation clip',
+        default='DEFAULT'
+    )
+
+    rotation_format: EnumProperty(
+        name='Rotation Format',
+        items=(('QUATERNION', 'Quaternion',
+                'UE Standard.\nNo Gimbal Lock but Blender does NOT support slerp interpolation for key frames'),
+               ('XYZ', 'Euler (XYZ)', 'Blender Standard.\nGood interpolation but prone to Gimbal Lock')),
+        description='Rotation format for pose bones',
+        default='QUATERNION'
+    )
+
     ignore_missing_bones: BoolProperty(
         name='Ignore Missing Bones',
         description=(
-            "When off, it will raise an error if the selected armature is missing animated bones"
+            "When off, it will raise an error if the selected armature does NOT have all animated bones"
         ),
+        default=True,
+    )
+
+    ignore_root_bone: BoolProperty(
+        name='Ignore Root Bone',
+        description=(
+            "Ignore root bone tracks.\n"
+            "It might be able to make the animation cyclic"
+        ),
+        default=False,
+    )
+
+    import_as_nla: BoolProperty(
+        name='Import as NLA',
+        description="Import the animation as an NLA track",
         default=False,
     )
 
@@ -726,7 +829,7 @@ class ImportUasset(Operator, ImportHelper):
             ['invert_normal_maps', 'suffix_for_color', 'suffix_for_normal', 'suffix_for_alpha'],
             ['rotate_bones', 'minimal_bone_length', 'normalize_bones',
              'rename_armature', 'only_skeleton', 'show_axes', 'bone_display_type', 'show_in_front'],
-            ['ignore_missing_bones'],
+            ['start_frame_option', 'rotation_format', 'import_as_nla', 'ignore_root_bone', 'ignore_missing_bones'],
             ['unit_scale', 'rescale']
         ]
 
@@ -787,7 +890,11 @@ class ImportUasset(Operator, ImportHelper):
                 invert_normal_maps=import_options.invert_normal_maps,
                 ue_version=general_options.ue_version,
                 suffix_list=suffix_list,
-                ignore_missing_bones=import_options.ignore_missing_bones
+                ignore_missing_bones=import_options.ignore_missing_bones,
+                ignore_root_bone=import_options.ignore_root_bone,
+                start_frame_option=import_options.start_frame_option,
+                rotation_format=import_options.rotation_format,
+                import_as_nla=import_options.import_as_nla
             )
 
             context.scene.general_options.source_file = file

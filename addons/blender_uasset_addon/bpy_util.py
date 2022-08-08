@@ -32,6 +32,54 @@ def update_window():
     bpy.ops.wm.redraw_timer(type='DRAW_WIN_SWAP', iterations=1)
 
 
+def get_fps():
+    """Get fps for animations."""
+    render = bpy.context.scene.render
+    return render.fps / render.fps_base
+
+
+def set_fps(fps):
+    """Set fps for animations."""
+    render = bpy.context.scene.render
+    render.fps = fps * render.fps_base
+
+
+def add_nla_track(amt, name='NLA_track'):
+    """Add an NLA track to an armature."""
+    if not amt.animation_data:
+        amt.animation_data_create()
+    nla_tracks = amt.animation_data.nla_tracks
+    new_track = nla_tracks.new()
+    new_track.name = name
+    nla_tracks.active = new_track
+    return new_track
+
+
+def add_nla_strip(nla_track, name, start, action, end=None):
+    """Add an NLA strip to an NLA track."""
+    strip = nla_track.strips.new(name, start, action)
+    if end is not None:
+        strip.action_frame_end = end
+    return strip
+
+
+def get_fcurves(action, data_path, num_indices):
+    """Add fcurves to an action."""
+    def get_fc(action, data_path, index):
+        curve = action.fcurves.find(data_path, index=index)
+        if curve is None:
+            curve = action.fcurves.new(data_path, index=index)
+        return curve
+    fcurves = [get_fc(action, data_path, index=i) for i in range(num_indices)]
+    return fcurves
+
+
+def set_vector_to_fcurves(fcurves, vec, frame):
+    """Set a vector to fcurves."""
+    for fc, x in zip(fcurves, vec):
+        fc.keyframe_points.insert(frame, x)
+
+
 def move_to_object_mode():
     """Activate a object and move to the object mode."""
     if bpy.context.mode == 'OBJECT':

@@ -115,6 +115,7 @@ class CompressedAnimData:
         offset = f.tell()
         if version == 'ff7r':
             compressed_clip = CompressedClip.read(f)
+
             rest = f.read(size - (f.tell() - offset))
             return CompressedAnimData(size, compressed_clip, rest, version)
 
@@ -157,7 +158,7 @@ class AnimSequence:
             self.print()
             # Todo: Remove this for released version
             # with open(f'{uasset.file}.bin', 'wb') as f:
-            #     self.compressed_data.write(f)
+            #    self.compressed_data.write(f)
 
     @staticmethod
     def read(f, uasset, verbose=False):
@@ -247,3 +248,7 @@ class AnimSequence:
     def get_animation_path(self):
         """Get path to animation asset."""
         return self.uasset.actual_path
+
+    def get_animation_name(self):
+        """Get animation name."""
+        return self.uasset.asset_name

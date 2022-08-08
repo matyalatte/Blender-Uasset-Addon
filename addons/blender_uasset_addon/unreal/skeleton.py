@@ -97,9 +97,12 @@ class Bone:
             parent_id = b.parent
             if parent_id != -1:
                 parent_name = bones[parent_id].name
+                parent_obj = bones[parent_id]
             else:
                 parent_name = 'None'
+                parent_obj = None
             b.parent_name = parent_name
+            b.parent_obj = parent_obj
 
     @staticmethod
     def get_bone_id(bones, bone_name):

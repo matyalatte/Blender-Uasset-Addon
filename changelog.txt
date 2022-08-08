@@ -1,3 +1,7 @@
+v0.1.7
+- Added support for ACL v1.1.0
+- Added "actual path" (the actual file path to .uasset) to custom properties
+
 v0.1.6-hotfix
 - Fixed a bug y axis will be inverted for vertex normals.
 - Fixed a bug it can't get asset paths for some assets.

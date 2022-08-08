@@ -4,7 +4,7 @@
 There are some python scripts to test the addon.
 
 - `regist_without_installing.py`: Script to use the addon without installing it in Blender.
-- `test.py`: Script to check if the addon can reconstract .uasset files.
+- `test.py`: Script to check if the addon can reconstruct .uasset files.
 - `lint.py`: Script to run pylint
 
 ## Flake8

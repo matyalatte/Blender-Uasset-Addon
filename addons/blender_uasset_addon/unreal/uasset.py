@@ -190,7 +190,7 @@ class UassetExport(c.LittleEndianStructure):
     ]
 
     MAIN_EXPORTS = ['SkeletalMesh', 'StaticMesh', 'Skeleton', 'AnimSequence',
-                    'Texture2D', 'TextureCube', 'Material', 'MaterialInstanceConstant']
+                    'Texture2D', 'TextureCube', 'Material', 'MaterialInstanceConstant', 'BlendSpace']
 
     def __init__(self):
         """Constructor."""
@@ -312,7 +312,7 @@ class Uasset:
             # read exports
             io.check(self.header.export_offset, f.tell(), f)
             self.exports = [UassetExport.read(f, self.version) for i in range(self.header.export_count)]
-            self.asset_type, asset_name = UassetExport.name_exports(self.exports, self.imports, self.name_list)
+            self.asset_type, self.asset_name = UassetExport.name_exports(self.exports, self.imports, self.name_list)
 
             if verbose:
                 print('Export')
@@ -325,9 +325,9 @@ class Uasset:
 
             import_names = [imp.name for imp in self.imports]
             paths = [n for n in self.name_list if n[0] == '/' and n not in import_names]
-            paths = [p for p in paths if p.split('/')[-1] in asset_name]
+            paths = [p for p in paths if p.split('/')[-1] in self.asset_name]
             if len(paths) != 1:
-                paths = [p for p in paths if asset_name in p.split('/')[-1]]
+                paths = [p for p in paths if self.asset_name in p.split('/')[-1]]
                 if len(paths) != 1:
                     raise RuntimeError('Failed to get asset path.')
             self.asset_path = paths[0]

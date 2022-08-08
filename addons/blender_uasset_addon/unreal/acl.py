@@ -6,6 +6,7 @@ Notes:
 """
 import ctypes as c
 import math
+import struct
 from ..util import io_util as io
 
 
@@ -80,6 +81,7 @@ class ClipHeader(c.LittleEndianStructure):
         print(pad + f'  clip_range_reduction: {ClipHeader.RANGE_REDUCTION_FLAGS[self.clip_range_reduction]}')
         print(pad + f'  segment_range_reduction: {ClipHeader.RANGE_REDUCTION_FLAGS[self.segment_range_reduction]}')
         print(pad + f'  has_scale: {self.has_scale > 0}')
+        print(pad + f'  default_scale: {self.default_scale > 0}')
         print(pad + f'  num_samples: {self.num_samples}')
         print(pad + f'  sample_rate (fps): {self.sample_rate}')
 
@@ -135,10 +137,14 @@ class RangeData:
         self.extent_xyz = extent_xyz
 
     @staticmethod
-    def read(f):
+    def read(f, segment=False):
         """Read function."""
-        min_xyz = io.read_vec3_f32(f)
-        extent_xyz = io.read_vec3_f32(f)
+        if segment:
+            min_xyz = io.read_vec3_i8(f)
+            extent_xyz = io.read_vec3_i8(f)
+        else:
+            min_xyz = io.read_vec3_f32(f)
+            extent_xyz = io.read_vec3_f32(f)
         range_data = RangeData(min_xyz, extent_xyz)
         return range_data
 
@@ -154,7 +160,8 @@ class RangeData:
 
     def unpack(self, xyz):
         """Unpack a normalized vector."""
-        return [RangeData.unpack_elem(i, m, e) for i, m, e in zip(xyz, self.min_xyz, self.extent_xyz)]
+        vec = [RangeData.unpack_elem(i, m, e) for i, m, e in zip(xyz, self.min_xyz, self.extent_xyz)]
+        return vec
 
     def print(self):
         """Print meta data."""
@@ -170,30 +177,25 @@ class BoneTrack:
         self.use_default = [False] * 3
         self.use_constant = [False] * 3
         self.constant_list = []
-        self.range_list = []
-        self.bit_rates = []
-        self.track_data_list = []
+        self.track_data = []
 
     def set_use_default(self, use_default_str):
         """Set use_default by a string (e.g. '001')."""
         self.use_default = [flag == '1' for flag in use_default_str]
+        if len(use_default_str) != 3:
+            self.use_default += [True]
 
     def set_use_constant(self, use_constant_str):
         """Set use_constant by a string (e.g. '001')."""
         self.use_constant = [flag == '1' for flag in use_constant_str]
+        if len(use_constant_str) != 3:
+            self.use_constant += [True]
 
     def set_constants(self, constant_tracks_data, constant_id):
         """Set constants for tracks."""
         constant_count = self.get_constant_count()
         self.constant_list = constant_tracks_data[constant_id: constant_id + constant_count]
         return constant_count
-
-    def set_ranges(self, range_data, bit_rates, range_id):
-        """Set ranges for tracks."""
-        range_count = self.get_range_count()
-        self.range_list = range_data[range_id: range_id + range_count]
-        self.bit_rates = bit_rates[range_id: range_id + range_count]
-        return range_count
 
     def get_constant_count(self):
         """Get how many constants it needs."""
@@ -203,32 +205,12 @@ class BoneTrack:
         """Get how many range reductions it needs."""
         return 3 - sum(self.use_constant)
 
-    def get_track_data_size(self):
-        """Get binary size for valiable tracks."""
-        return sum(bits for bits in self.bit_rates) * 3
-
-    def set_track_data(self, track_data_bin_, track_data_id):
+    def set_track_data(self, floats, offset):
         """Set track data."""
-        num_samples = len(track_data_bin_)
-        frame_size = sum(bits for bits in self.bit_rates)
-        track_data_size = frame_size * 3
-        track_data_bin = [b[track_data_id: track_data_id + track_data_size] for b in track_data_bin_]
-        track_data = []
-        offset = 0
-        for bit_rate, range_data in zip(self.bit_rates, self.range_list):
-            frame_data_bin = ''.join([b[offset: offset + bit_rate * 3] for b in track_data_bin])
-            binary = [frame_data_bin[i * bit_rate: (i + 1) * bit_rate] for i in range(3 * num_samples)]
-            print(binary)
-            max_int = (1 << bit_rate) - 1
-            ints = [int(b, 2) for b in binary]
-            floats = [i / max_int for i in ints]
-            # print(max(floats))
-            xyzs = [floats[i * 3: (i + 1) * 3] for i in range(num_samples)]
-            xyzs = [range_data.unpack(xyz) for xyz in xyzs]
-            track_data.append(xyzs)
-            offset += bit_rate * 3
+        range_count = self.get_range_count()
+        track_data = floats[offset: offset + range_count]
         self.track_data = track_data
-        return track_data_size
+        return range_count
 
     def print(self, name, padding=4):
         """Print meta data."""
@@ -269,6 +251,7 @@ class CompressedClip:
         self.track_data = track_data
         self.bone_tracks = bone_tracks
 
+    # Todo: optimize this awful function
     @staticmethod
     def read(f):
         """Read function."""
@@ -292,63 +275,128 @@ class CompressedClip:
         io.check(io.read_uint8(f), 0)
         io.check(io.read_uint8(f), 0)  # padding
 
+        # read headers
         clip_header = ClipHeader.read(f)
-        if clip_header.has_scale == 0:
-            raise RuntimeError("Unsupported animation clip (no scale data)")
+        segment_headers = io.read_array(f, SegmentHeader.read, length=clip_header.num_segments)
+
+        # check formats
         clip_range_reduction = ClipHeader.RANGE_REDUCTION_FLAGS[clip_header.clip_range_reduction]
         if clip_range_reduction != 'AllTracks':
             raise RuntimeError(f"Unsupported animation clip (clip range reduction: {clip_range_reduction})")
         segment_range_reduction = ClipHeader.RANGE_REDUCTION_FLAGS[clip_header.segment_range_reduction]
-        if segment_range_reduction != 'None':
+        if segment_range_reduction not in ['None', 'AllTracks']:
             raise RuntimeError(f"Unsupported animation clip (segment range reduction: {segment_range_reduction})")
+        rot_format = ClipHeader.ROTATION_FORMAT[clip_header.rotation_format]
+        trans_format = ClipHeader.VECTOR_FORMAT[clip_header.translation_format]
+        scale_format = ClipHeader.VECTOR_FORMAT[clip_header.scale_format]
+        if rot_format != 'QuatDropW_Variable':
+            raise RuntimeError(f"Unsupported animation clip (rotation format: {rot_format})")
+        if trans_format != 'Vector3_Variable':
+            raise RuntimeError(f"Unsupported animation clip (translation format: {trans_format})")
+        if scale_format != 'Vector3_Variable':
+            raise RuntimeError(f"Unsupported animation clip (scale format: {scale_format})")
+        if clip_header.default_scale != 1:
+            raise RuntimeError(f"Unsupported animation clip (default scale: {clip_header.default_scale})")
 
-        segment_headers = io.read_array(f, SegmentHeader.read, length=clip_header.num_segments)
+        # read bit sets
+        num_attributes = 2 + clip_header.has_scale
         default_tracks_bitset = io.read_uint32_array(f, length=clip_header.get_default_tracks_bitset_size() // 4)
         constant_tracks_bitset = io.read_uint32_array(f, length=clip_header.get_constant_tracks_bitset_size() // 4)
-        bone_tracks = [BoneTrack() for i in range(clip_header.num_bones)]
 
-        def get_tracks_flags(bitset, num_bones):
+        def get_tracks_flags(bitset, num_bones, num_attributes):
             tracks_flags = ''
             for i in bitset:
                 tracks_flags += format(i, "b").zfill(32)
-            tracks_flags = tracks_flags[: num_bones * 3]
+            tracks_flags = tracks_flags[: num_bones * num_attributes]
             return tracks_flags
 
-        default_tracks_flags = get_tracks_flags(default_tracks_bitset, clip_header.num_bones)
-        constant_tracks_flags = get_tracks_flags(constant_tracks_bitset, clip_header.num_bones)
+        default_tracks_flags = get_tracks_flags(default_tracks_bitset, clip_header.num_bones, num_attributes)
+        constant_tracks_flags = get_tracks_flags(constant_tracks_bitset, clip_header.num_bones, num_attributes)
+
+        # read constant tracks
         constant_tracks_data = io.read_float32_array(f, length=clip_header.get_constant_tracks_data_size() // 4)
 
         constant_count = 0
         range_count = 0
+        bone_tracks = [BoneTrack() for i in range(clip_header.num_bones)]
         for track, i in zip(bone_tracks, range(clip_header.num_bones)):
-            track.set_use_default(default_tracks_flags[i * 3: (i + 1) * 3])
-            track.set_use_constant(constant_tracks_flags[i * 3: (i + 1) * 3])
+            track.set_use_default(default_tracks_flags[i * num_attributes: (i + 1) * num_attributes])
+            track.set_use_constant(constant_tracks_flags[i * num_attributes: (i + 1) * num_attributes])
             constant_count += track.set_constants(constant_tracks_data, constant_count)
             range_count += track.get_range_count()
 
+        # read clip range data
+        io.check(f.tell(), clip_header.clip_range_data_offset + clip_header.offset)
         range_data = io.read_array(f, RangeData.read, length=range_count)
-        bit_rates = io.read_uint8_array(f, length=range_count)
-        bit_rates = [CompressedClip.BIT_RATE_NUM_BITS[i] for i in bit_rates]
-        io.check(f.read(2), b'\xcd\xcd')  # padding
 
-        range_count = 0
-        track_data_size = 0
-        for track, i in zip(bone_tracks, range(clip_header.num_bones)):
-            range_count += track.set_ranges(range_data, bit_rates, range_count)
-            track_data_size += track.get_track_data_size()
+        # read segments
+        bone_track_floats = [[] for i in range(range_count)]
+        for s_header in segment_headers:
+            # read bit rates
+            if range_count != 0:
+                io.check(f.tell(), s_header.format_per_track_data_offset + clip_header.offset)
+            bit_rates = io.read_uint8_array(f, length=range_count)
+            bit_rates = [CompressedClip.BIT_RATE_NUM_BITS[i] for i in bit_rates]
+            num_padding = (2 - (f.tell() - clip_header.offset) % 2) % 2
+            io.check(f.read(num_padding), b'\xcd' * num_padding)  # padding
 
-        track_data = io.read_uint32_array(f, length=math.ceil(track_data_size * clip_header.num_samples / 32))
+            # read segment rage data
+            if segment_range_reduction == 'AllTracks':
+                io.check(f.tell(), s_header.range_data_offset + clip_header.offset)
+                segment_range_data = [RangeData.read(f, segment=True) for i in range(range_count)]
+            else:
+                segment_range_data = [None] * range_count
+            num_padding = (4 - (f.tell() - clip_header.offset) % 4) % 4
+            io.check(f.read(num_padding), b'\xcd' * num_padding)  # padding
 
-        binary = ''
-        for i in track_data:
-            binary += format(i, "b").zfill(32)
+            # read animated track data
+            track_data_size = sum(bit_rates) * 3
+            num_samples = s_header.num_samples
+            length = math.ceil(track_data_size * num_samples / 8)
+            if range_count != 0:
+                io.check(f.tell(), s_header.track_data_offset + clip_header.offset)
+            track_data = io.read_uint8_array(f, length)
+            binary = ''
+            for i in track_data:
+                binary += format(i, "b").zfill(8)
 
-        track_data_id = 0
-        num_samples = clip_header.num_samples
-        track_data_bin = [binary[i * track_data_size: (i + 1) * track_data_size] for i in range(num_samples)]
+            # unpack animated track data
+
+            def get_frame_bin(i, binary, track_data_size, idx, bits):
+                return binary[i * track_data_size + idx: i * track_data_size + idx + bits * 3]
+            idx = 0
+            for bits, rd, rid in zip(bit_rates, range_data, range(range_count)):
+                if bits != 0:
+                    bone_track_bin = [get_frame_bin(i, binary, track_data_size, idx, bits) for i in range(num_samples)]
+                    bone_track_bin = [[b[i * bits: (i + 1) * bits] for i in range(3)] for b in bone_track_bin]
+                    bone_track_bin = sum(bone_track_bin, [])
+                    max_int = (1 << bits) - 1
+                    ints = [int(b, 2) for b in bone_track_bin]
+                else:
+                    ints = [0] * num_samples * 3
+                if bits != 32:
+                    floats = [i / max_int for i in ints]
+                    xyzs = [floats[i * 3: (i + 1) * 3] for i in range(num_samples)]
+                    srd = segment_range_data[rid]
+                    if srd is not None:
+                        xyzs = [srd.unpack(xyz) for xyz in xyzs]
+                else:
+                    bt = [i.to_bytes(4, byteorder="big") for i in ints]
+                    floats = [struct.unpack('>f', b)[0] for b in bt]
+                    xyzs = [floats[i * 3: (i + 1) * 3] for i in range(num_samples)]
+                if bits != 32:
+                    xyzs = [rd.unpack(xyz) for xyz in xyzs]
+                bone_track_floats[rid] += xyzs
+                idx += bits * 3
+
+        # set unpacked data
+        idx = 0
         for track in bone_tracks:
-            track_data_id += track.set_track_data(track_data_bin, track_data_id)
+            idx += track.set_track_data(bone_track_floats, idx)
+        io.check(idx, len(bone_track_floats))
 
+        io.check(f.read(15), b'\xcd' * 15)
+        io.check(f.tell() - offset, size)
         return CompressedClip(offset, size, data_hash, clip_header, segment_headers,
                               default_tracks_bitset, constant_tracks_bitset,
                               range_data, bit_rates, track_data, bone_tracks)
@@ -368,8 +416,9 @@ class CompressedClip:
         list(map(lambda x: x.write(f), self.range_data))
         bit_rates = [CompressedClip.BIT_RATE_NUM_BITS.index(i) for i in self.bit_rates]
         io.write_uint8_array(f, bit_rates)
-        f.write(b'\xcd\xcd')
-        io.write_uint32_array(f, self.track_data)
+        f.write(b'\xcd' * (4 - len(bit_rates) % 4))
+        io.write_uint8_array(f, self.track_data)
+        f.write(b'\xcd' * 15)
 
     def print(self, bone_names):
         """Print meta data."""
@@ -379,6 +428,6 @@ class CompressedClip:
         self.clip_header.print()
         for seg in self.segment_headers:
             seg.print()
-        print('  Track Settings')
-        for track, name in zip(self.bone_tracks, bone_names):
-            track.print(name)
+        # print('  Track Settings')
+        # for track, name in zip(self.bone_tracks, bone_names):
+        #    track.print(name)

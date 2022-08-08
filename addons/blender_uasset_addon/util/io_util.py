@@ -106,7 +106,7 @@ def read_num_array(file, structure, length=None):
     if length is None:
         length = read_uint32(file)
     binary = file.read(st_size[st_list.index(structure)] * length)
-    return list(struct.unpack(structure * length, binary))
+    return list(struct.unpack('<' + structure * length, binary))
 
 
 def read_uint32_array(file, length=None):
@@ -152,6 +152,12 @@ def read_vec3_f32(file):
 def read_vec3_f32_array(file):
     """Read an array of vec3."""
     return read_array(file, read_vec3_f32)
+
+
+def read_vec3_i8(file):
+    """Read 3 ints as floats."""
+    vec = read_uint8_array(file, length=3)
+    return [x / 255 for x in vec]
 
 
 def read_16byte(file):

@@ -5,7 +5,7 @@
 ![pylint](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/matyalatte/f1a5f45e1346698f50387619ff6c5bf7/raw/blender_uasset_addon_pylint_badge.json)
 ![coverage](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/matyalatte/0ca588aa8786d78c95ce2acdeb90635c/raw/blender_uasset_addon_pytest_badge.json)
 
-# Blender Uasset Addon v0.1.6
+# Blender Uasset Addon v0.1.7
 Blender addon to import .uasset files
 
 Most of the source code is from [my mesh tool](https://github.com/matyalatte/FF7R-mesh-importer) and [texture tool](https://github.com/matyalatte/UE4-DDS-Tools).
@@ -27,7 +27,7 @@ Most of the source code is from [my mesh tool](https://github.com/matyalatte/FF7
 
 | UE version | Skeletal Mesh | Static Mesh | Skeleton | Texture | Animation | Injection |
 | :---: |:---:|:---:|:---:|:---:|:---:|:---:|
-| FF7R | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :x: | :heavy_check_mark: |
+| FF7R | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :warning: | :heavy_check_mark: |
 | 4.18 | :warning: | :warning: | :heavy_check_mark:  | :heavy_check_mark: | :x: | :warning: |
 | 4.26, 4.27| :warning: | :warning: | :heavy_check_mark: | :heavy_check_mark: | :x: | :x: |
 | 5.0 | :warning: | :warning: | :heavy_check_mark: | :heavy_check_mark: | :x: | :x: |
