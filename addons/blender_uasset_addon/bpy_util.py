@@ -41,7 +41,8 @@ def get_fps():
 def set_fps(fps):
     """Set fps for animations."""
     render = bpy.context.scene.render
-    render.fps = fps * render.fps_base
+    render.fps_base = max(int(render.fps_base), 1)
+    render.fps = int(fps * render.fps_base)
 
 
 def add_nla_track(amt, name='NLA_track'):

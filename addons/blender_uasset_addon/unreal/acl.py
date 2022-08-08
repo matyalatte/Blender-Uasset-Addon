@@ -416,7 +416,10 @@ class CompressedClip:
         list(map(lambda x: x.write(f), self.range_data))
         bit_rates = [CompressedClip.BIT_RATE_NUM_BITS.index(i) for i in self.bit_rates]
         io.write_uint8_array(f, bit_rates)
-        f.write(b'\xcd' * (4 - len(bit_rates) % 4))
+        num_padding = (2 - (f.tell() - self.clip_header.offset) % 2) % 2
+        f.write(b'\xcd' * num_padding)
+        num_padding = (4 - (f.tell() - self.clip_header.offset) % 4) % 4
+        f.write(b'\xcd' * num_padding)  # padding
         io.write_uint8_array(f, self.track_data)
         f.write(b'\xcd' * 15)
 
