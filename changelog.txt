@@ -1,5 +1,6 @@
 v0.1.7
 - Added support for ACL v1.1.0
+- Added animation options to fbx export
 - Added verbose option
 - Added "actual path" (the actual file path to .uasset) to custom properties
 - Fixed an error when multiple bones have the same name
