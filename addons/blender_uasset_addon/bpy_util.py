@@ -714,3 +714,66 @@ def make_trs(trans, rot, scale):
     mat_rot = rot.to_matrix().to_4x4()
     mat_sca = Matrix.Diagonal(scale).to_4x4()
     return mat_trans @ mat_rot @ mat_sca
+
+
+def get_animation_data(amt, start_frame=0, num_samples=1, interval=1):
+    """Get animation data as a dictionary.
+
+    Args:
+        amt (bpy.types.Armature): target armature
+        start_frame (float): start frame for the animation
+        num_samples (int): number of frames
+        interval (float): duration time for each frame
+
+    Returns:
+        anim_data (dict): animation data
+
+    Notes:
+        anim_data[bone_name][element] = [vec_for_frame0, vec_for_frame1, ...]
+        element: 'location', 'scale', 'rotation_quaternion' or 'rotation_euler'
+    """
+    fcurves = amt.animation_data.action.fcurves
+    anim_data = {}
+    for fc in fcurves:
+        idx = fc.array_index
+        data_path = fc.data_path.split('.')
+        if len(data_path) != 3 or data_path[0] != 'pose':
+            continue
+
+        num_key_frames = len(fc.keyframe_points)
+        if num_key_frames == 0:
+            continue
+        bone_name = data_path[1].split('"')[1]
+        data_type = data_path[2]
+        if data_type not in ['location', 'scale', 'rotation_quaternion', 'rotation_euler']:
+            continue
+        if bone_name not in anim_data:
+            bone_anim_data = {}
+            anim_data[bone_name] = bone_anim_data
+        else:
+            bone_anim_data = anim_data[bone_name]
+        if data_type not in bone_anim_data:
+            elem_anim_data = [[] for i in range(3 + (data_type == 'rotation_quaternion'))]
+            bone_anim_data[data_type] = elem_anim_data
+        else:
+            elem_anim_data = bone_anim_data[data_type]
+        if num_key_frames == 1:
+            points = [fc.evaluate(0)]
+        else:
+            points = [fc.evaluate(start_frame + t * interval) for t in range(num_samples)]
+        elem_anim_data[idx] = points
+
+    for bone_anim in anim_data.values():
+        for data_type, elem_anim in bone_anim.items():
+            frame_count = max([len(points) for points in elem_anim])
+            for points, idx in zip(elem_anim, range(len(elem_anim))):
+                if len(points) == 1:
+                    points = points * frame_count
+                elif len(points) == 0:
+                    if (len(elem_anim) == 4 and idx == 0) or data_type == 'scale':
+                        points = [1] * frame_count
+                    else:
+                        points = [0] * frame_count
+            bone_anim[data_type] = [[points[t] for points in elem_anim] for t in range(frame_count)]
+
+    return anim_data

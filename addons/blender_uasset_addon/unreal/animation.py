@@ -99,55 +99,15 @@ class UnkData:
         io.write_uint32(f, 4)
 
 
-class CompressedAnimData:
-    """Compressed animation data."""
-
-    def __init__(self, size, compressed_clip, rest, version):
-        """Constructor."""
-        self.size = size
-        self.compressed_clip = compressed_clip
-        self.rest = rest
-        self.version = version
-
-    @staticmethod
-    def read(f, size, version):
-        """Read function."""
-        offset = f.tell()
-        if version == 'ff7r':
-            compressed_clip = CompressedClip.read(f)
-
-            rest = f.read(size - (f.tell() - offset))
-            return CompressedAnimData(size, compressed_clip, rest, version)
-
-        else:
-            rest = f.read(size - (f.tell() - offset))
-            # for i in range(len(rest) // 4):
-            #     binary = rest[i*4:i*4+4]
-            #     l = struct.unpack('f', rest[i*4:i*4+4])[0]
-            #     print(f'{binary}:{fl}')
-            return CompressedAnimData(size, None, rest, version)
-
-    def write(self, f):
-        """Write function."""
-        if self.version == 'ff7r':
-            self.compressed_clip.write(f)
-        f.write(self.rest)
-
-    def print(self, bone_names):
-        """Print meta data."""
-        if self.version == 'ff7r':
-            self.compressed_clip.print(bone_names)
-
-
 class AnimSequence:
     """Animation data."""
-    def __init__(self, uasset, unk, guid, unk_int, unk_ids, bone_ids,
+    def __init__(self, uasset, unk, guid, format_bytes, unk_ids, bone_ids,
                  unk2, raw_size, compressed_size, compressed_data, verbose):
         """Constructor."""
         self.uasset = uasset
         self.unk = unk
         self.guid = guid
-        self.unk_int = unk_int
+        self.format_bytes = format_bytes
         self.unk_ids = unk_ids
         self.bone_ids = bone_ids
         self.unk2 = unk2
@@ -177,9 +137,13 @@ class AnimSequence:
             io.check(io.read_uint64(f), none_id)
         io.read_null(f)
         guid = f.read(16)
-        io.check(io.read_uint16(f), 1)
-        io.check(io.read_uint32(f), 1)
-        unk_int = io.read_uint32(f)  # Format bytes?
+        io.check(io.read_uint16(f), 1)  # StripFlags
+        io.check(io.read_uint32(f), 1)  # bSerializeCompressedData?
+
+        # UAnimSequence::SerializeCompressedData
+        format_bytes = io.read_uint8_array(f, length=4)  # key format and trs formats
+        if format_bytes[0] < 3:
+            raise RuntimeError('Non-ACL animations are unsupported.')
         unk_ids = io.read_uint32_array(f)  # CompressedTrackOffsets?
         io.check(io.read_uint32(f), 0)  # CompressedScaleOffsets OffsetData?
         io.check(io.read_uint32(f), 2)  # CompressedScaleOffsets StripSize?
@@ -188,7 +152,7 @@ class AnimSequence:
         offset = f.tell()
         if uasset.version == 'ff7r':
             if f.read(2) == b'\x00\x03':
-                _ = [UnkData.read(f) for i in range(io.read_uint32(f))]
+                _ = [UnkData.read(f) for i in range(io.read_uint32(f))]  # CompressedCurveData?
             else:
                 io.check(f.read(1), b'\x01', f)
         else:
@@ -197,12 +161,12 @@ class AnimSequence:
         f.seek(offset)
         unk2 = f.read(size)
 
-        raw_size = io.read_uint32(f)  # some offset?
+        raw_size = io.read_uint32(f)  # CompressedRawDataSize
         compressed_size = io.read_uint32(f)
         if uasset.version != 'ff7r':
             io.read_const_uint32(f, 0)
-        compressed_data = CompressedAnimData.read(f, compressed_size, uasset.version)
-        return AnimSequence(uasset, unk, guid, unk_int, unk_ids, bone_ids,
+        compressed_data = CompressedClip.read(f)
+        return AnimSequence(uasset, unk, guid, format_bytes, unk_ids, bone_ids,
                             unk2, raw_size, compressed_size, compressed_data, verbose)
 
     def write(self, f):
@@ -215,7 +179,7 @@ class AnimSequence:
 
         io.write_uint16(f, 1)
         io.write_uint32(f, 1)
-        io.write_uint32(f, self.unk_int)
+        io.write_uint8_array(f, self.format_bytes)
         io.write_uint32_array(f, self.unk_ids, with_length=True)
         io.write_uint32(f, 0)
         io.write_uint32(f, 2)
@@ -224,10 +188,15 @@ class AnimSequence:
         f.write(self.unk2)
 
         io.write_uint32(f, self.raw_size)
+        offset = f.tell()
         io.write_uint32(f, self.compressed_data.size)
         if self.uasset.version != 'ff7r':
             io.write_uint32(f, 0)
         self.compressed_data.write(f)
+        end_offset = f.tell()
+        f.seek(offset)
+        io.write_uint32(f, self.compressed_data.size)
+        f.seek(end_offset)
 
     def print(self):
         """Print meta data."""
@@ -252,3 +221,7 @@ class AnimSequence:
     def get_animation_name(self):
         """Get animation name."""
         return self.uasset.asset_name
+
+    def import_anim_data(self, anim_data):
+        """Import animation data."""
+        self.compressed_data.import_anim_data(anim_data)

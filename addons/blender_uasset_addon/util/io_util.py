@@ -308,6 +308,12 @@ def write_vec3_f32_array(file, vec_ary, with_length=False):
     return write_array(file, vec_ary, write_vec3_f32, with_length=with_length)
 
 
+def write_vec3_i8(file, vec):
+    """Read 3 ints as floats."""
+    vec = [int(x * 255) for x in vec]
+    write_uint8_array(file, vec)
+
+
 def write_16byte(file, binary):
     """Write binary."""
     return file.write(binary)
@@ -339,6 +345,14 @@ def write_struct_array(file, ary, with_length=False):
         write_uint32(file, len(ary))
     for a in ary:
         file.write(a)
+
+
+def rewrite_struct(f, obj):
+    """Rewrite an object."""
+    offset = f.tell()
+    f.seek(obj.offset)
+    obj.write(f)
+    f.seek(offset)
 
 
 def compare(file1, file2, no_err=False):

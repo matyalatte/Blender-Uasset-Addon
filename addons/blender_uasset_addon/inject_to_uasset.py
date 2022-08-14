@@ -9,6 +9,7 @@ from bpy.props import (StringProperty,
                        FloatProperty,
                        PointerProperty)
 from bpy.types import Operator, PropertyGroup
+from mathutils import Vector, Quaternion, Euler
 
 from . import bpy_util, unreal, util
 if "bpy" in locals():
@@ -252,59 +253,154 @@ def get_primitives(asset, armature, meshes, rescale=1.0, only_mesh=False):
     return primitives
 
 
+def inject_animation(asset, armature, ue_version, rescale=1.0):
+    """Inject animation data into the asset."""
+    anim = asset.uexp.anim
+
+    # Get skeleton asset
+    anim_path = anim.get_animation_path()
+    skel_path = anim.get_skeleton_path()
+    skel_basename = os.path.basename(skel_path)
+    skel_search_paths = [skel_path, anim_path]
+    if 'actual_path' in armature:
+        skel_search_paths.append(armature['actual_path'])
+    skel_path = None
+    for path in skel_search_paths:
+        path = os.path.join(os.path.dirname(path), skel_basename)
+        if os.path.exists(path):
+            skel_path = path
+            print(f'Skeleton asset found ({path})')
+            break
+        print(f'Skeleton asset NOT found ({path})')
+    if skel_path is None:
+        raise RuntimeError('Skeleton asset not found.')
+    bones = unreal.uasset.Uasset(skel_path, version=ue_version).uexp.skeleton.bones
+
+    if ue_version != 'ff7r':
+        raise RuntimeError(f'Animations are unsupported for this verison. ({ue_version})')
+
+    # Get animation data
+    bone_ids = anim.bone_ids
+    compressed_clip = anim.compressed_data
+    num_samples = compressed_clip.clip_header.num_samples
+    print(f'frame count: {num_samples}')
+
+    scene_fps = bpy_util.get_fps()
+    asset_fps = compressed_clip.clip_header.sample_rate
+    interval = scene_fps / asset_fps
+    anim_data = bpy_util.get_animation_data(armature, start_frame=1, num_samples=num_samples, interval=interval)
+
+    class BlenderBoneTrack:
+        """Animation tracks for a bone."""
+        def __init__(self):
+            self.rot = []
+            self.trans = []
+            self.scale = []
+
+    def vec_add(a, b):
+        return [a_ + b_ for a_, b_ in zip(a, b)]
+
+    def vec_mult(a, b):
+        return [a_ * b_ for a_, b_ in zip(a, b)]
+
+    rescale_factor = get_rescale_factor(rescale)
+    bone_tracks = [BlenderBoneTrack() for i in range(len(bone_ids))]
+    for idx, track in zip(bone_ids, bone_tracks):
+        bone = bones[idx]
+        if bone.name not in anim_data:
+            continue
+        bone_anim_data = anim_data[bone.name]
+        for data_type, elem_anim_data in bone_anim_data.items():
+            if len(elem_anim_data) == 0:
+                continue
+            if 'rotation' in data_type:
+                for vec in elem_anim_data:
+                    if 'quaternion' in data_type:
+                        quat_diff = Quaternion(vec).normalized()
+                    else:
+                        euler = Euler(vec)
+                        quat_diff = euler.to_quaternion(euler)
+                    quat = bone.rot
+                    default_quat = Quaternion([-quat[3], quat[0], -quat[1], quat[2]])
+                    new_quat = default_quat @ quat_diff
+                    new_quat_dropw = [new_quat[1], -new_quat[2], new_quat[3]]
+                    if new_quat[0] > 0:
+                        new_quat_dropw = [-x for x in new_quat_dropw]
+                    track.rot.append(new_quat_dropw)
+            elif data_type == 'location':
+                for vec in elem_anim_data:
+                    trans_diff = Vector(vec)
+                    quat = bone.rot
+                    default_quat = Quaternion([-quat[3], quat[0], -quat[1], quat[2]])
+                    trans_diff *= rescale_factor
+                    trans_diff = default_quat @ trans_diff
+                    trans_diff[1] *= -1
+                    trans = vec_add(trans_diff, bone.trans)
+                    track.trans.append(trans)
+            elif data_type == 'scale':
+                for vec in elem_anim_data:
+                    track.scale.append(vec_mult(vec, bone.scale))
+    anim.import_anim_data(bone_tracks)
+
+
 def inject_uasset(source_file, directory, ue_version='4.18',
                   rescale=1.0, only_mesh=True,
                   duplicate_folder_structure=True,
                   mod_name='mod_name_here',
                   content_folder='End\\Content'):
     """Inject selected objects to uasset file."""
-    # get selected objects
-    armature, meshes = bpy_util.get_selected_armature_and_meshes()
-
-    # check uv count
-    uv_counts = [len(mesh.data.uv_layers) for mesh in meshes]
-    if len(list(set(uv_counts))) > 1:
-        raise RuntimeError('All meshes should have the same number of uv maps')
-
     # load source file
-
     version = ue_version
     if version not in ['ff7r', '4.18']:
         raise RuntimeError(f'Injection is unsupported for {version}')
     asset = unreal.uasset.Uasset(source_file, version=version)
     asset_type = asset.asset_type
 
-    if armature is None and 'Skelet' in asset_type:
+    # get selected objects
+    armature, meshes = bpy_util.get_selected_armature_and_meshes()
+
+    if armature is None and ('Skelet' in asset_type or asset_type == 'AnimSequence'):
         raise RuntimeError('Select an armature.')
     if meshes == [] and 'Mesh' in asset_type:
         raise RuntimeError('Select meshes.')
-    if 'Mesh' not in asset_type and asset_type != 'Skeleton':
+    if 'Mesh' not in asset_type and asset_type not in ['Skeleton', 'AnimSequence']:
         raise RuntimeError(f'Unsupported asset. ({asset_type})')
 
-    if asset_type == 'Skeleton':
+    if asset_type in ['Skeleton', 'AnimSequence']:
         meshes = []
+    if asset_type == 'AnimSequence':
+        inject_animation(asset, armature, ue_version, rescale=rescale)
+    else:
+        # check uv count
+        uv_counts = [len(mesh.data.uv_layers) for mesh in meshes]
+        if len(list(set(uv_counts))) > 1:
+            raise RuntimeError('All meshes should have the same number of uv maps')
 
-    primitives = get_primitives(asset, armature, meshes,
-                                rescale=rescale,
-                                only_mesh=only_mesh)
-    bpy_util.deselect_all()
-    bpy_util.select_objects([armature] + meshes)
+        primitives = get_primitives(asset, armature, meshes,
+                                    rescale=rescale,
+                                    only_mesh=only_mesh)
+        print('Editing asset data...')
+        asset.uexp.import_from_blender(primitives, only_mesh=only_mesh)
 
-    print('Editing asset data...')
-    asset.uexp.import_from_blender(primitives, only_mesh=only_mesh)
+        bpy_util.deselect_all()
+        bpy_util.select_objects([armature] + meshes)
+
+    actual_name = os.path.basename(asset.actual_path)
+
     if duplicate_folder_structure:
         dirs = asset.asset_path.split('/')
         if dirs[0] == '':
             dirs = dirs[2:]
         else:
             dirs = dirs[1:]
+        dirs = dirs[:-1]
         dirs = '\\'.join(dirs)
         asset_path = os.path.join(directory, mod_name,
-                                  content_folder, dirs)
+                                  content_folder, dirs, actual_name)
     else:
-        asset_path = os.path.join(directory, asset.name)
+        asset_path = os.path.join(directory, actual_name)
 
-    asset.save(asset_path + '.uasset')
+    asset.save(asset_path)
     return asset_type
 
 
@@ -324,7 +420,7 @@ class InjectOptions(PropertyGroup):
         description=(
             'Duplicate the folder structure .uasset have'
         ),
-        default=False,
+        default=True,
     )
 
     content_folder: StringProperty(

@@ -1,4 +1,4 @@
-v0.1.7
+v0.2.0 (ACL support)
 - Added support for ACL v1.1.0
 - Added animation options to fbx export
 - Added verbose option

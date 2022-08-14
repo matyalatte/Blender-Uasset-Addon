@@ -434,7 +434,7 @@ def load_animation(anim, armature, ue_version, rescale=1.0, ignore_missing_bones
 
     # Get animation data
     bone_ids = anim.bone_ids
-    compressed_clip = anim.compressed_data.compressed_clip
+    compressed_clip = anim.compressed_data
     num_samples = compressed_clip.clip_header.num_samples
     print(f'frame count: {num_samples}')
 
