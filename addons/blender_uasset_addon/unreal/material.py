@@ -67,9 +67,6 @@ class Material:
     @staticmethod
     def assign_materials(materials1, materials2):
         """Assign material ids."""
-        # if len(materials1)!=len(materials2):
-        #     raise RuntimeError('Number of materials should be the same.')
-
         print('Assigning materials...')
 
         def get_range(num):
@@ -115,21 +112,33 @@ class Material:
         new_material_ids, assigned1, assigned2 = assign(names1, names2, assigned1, assigned2,
                                                         new_material_ids)
 
+        def index_of(val, in_list):
+            try:
+                return in_list.index(val)
+            except ValueError:
+                return None
+
         for i in range(len(materials2)):
             if not assigned2[i]:
-                new_id = assigned1.index(False)
                 assigned2[i] = True
-                assigned1[new_id] = True
+                new_id = index_of(False, assigned1)
+                if new_id is not None:
+                    assigned1[new_id] = True
+                else:
+                    new_id = len(assigned1)
+                    assigned1.append(True)
                 new_material_ids[i] = new_id
 
         for i, mat2 in zip(range(len(materials2)), materials2):
-            mat1 = materials1[new_material_ids[i]]
-            m1str = mat1.import_name
-            if m1str != mat1.slot_name:
-                m1str += f'({mat1.slot_name})'
-
             m2str = mat2.import_name
-            print(f'Assigned {m2str} to {m1str}')
+            if i < len(materials1):
+                mat1 = materials1[new_material_ids[i]]
+                m1str = mat1.import_name
+                if m1str != mat1.slot_name:
+                    m1str += f'({mat1.slot_name})'
+                print(f'Assigned {m2str} to {m1str}')
+            else:
+                print(f'Added {m2str} to material slots')
 
         return new_material_ids
 

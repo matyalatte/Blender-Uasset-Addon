@@ -379,7 +379,8 @@ def load_acl_track(pose_bone, ue_bone, data_path, values, action, start_frame=0,
 
 
 def load_acl_bone_track(pose_bone, ue_bone, track, action, start_frame=0, interval=1,
-                        rescale_factor=1.0, rotation_format='QUATERNION'):
+                        rescale_factor=1.0, rotation_format='QUATERNION',
+                        only_first_frame=False):
     """Load acl track for a bone."""
     data_paths = ['rotation_quaternion', 'location', 'scale']
     if rotation_format != 'QUATERNION':
@@ -395,13 +396,16 @@ def load_acl_bone_track(pose_bone, ue_bone, track, action, start_frame=0, interv
         else:
             frames = track.track_data[track_data_id]
             track_data_id += 1
+        if only_first_frame:
+            frames = [frames[0]]
         load_acl_track(pose_bone, ue_bone, data_path, frames, action, start_frame=start_frame, interval=interval,
                        rescale_factor=rescale_factor, rotation_format=rotation_format)
 
 
 def load_animation(anim, armature, ue_version, rescale=1.0, ignore_missing_bones=False,
                    start_frame_option='DEFAULT', rotation_format='QUATERNION',
-                   ignore_root_bone=False, import_as_nla=False):
+                   ignore_root_bone=False, import_as_nla=False,
+                   only_first_frame=False):
     """Import animation data."""
     # Get skeleton asset
     anim_path = anim.get_animation_path()
@@ -496,7 +500,8 @@ def load_animation(anim, armature, ue_version, rescale=1.0, ignore_missing_bones
                 continue
         pb = pose_bones[bone.name]
         load_acl_bone_track(pb, bone, track, action, start_frame=start_frame, interval=interval,
-                            rescale_factor=rescale_factor, rotation_format=rotation_format)
+                            rescale_factor=rescale_factor, rotation_format=rotation_format,
+                            only_first_frame=only_first_frame)
 
 
 def load_uasset(file, rename_armature=True, keep_sections=False,
@@ -508,7 +513,8 @@ def load_uasset(file, rename_armature=True, keep_sections=False,
                 suffix_list=(['_C', '_D'], ['_N'], ['_A']),
                 ignore_missing_bones=False, start_frame_option='DEFAULT',
                 rotation_format='QUATERNION', ignore_root_bone=False,
-                import_as_nla=False, verbose=False):
+                import_as_nla=False, only_first_frame=False,
+                verbose=False):
     """Import assets form .uasset file.
 
     Notes:
@@ -534,7 +540,7 @@ def load_uasset(file, rename_armature=True, keep_sections=False,
         load_animation(anim, armature, ue_version, rescale=rescale,
                        ignore_missing_bones=ignore_missing_bones, start_frame_option=start_frame_option,
                        rotation_format=rotation_format, ignore_root_bone=ignore_root_bone,
-                       import_as_nla=import_as_nla)
+                       import_as_nla=import_as_nla, only_first_frame=only_first_frame)
         return armature, asset_type
 
     if asset_type not in ['SkeletalMesh', 'Skeleton', 'StaticMesh']:
@@ -807,6 +813,12 @@ class ImportOptions(PropertyGroup):
         default=False,
     )
 
+    only_first_frame: BoolProperty(
+        name='Only the First Frame',
+        description="Import only the first frame.",
+        default=False,
+    )
+
 
 class ImportUasset(Operator, ImportHelper):
     """Operator to import .uasset files."""
@@ -844,7 +856,8 @@ class ImportUasset(Operator, ImportHelper):
             ['invert_normal_maps', 'suffix_for_color', 'suffix_for_normal', 'suffix_for_alpha'],
             ['rotate_bones', 'minimal_bone_length', 'normalize_bones',
              'rename_armature', 'only_skeleton', 'show_axes', 'bone_display_type', 'show_in_front'],
-            ['start_frame_option', 'rotation_format', 'import_as_nla', 'ignore_root_bone', 'ignore_missing_bones'],
+            ['start_frame_option', 'rotation_format', 'import_as_nla',
+             'ignore_root_bone', 'ignore_missing_bones', 'only_first_frame'],
             ['unit_scale', 'rescale']
         ]
 
@@ -910,6 +923,7 @@ class ImportUasset(Operator, ImportHelper):
                 start_frame_option=import_options.start_frame_option,
                 rotation_format=import_options.rotation_format,
                 import_as_nla=import_options.import_as_nla,
+                only_first_frame=import_options.only_first_frame,
                 verbose=general_options.verbose
             )
 

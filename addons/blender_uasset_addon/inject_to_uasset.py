@@ -130,8 +130,8 @@ def get_primitives(asset, armature, meshes, rescale=1.0, only_mesh=False):
         """Class to store Blender's material data."""
         def __init__(self, m):
             self.import_name = m.name
-            self.slot_name = None
-            self.asset_path = None
+            self.slot_name = f'slot_{m.name}'
+            self.asset_path = f'/Game/GameContents/path_to_{m.name}'
             self.class_name = None
 
             if 'slot_name' in m:
@@ -288,7 +288,14 @@ def inject_animation(asset, armature, ue_version, rescale=1.0):
     scene_fps = bpy_util.get_fps()
     asset_fps = compressed_clip.clip_header.sample_rate
     interval = scene_fps / asset_fps
-    anim_data = bpy_util.get_animation_data(armature, start_frame=1, num_samples=num_samples, interval=interval)
+    start_frame = 1
+    print(f'injected frames: {start_frame} ~ {start_frame + num_samples * interval}')
+    anim_data = bpy_util.get_animation_data(armature, start_frame=start_frame,
+                                            num_samples=num_samples, interval=interval)
+    bone_names = [b.name for b in bones]
+    ignored_bones = [k for k in anim_data.keys() if k not in bone_names]
+    if len(ignored_bones) > 0:
+        print(f'Ignored some bones does NOT exist in the animation asset. ({ignored_bones})')
 
     class BlenderBoneTrack:
         """Animation tracks for a bone."""

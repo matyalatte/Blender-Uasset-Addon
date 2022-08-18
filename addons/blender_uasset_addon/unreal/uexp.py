@@ -128,7 +128,7 @@ class Uexp:
         if not only_mesh and self.skeleton is not None:
             self.skeleton.import_bones(primitives['BONES'], self.name_list)
         if self.mesh is not None:
-            self.mesh.import_from_blender(primitives, only_mesh=only_mesh)
+            self.mesh.import_from_blender(primitives, self.uasset, only_mesh=only_mesh)
 
     def embed_string(self, string):
         """Embed string to .uexp."""
