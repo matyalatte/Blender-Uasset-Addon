@@ -46,8 +46,12 @@ class Mesh:
             json.dump(logs, f, indent=4)
 
     @staticmethod
-    def seek_materials(f, imports, seek_import=False):
+    def seek_materials(f, imports, material_size):
         """Read binary data until find material import ids."""
+        has_material = False
+        for imp in imports:
+            if imp.material:
+                has_material = True
         # offset = f.tell()
         buf = f.read(3)
         size = io.get_size(f)
@@ -61,24 +65,38 @@ class Mesh:
                     raise RuntimeError('Material properties not found. This is an unexpected error.')
             f.seek(-4, 1)
             import_id = -io.read_int32(f) - 1
-            if import_id < len(imports) and (imports[import_id].material or seek_import):
+            if import_id < len(imports) and imports[import_id].material:
+                break
+            if import_id == 0 and not has_material:
                 break
             # print(imports[import_id].name)
-            buf = f.read(3)
+            buf = b''.join([buf[1:], f.read(1)])
+        if has_material:
+            f.seek(-8, 1)
+        else:
+            f.seek(-20, 1)
+            num = 0
+            while io.read_uint32(f) != num or num == 0:
+                f.seek(-4 - material_size, 1)
+                num += 1
+            f.seek(-4, 1)
         return
 
     @staticmethod
     def read_materials(f, version, imports, name_list, skeletal=False, verbose=False):
         """Seeek and read material data."""
         offset = f.tell()
-        Mesh.seek_materials(f, imports)
-        f.seek(-8, 1)
+        material_size = Material.get_size(version, skeletal)
+        Mesh.seek_materials(f, imports, material_size)
         unk_size = f.tell() - offset
         f.seek(offset)
         unk = f.read(unk_size)
 
         material_offset = f.tell()
         materials = [Material.read(f, version, skeletal=skeletal) for i in range(io.read_uint32(f))]
+        if len(materials) == 0:
+            msg = 'Material slot is empty. Be sure materials are assigned correctly in UE4.'
+            raise RuntimeError(msg)
         Material.update_material_data(materials, name_list, imports)
         if verbose:
             print(f'Materials (offset: {material_offset})')
@@ -86,16 +104,19 @@ class Mesh:
                 material.print()
         return unk, materials
 
-    def add_material_slot(self, imports, name_list, file_data_ids, material):
+    def add_material_slot(self, uasset, material):
         """Add material slots to asset."""
+        imports = uasset.imports
+        name_list = uasset.name_list
+        file_data_ids = uasset.file_data_ids
         if isinstance(material, str):
-            slot_name = material
+            slot_name = f'slot_{material}'
             import_name = material
             file_path = '/Game/GameContents/path_to_' + material
         else:
             slot_name = material.slot_name
             import_name = material.import_name
-            file_path = material.file_path
+            file_path = material.asset_path
 
         # add material slot
         import_id = self.materials[-1].import_id
@@ -121,15 +142,22 @@ class Mesh:
         new_dir_import.name_id = len(name_list)
         name_list.append(file_path)
 
-    def import_from_blender(self, primitives, only_mesh=True):
+    def import_from_blender(self, primitives, uasset, only_mesh=True, skeletal=False):
         """Import mesh data from Blender."""
         materials = primitives['MATERIALS']
-        if len(self.materials) < len(materials):
-            msg = 'Can not add material slots. '
-            msg += f'(source file: {len(self.materials)}, blender: {len(materials)})'
-            raise RuntimeError(msg)
-
         new_material_ids = Material.assign_materials(self.materials, materials)
+
+        if len(self.materials) < len(materials):
+            if not skeletal:
+                msg = 'Can not add material slots to static mesh.'
+                msg += f'(source file: {len(self.materials)}, blender: {len(materials)})'
+                raise RuntimeError(msg)
+
+            added_num = len(materials)-len(self.materials)
+            for i in range(added_num):
+                idx = new_material_ids.index(len(self.materials))
+                self.add_material_slot(uasset, materials[idx])
+            print(f'Added {added_num} materials. You need to edit name table to use the new materials.')
 
         self.remove_LODs()
         lod = self.LODs[0]
@@ -257,7 +285,7 @@ class SkeletalMesh(Mesh):
 
         print("KDI buffers have been removed.")
 
-    def import_from_blender(self, primitives, only_mesh=True):
+    def import_from_blender(self, primitives, uasset, only_mesh=True):
         """Import mesh data from Blender."""
         bones = primitives['BONES']
         if only_mesh:
@@ -268,7 +296,7 @@ class SkeletalMesh(Mesh):
 
         if self.extra_mesh is not None and not only_mesh:
             self.extra_mesh.disable()
-        super().import_from_blender(primitives, only_mesh=only_mesh)
+        super().import_from_blender(primitives, uasset, only_mesh=only_mesh, skeletal=True)
 
 
 class ExtraMesh:

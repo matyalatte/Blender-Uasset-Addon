@@ -41,17 +41,6 @@ class Uexp:
 
         if verbose:
             print(f'Asset type: {self.asset_type}')
-
-        # check materials
-        if self.asset_type in ['SkeletalMesh', 'StaticMesh']:
-            has_material = False
-            for imp in self.imports:
-                if imp.material:
-                    has_material = True
-            if not has_material:
-                msg = 'Material slot is empty. Be sure materials are assigned correctly in UE4.'
-                raise RuntimeError(msg)
-
         # print('Loading '+file+'...', ignore_verbose=True)
         # open .uexp
         self.mesh = None
@@ -139,7 +128,7 @@ class Uexp:
         if not only_mesh and self.skeleton is not None:
             self.skeleton.import_bones(primitives['BONES'], self.name_list)
         if self.mesh is not None:
-            self.mesh.import_from_blender(primitives, only_mesh=only_mesh)
+            self.mesh.import_from_blender(primitives, self.uasset, only_mesh=only_mesh)
 
     def embed_string(self, string):
         """Embed string to .uexp."""

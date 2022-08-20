@@ -3,11 +3,10 @@
 bl_info = {
     'name': 'Uasset format',
     'author': 'Matyalatte',
-    'version': (0, 1, 6),
+    'version': (0, 2, 0),
     'blender': (3, 0, 0),
     'location': 'File > Import-Export',
     'description': 'Import assets from .uasset',
-    'warning': "Only works with FF7R's assets.",
     "wiki_url": "https://github.com/matyalatte/Blender-Uasset-Addon",
     'support': 'COMMUNITY',
     'category': 'Import-Export',

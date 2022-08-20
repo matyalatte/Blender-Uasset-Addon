@@ -182,7 +182,7 @@ def generate_materials(asset, version, load_textures=False,
     material_names = [m.import_name for m in asset.uexp.mesh.materials]
     color_gen = bpy_util.ColorGenerator()
     materials = [bpy_util.add_material(name, color_gen) for name in material_names]
-    texture_num = sum([len(m.texture_asset_paths) for m in asset.uexp.mesh.materials])
+    texture_num = sum(len(m.texture_asset_paths) for m in asset.uexp.mesh.materials)
     progress = 1
     texs = {}
 
@@ -322,6 +322,7 @@ def generate_mesh(amt, asset, materials, material_names, rescale=1.0,
 
         # smoothing
         normal = np.array(normals[i], dtype=np.float64) / 127 - 1  # Got broken normals with float32
+        normal = bpy_util.flip_y_for_3d_vectors(normal)
         bpy_util.smoothing(mesh_data, len(indice) // 3, normal, enable_smoothing=smoothing)
 
     if not keep_sections:
@@ -333,20 +334,194 @@ def generate_mesh(amt, asset, materials, material_names, rescale=1.0,
     return sections[0]
 
 
+def load_acl_track(pose_bone, ue_bone, data_path, values, action, start_frame=0, interval=1,
+                   rescale_factor=1.0, rotation_format='QUATERNION'):
+    """Load acl track for an element."""
+    def vec_sub(a, b):
+        return [a_ - b_ for a_, b_ in zip(a, b)]
+
+    def vec_div(a, b):
+        return [a_ / b_ for a_, b_ in zip(a, b)]
+
+    path_from_pb = pose_bone.path_from_id(data_path)
+    fcurves = bpy_util.get_fcurves(action, path_from_pb, 3 + (rotation_format == 'QUATERNION'))
+
+    frame = start_frame
+    for val in values:
+        if 'rotation' in data_path:
+            val[1] = - val[1]
+            norm = sum(x*x for x in val)
+            if norm > 1:
+                quat = [0] + val
+            else:
+                quat = [- np.sqrt(1 - norm)] + val
+            anim_quat = Quaternion(quat)
+            quat = ue_bone.rot
+            default_quat = Quaternion([-quat[3], quat[0], -quat[1], quat[2]])
+            quat_diff = default_quat.rotation_difference(anim_quat)
+            if rotation_format == 'QUATERNION':
+                new_val = quat_diff
+            else:
+                new_val = quat_diff.to_euler()
+        elif data_path == 'location':
+            trans_diff = vec_sub(val, ue_bone.trans)
+            trans_diff = Vector([trans_diff[0], -trans_diff[1], trans_diff[2]])
+            trans_diff *= rescale_factor
+            quat = ue_bone.rot
+            default_quat = Quaternion([-quat[3], quat[0], -quat[1], quat[2]])
+            rotated_trans_diff = default_quat.conjugated() @ trans_diff
+            new_val = rotated_trans_diff
+        elif data_path == 'scale':
+            scale_diff = vec_div(val, ue_bone.scale)
+            new_val = scale_diff
+        bpy_util.set_vector_to_fcurves(fcurves, new_val, frame)
+        frame += interval
+
+
+def load_acl_bone_track(pose_bone, ue_bone, track, action, start_frame=0, interval=1,
+                        rescale_factor=1.0, rotation_format='QUATERNION',
+                        only_first_frame=False):
+    """Load acl track for a bone."""
+    data_paths = ['rotation_quaternion', 'location', 'scale']
+    if rotation_format != 'QUATERNION':
+        data_paths[0] = 'rotation_euler'
+    constant_id = 0
+    track_data_id = 0
+    for use_default, use_constant, data_path in zip(track.use_default, track.use_constant, data_paths):
+        if use_default:
+            continue
+        if use_constant:
+            frames = [track.constant_list[constant_id * 3: (constant_id + 1) * 3]]
+            constant_id += 1
+        else:
+            frames = track.track_data[track_data_id]
+            track_data_id += 1
+        if only_first_frame:
+            frames = [frames[0]]
+        load_acl_track(pose_bone, ue_bone, data_path, frames, action, start_frame=start_frame, interval=interval,
+                       rescale_factor=rescale_factor, rotation_format=rotation_format)
+
+
+def load_animation(anim, armature, ue_version, rescale=1.0, ignore_missing_bones=False,
+                   start_frame_option='DEFAULT', rotation_format='QUATERNION',
+                   ignore_root_bone=False, import_as_nla=False,
+                   only_first_frame=False):
+    """Import animation data."""
+    # Get skeleton asset
+    anim_path = anim.get_animation_path()
+    skel_path = anim.get_skeleton_path()
+    skel_basename = os.path.basename(skel_path)
+    skel_search_paths = [skel_path, anim_path]
+    if 'actual_path' in armature:
+        skel_search_paths.append(armature['actual_path'])
+    skel_path = None
+    for path in skel_search_paths:
+        path = os.path.join(os.path.dirname(path), skel_basename)
+        if os.path.exists(path):
+            skel_path = path
+            print(f'Skeleton asset found ({path})')
+            break
+        print(f'Skeleton asset NOT found ({path})')
+    if skel_path is None:
+        raise RuntimeError('Skeleton asset not found.')
+    bones = unreal.uasset.Uasset(skel_path, version=ue_version).uexp.skeleton.bones
+
+    if ue_version != 'ff7r':
+        raise RuntimeError(f'Animations are unsupported for this verison. ({ue_version})')
+
+    # Get pose bones
+    bpy_util.move_to_object_mode()
+    bpy_util.move_to_pose_mode(armature)
+    pose_bones = armature.pose.bones
+    for pb in pose_bones:
+        pb.rotation_mode = rotation_format
+
+    # Get animation data
+    bone_ids = anim.bone_ids
+    compressed_clip = anim.compressed_data
+    num_samples = compressed_clip.clip_header.num_samples
+    print(f'frame count: {num_samples}')
+
+    # Check required bones
+    if not ignore_missing_bones:
+        for bone_id in bone_ids:
+            if bone_id >= len(bones):
+                raise RuntimeError(f'Bone index out of range. (anim bone id: {bone_id}, num bones: {len(bones)})')
+            bone = bones[bone_id]
+            if bone.name not in pose_bones:
+                raise RuntimeError(f'A required bone not found in the selected armature. ({bone.name})')
+
+    # Check fps
+    scene_fps = bpy_util.get_fps()
+    anim_fps = compressed_clip.clip_header.sample_rate
+    interval = max(scene_fps // anim_fps, 1)
+    if scene_fps % anim_fps != 0:
+        new_fps = interval * anim_fps
+        print(f'Changed FPS from {scene_fps} to {new_fps}.')
+        bpy_util.set_fps(new_fps)
+
+    # Set frame info
+    scene = bpy.context.scene
+    if start_frame_option == 'CURRENT':
+        start_frame = scene.frame_current
+    elif start_frame_option == 'DEFAULT':
+        start_frame = scene.frame_start
+    else:
+        start_frame = 1
+
+    # Get action
+    anim_name = anim.get_animation_name()
+    if import_as_nla:
+        action = bpy.data.actions.new(name=anim_name)
+        nla_track = bpy_util.add_nla_track(armature, name=anim_name)
+        end_frame = max((num_samples - 1) * interval, 1)
+        _ = bpy_util.add_nla_strip(nla_track, anim_name, start_frame, action, end=end_frame)
+        start_frame = 0
+    else:
+        if armature.animation_data is None:
+            armature.animation_data_create()
+        if armature.animation_data.action is None:
+            action = bpy.data.actions.new(name=armature.name)
+            armature.animation_data.action = action
+        else:
+            action = armature.animation_data.action
+
+    # Intert key frames to the action
+    print('Inserting key frames...')
+    rescale_factor = get_rescale_factor(rescale)
+    for track, bone_id in zip(compressed_clip.bone_tracks, bone_ids):
+        bone = bones[bone_id]
+        if bone_id == 0 and ignore_root_bone:
+            print(f'Tracks for {bone.name} have been ignored.')
+            continue
+        if bone.name not in pose_bones:
+            if ignore_missing_bones:
+                print(f'Found a missing bone. Tracks for {bone.name} have been ignored.')
+                continue
+        pb = pose_bones[bone.name]
+        load_acl_bone_track(pb, bone, track, action, start_frame=start_frame, interval=interval,
+                            rescale_factor=rescale_factor, rotation_format=rotation_format,
+                            only_first_frame=only_first_frame)
+
+
 def load_uasset(file, rename_armature=True, keep_sections=False,
                 normalize_bones=True, rotate_bones=False,
                 minimal_bone_length=0.025, rescale=1.0,
                 smoothing=True, only_skeleton=False,
                 show_axes=False, bone_display_type='OCTAHEDRAL', show_in_front=True,
                 load_textures=False, invert_normal_maps=False, ue_version='4.18',
-                suffix_list=(['_C', '_D'], ['_N'], ['_A'])):
+                suffix_list=(['_C', '_D'], ['_N'], ['_A']),
+                ignore_missing_bones=False, start_frame_option='DEFAULT',
+                rotation_format='QUATERNION', ignore_root_bone=False,
+                import_as_nla=False, only_first_frame=False,
+                verbose=False):
     """Import assets form .uasset file.
 
     Notes:
         See property groups for the description of arguments
     """
     # load .uasset
-    asset = unreal.uasset.Uasset(file, version=ue_version)
+    asset = unreal.uasset.Uasset(file, version=ue_version, verbose=verbose)
     asset_type = asset.asset_type
     print(f'Asset type: {asset_type}')
 
@@ -355,6 +530,18 @@ def load_uasset(file, rename_armature=True, keep_sections=False,
         return tex, asset_type
     if 'Material' in asset_type:
         raise RuntimeError(f'Unsupported asset. ({asset.asset_type})')
+    if 'AnimSequence' in asset_type:
+        anim = asset.uexp.anim
+        selected = bpy.context.selected_objects
+        amt_list = [obj for obj in selected if obj.type == 'ARMATURE']
+        if len(amt_list) != 1:
+            raise RuntimeError('Select an armature to import an animation.')
+        armature = amt_list[0]
+        load_animation(anim, armature, ue_version, rescale=rescale,
+                       ignore_missing_bones=ignore_missing_bones, start_frame_option=start_frame_option,
+                       rotation_format=rotation_format, ignore_root_bone=ignore_root_bone,
+                       import_as_nla=import_as_nla, only_first_frame=only_first_frame)
+        return armature, asset_type
 
     if asset_type not in ['SkeletalMesh', 'Skeleton', 'StaticMesh']:
         raise RuntimeError(f'Unsupported asset. ({asset.asset_type})')
@@ -395,6 +582,7 @@ def load_uasset(file, rename_armature=True, keep_sections=False,
         root = amt
     root['class'] = asset.asset_type
     root['asset_path'] = asset.asset_path
+    root['actual_path'] = asset.actual_path
     return root, asset.asset_type
 
 
@@ -404,6 +592,7 @@ class TABFLAGS_WindowManager(PropertyGroup):
     ui_mesh: BoolProperty(name='Mesh', default=True)
     ui_texture: BoolProperty(name='Texture', default=False)
     ui_armature: BoolProperty(name='Armature', default=False)
+    ui_animation: BoolProperty(name='Animation', default=False)
     ui_scale: BoolProperty(name='Scale', default=False)
 
 
@@ -425,6 +614,15 @@ class GeneralOptions(PropertyGroup):
             'Path to .uasset file you want to mod'
         ),
         default='',
+    )
+
+    verbose: BoolProperty(
+        name='Verbose',
+        description=(
+            "Show the parsing result in the console.\n"
+            'Note that "print()" is a very slow function.'
+        ),
+        default=False,
     )
 
 
@@ -574,6 +772,53 @@ class ImportOptions(PropertyGroup):
         default=1, min=0.01, max=100, step=0.01, precision=2,
     )
 
+    start_frame_option: EnumProperty(
+        name='Start Frame',
+        items=(('DEFAULT', 'Default', 'Use the start frame of the scene'),
+               ('CURRENT', 'Current', 'Use the current frame'),
+               ('FIRST', '1', 'Use 1 for the start frame')),
+        description='Start frame for the animation clip',
+        default='DEFAULT'
+    )
+
+    rotation_format: EnumProperty(
+        name='Rotation Format',
+        items=(('QUATERNION', 'Quaternion',
+                'UE Standard.\nNo Gimbal Lock but Blender does NOT support slerp interpolation for key frames'),
+               ('XYZ', 'Euler (XYZ)', 'Blender Standard.\nGood interpolation but prone to Gimbal Lock')),
+        description='Rotation format for pose bones',
+        default='QUATERNION'
+    )
+
+    ignore_missing_bones: BoolProperty(
+        name='Ignore Missing Bones',
+        description=(
+            "When off, it will raise an error if the selected armature does NOT have all animated bones"
+        ),
+        default=True,
+    )
+
+    ignore_root_bone: BoolProperty(
+        name='Ignore Root Bone',
+        description=(
+            "Ignore root bone tracks.\n"
+            "It might be able to make the animation cyclic"
+        ),
+        default=False,
+    )
+
+    import_as_nla: BoolProperty(
+        name='Import as NLA',
+        description="Import the animation as an NLA track",
+        default=False,
+    )
+
+    only_first_frame: BoolProperty(
+        name='Only the First Frame',
+        description="Import only the first frame.",
+        default=False,
+    )
+
 
 class ImportUasset(Operator, ImportHelper):
     """Operator to import .uasset files."""
@@ -599,15 +844,20 @@ class ImportUasset(Operator, ImportHelper):
         win_m = bpy.context.window_manager.tabflags
         goption = context.scene.general_options
         ioption = context.scene.import_options
-        options = [goption] + [ioption] * 4
-        show_flags = [win_m.ui_general, win_m.ui_mesh, win_m.ui_texture, win_m.ui_armature, win_m.ui_scale]
-        labels = ['ui_general', 'ui_mesh', 'ui_texture', 'ui_armature', 'ui_scale']
+        options = [goption] + [ioption] * 5
+        show_flags = [
+            win_m.ui_general, win_m.ui_mesh, win_m.ui_texture,
+            win_m.ui_armature, win_m.ui_animation, win_m.ui_scale
+        ]
+        labels = ['ui_general', 'ui_mesh', 'ui_texture', 'ui_armature', 'ui_animation', 'ui_scale']
         props = [
-            ['ue_version'],
+            ['ue_version', 'verbose'],
             ['load_textures', 'keep_sections', 'smoothing'],
             ['invert_normal_maps', 'suffix_for_color', 'suffix_for_normal', 'suffix_for_alpha'],
             ['rotate_bones', 'minimal_bone_length', 'normalize_bones',
              'rename_armature', 'only_skeleton', 'show_axes', 'bone_display_type', 'show_in_front'],
+            ['start_frame_option', 'rotation_format', 'import_as_nla',
+             'ignore_root_bone', 'ignore_missing_bones', 'only_first_frame'],
             ['unit_scale', 'rescale']
         ]
 
@@ -634,22 +884,8 @@ class ImportUasset(Operator, ImportHelper):
         return self.import_uasset(context)
 
     def import_uasset(self, context):
-        """Import files."""
-        if self.files:
-            # Multiple file import
-            ret = {'CANCELLED'}
-            dirname = os.path.dirname(self.filepath)
-            for file in self.files:
-                path = os.path.join(dirname, file.name)
-                if self.unit_import(path, context) == {'FINISHED'}:
-                    ret = {'FINISHED'}
-            return ret
-
-        # Single file import
-        return self.unit_import(self.filepath, context)
-
-    def unit_import(self, file, context):
         """Import a file."""
+        file = self.filepath
         try:
             start_time = time.time()
             general_options = context.scene.general_options
@@ -681,7 +917,14 @@ class ImportUasset(Operator, ImportHelper):
                 load_textures=import_options.load_textures,
                 invert_normal_maps=import_options.invert_normal_maps,
                 ue_version=general_options.ue_version,
-                suffix_list=suffix_list
+                suffix_list=suffix_list,
+                ignore_missing_bones=import_options.ignore_missing_bones,
+                ignore_root_bone=import_options.ignore_root_bone,
+                start_frame_option=import_options.start_frame_option,
+                rotation_format=import_options.rotation_format,
+                import_as_nla=import_options.import_as_nla,
+                only_first_frame=import_options.only_first_frame,
+                verbose=general_options.verbose
             )
 
             context.scene.general_options.source_file = file

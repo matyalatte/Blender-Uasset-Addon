@@ -106,7 +106,7 @@ def read_num_array(file, structure, length=None):
     if length is None:
         length = read_uint32(file)
     binary = file.read(st_size[st_list.index(structure)] * length)
-    return list(struct.unpack(structure * length, binary))
+    return list(struct.unpack('<' + structure * length, binary))
 
 
 def read_uint32_array(file, length=None):
@@ -152,6 +152,12 @@ def read_vec3_f32(file):
 def read_vec3_f32_array(file):
     """Read an array of vec3."""
     return read_array(file, read_vec3_f32)
+
+
+def read_vec3_i8(file):
+    """Read 3 ints as floats."""
+    vec = read_uint8_array(file, length=3)
+    return [x / 255 for x in vec]
 
 
 def read_16byte(file):
@@ -302,6 +308,12 @@ def write_vec3_f32_array(file, vec_ary, with_length=False):
     return write_array(file, vec_ary, write_vec3_f32, with_length=with_length)
 
 
+def write_vec3_i8(file, vec):
+    """Read 3 ints as floats."""
+    vec = [int(x * 255) for x in vec]
+    write_uint8_array(file, vec)
+
+
 def write_16byte(file, binary):
     """Write binary."""
     return file.write(binary)
@@ -325,6 +337,22 @@ def write_null(f):
 def write_null_array(f, length):
     """Write an array of 0s."""
     write_uint32_array(f, [0] * length)
+
+
+def write_struct_array(file, ary, with_length=False):
+    """Write an array."""
+    if with_length:
+        write_uint32(file, len(ary))
+    for a in ary:
+        file.write(a)
+
+
+def rewrite_struct(f, obj):
+    """Rewrite an object."""
+    offset = f.tell()
+    f.seek(obj.offset)
+    obj.write(f)
+    f.seek(offset)
 
 
 def compare(file1, file2, no_err=False):

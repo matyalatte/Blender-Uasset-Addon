@@ -33,6 +33,11 @@ class Material:
         io.write_uint32(f, material.slot_name_id)
         f.write(material.unk)
 
+    @staticmethod
+    def get_size(version, skeletal):
+        """Get binary size of a material."""
+        return 36 + 4 * (skeletal and (version >= '4.27'))
+
     def copy(self):
         """Copy itself."""
         return Material(self.import_id, self.slot_name_id, self.unk)
@@ -42,10 +47,15 @@ class Material:
         """Get meta data from .uasset files."""
         for material in materials:
             material.slot_name = name_list[material.slot_name_id]
-            material_import = imports[-material.import_id - 1]
-            material.import_name = material_import.name
-            material.class_name = material_import.class_name
-            material.asset_path = material_import.parent_name
+            if material.import_id != 0:
+                material_import = imports[-material.import_id - 1]
+                material.import_name = material_import.name
+                material.class_name = material_import.class_name
+                material.asset_path = material_import.parent_name
+            else:
+                material.import_name = material.slot_name
+                material.class_name = 'None'
+                material.asset_path = 'None'
 
     def print(self, padding=2):
         """Print meta data."""
@@ -57,9 +67,6 @@ class Material:
     @staticmethod
     def assign_materials(materials1, materials2):
         """Assign material ids."""
-        # if len(materials1)!=len(materials2):
-        #     raise RuntimeError('Number of materials should be the same.')
-
         print('Assigning materials...')
 
         def get_range(num):
@@ -105,26 +112,40 @@ class Material:
         new_material_ids, assigned1, assigned2 = assign(names1, names2, assigned1, assigned2,
                                                         new_material_ids)
 
+        def index_of(val, in_list):
+            try:
+                return in_list.index(val)
+            except ValueError:
+                return None
+
         for i in range(len(materials2)):
             if not assigned2[i]:
-                new_id = assigned1.index(False)
                 assigned2[i] = True
-                assigned1[new_id] = True
+                new_id = index_of(False, assigned1)
+                if new_id is not None:
+                    assigned1[new_id] = True
+                else:
+                    new_id = len(assigned1)
+                    assigned1.append(True)
                 new_material_ids[i] = new_id
 
         for i, mat2 in zip(range(len(materials2)), materials2):
-            mat1 = materials1[new_material_ids[i]]
-            m1str = mat1.import_name
-            if m1str != mat1.slot_name:
-                m1str += f'({mat1.slot_name})'
-
             m2str = mat2.import_name
-            print(f'Assigned {m2str} to {m1str}')
+            if i < len(materials1):
+                mat1 = materials1[new_material_ids[i]]
+                m1str = mat1.import_name
+                if m1str != mat1.slot_name:
+                    m1str += f'({mat1.slot_name})'
+                print(f'Assigned {m2str} to {m1str}')
+            else:
+                print(f'Added {m2str} to material slots')
 
         return new_material_ids
 
     def load_asset(self, main_file_path, main_asset_path, version):
         """Load material assets and store texture paths."""
+        if self.asset_path == 'None':
+            return self.asset_path
 
         def get_actual_path(target_asset_path):
             main_asset_dir = os.path.dirname(main_asset_path)
