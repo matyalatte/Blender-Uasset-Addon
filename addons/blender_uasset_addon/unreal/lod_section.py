@@ -98,6 +98,7 @@ class SkeletalLODSection4(SkeletalLODSection):
     CorrespondClothAssetIndex = b'\xCD\xCD'
 
     def __init__(self, version, material_id, first_ib_id, face_num, unk,
+                 recompute_tangent, cast_shadow,
                  first_vertex_id, vertex_group, vertex_num, max_bone_influences,
                  unk1, unk2):
         """Constructor."""
@@ -106,6 +107,8 @@ class SkeletalLODSection4(SkeletalLODSection):
         self.first_ib_id = first_ib_id
         self.face_num = face_num
         self.unk = unk
+        self.recompute_tangent = recompute_tangent
+        self.cast_shadow = cast_shadow
         self.first_vertex_id = first_vertex_id
         self.vertex_group = vertex_group
         self.vertex_num = vertex_num
@@ -123,8 +126,8 @@ class SkeletalLODSection4(SkeletalLODSection):
         io.read_null(f)
         io.check(f.read(3), b'\x00\xff\xff')
         unk = f.read(1)
-        io.read_null(f)
-        io.read_const_uint32(f, 1)
+        recompute_tangent = io.read_uint32(f)
+        cast_shadow = io.read_uint32(f)
         first_vertex_id = io.read_uint32(f)
 
         vertex_group = io.read_uint16_array(f)
@@ -140,7 +143,7 @@ class SkeletalLODSection4(SkeletalLODSection):
         io.read_null_array(f, 4, 'LOD_Section:ClothingSectionData: GUID should be null.')
         unknown = io.read_int32(f)
         io.check(unknown, -1, f, 'LOD_Section:ClothingSectionData: AssetLodIndex should be -1.')
-        if version == 'ff7r':
+        if version in ['ff7r', 'kh3']:
             unk1 = io.read_uint32(f)
             num = io.read_uint32(f)
             io.check(unk1 == 1, num > 0, f)
@@ -149,6 +152,7 @@ class SkeletalLODSection4(SkeletalLODSection):
             unk1 = None
             unk2 = None
         section = SkeletalLODSection4(version, material_id, first_ib_id, face_num, unk,
+                                      recompute_tangent, cast_shadow,
                                       first_vertex_id, vertex_group, vertex_num, max_bone_influences,
                                       unk1, unk2)
         return section
@@ -157,6 +161,7 @@ class SkeletalLODSection4(SkeletalLODSection):
         """Copy itself."""
         return SkeletalLODSection4(self.version, self.material_id,
                                    self.first_ib_id, self.face_num, self.unk,
+                                   self.recompute_tangent, self.cast_shadow,
                                    self.first_vertex_id, self.vertex_group,
                                    self.vertex_num, self.max_bone_influences,
                                    0, [])
@@ -171,7 +176,8 @@ class SkeletalLODSection4(SkeletalLODSection):
         io.write_null(f)
         f.write(b'\x00\xff\xff')
         f.write(section.unk)
-        io.write_uint32_array(f, [0, 1])
+        io.write_uint32(f, section.recompute_tangent)
+        io.write_uint32(f, section.cast_shadow)
         io.write_uint32(f, section.first_vertex_id)
         io.write_uint16_array(f, section.vertex_group, with_length=True)
         io.write_uint32(f, section.vertex_num)
@@ -180,7 +186,7 @@ class SkeletalLODSection4(SkeletalLODSection):
         f.write(SkeletalLODSection4.CorrespondClothAssetIndex)
         io.write_null_array(f, 4)
         io.write_int32(f, -1)
-        if section.version == 'ff7r':
+        if section.version in ['ff7r', 'kh3']:
             io.write_uint32(f, section.unk1)
             io.write_uint32(f, len(section.unk2) // 16)
             io.write_uint8_array(f, section.unk2)

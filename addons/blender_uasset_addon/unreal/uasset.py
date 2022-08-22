@@ -274,6 +274,9 @@ class Uasset:
         if version == 'ff7r':
             base_version = '4.18'
             custom_version = version
+        elif version == 'kh3':
+            base_version = '4.17'
+            custom_version = version
         else:
             base_version = version
             custom_version = None

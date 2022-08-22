@@ -1,3 +1,6 @@
+v0.2.1
+- Added support for KH3
+
 v0.2.0 (ACL support)
 - Added animation options to fbx export
 - Added support for animation injection

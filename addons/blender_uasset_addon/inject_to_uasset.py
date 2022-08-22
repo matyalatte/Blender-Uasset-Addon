@@ -281,12 +281,15 @@ def inject_animation(asset, armature, ue_version, rescale=1.0):
 
     # Get animation data
     bone_ids = anim.bone_ids
-    compressed_clip = anim.compressed_data
-    num_samples = compressed_clip.clip_header.num_samples
+    compressed_data = anim.compressed_data
+    num_samples = anim.num_frames
     print(f'frame count: {num_samples}')
 
     scene_fps = bpy_util.get_fps()
-    asset_fps = compressed_clip.clip_header.sample_rate
+    if anim.is_acl:
+        asset_fps = compressed_data.clip_header.sample_rate
+    else:
+        asset_fps = 30
     interval = scene_fps / asset_fps
     start_frame = 1
     print(f'injected frames: {start_frame} ~ {start_frame + num_samples * interval}')

@@ -334,7 +334,7 @@ def generate_mesh(amt, asset, materials, material_names, rescale=1.0,
     return sections[0]
 
 
-def load_acl_track(pose_bone, ue_bone, data_path, values, action, start_frame=0, interval=1,
+def load_acl_track(pose_bone, ue_bone, data_path, values, times, action,
                    rescale_factor=1.0, rotation_format='QUATERNION'):
     """Load acl track for an element."""
     def vec_sub(a, b):
@@ -346,8 +346,7 @@ def load_acl_track(pose_bone, ue_bone, data_path, values, action, start_frame=0,
     path_from_pb = pose_bone.path_from_id(data_path)
     fcurves = bpy_util.get_fcurves(action, path_from_pb, 3 + (rotation_format == 'QUATERNION'))
 
-    frame = start_frame
-    for val in values:
+    for val, t in zip(values, times):
         if 'rotation' in data_path:
             val[1] = - val[1]
             norm = sum(x*x for x in val)
@@ -359,6 +358,7 @@ def load_acl_track(pose_bone, ue_bone, data_path, values, action, start_frame=0,
             quat = ue_bone.rot
             default_quat = Quaternion([-quat[3], quat[0], -quat[1], quat[2]])
             quat_diff = default_quat.rotation_difference(anim_quat)
+
             if rotation_format == 'QUATERNION':
                 new_val = quat_diff
             else:
@@ -369,13 +369,13 @@ def load_acl_track(pose_bone, ue_bone, data_path, values, action, start_frame=0,
             trans_diff *= rescale_factor
             quat = ue_bone.rot
             default_quat = Quaternion([-quat[3], quat[0], -quat[1], quat[2]])
-            rotated_trans_diff = default_quat.conjugated() @ trans_diff
-            new_val = rotated_trans_diff
+            trans_diff = default_quat.conjugated() @ trans_diff
+
+            new_val = trans_diff
         elif data_path == 'scale':
             scale_diff = vec_div(val, ue_bone.scale)
             new_val = scale_diff
-        bpy_util.set_vector_to_fcurves(fcurves, new_val, frame)
-        frame += interval
+        bpy_util.set_vector_to_fcurves(fcurves, new_val, t)
 
 
 def load_acl_bone_track(pose_bone, ue_bone, track, action, start_frame=0, interval=1,
@@ -398,7 +398,29 @@ def load_acl_bone_track(pose_bone, ue_bone, track, action, start_frame=0, interv
             track_data_id += 1
         if only_first_frame:
             frames = [frames[0]]
-        load_acl_track(pose_bone, ue_bone, data_path, frames, action, start_frame=start_frame, interval=interval,
+        times = [t * interval + start_frame for t in range(len(frames))]
+        load_acl_track(pose_bone, ue_bone, data_path, frames, times, action,
+                       rescale_factor=rescale_factor, rotation_format=rotation_format)
+
+
+def load_bone_track(pose_bone, ue_bone, track, action, start_frame=0, interval=1,
+                    rescale_factor=1.0, rotation_format='QUATERNION',
+                    only_first_frame=False):
+    """Load acl track for a bone."""
+    data_paths = ['rotation_quaternion', 'location', 'scale']
+    if rotation_format != 'QUATERNION':
+        data_paths[0] = 'rotation_euler'
+    for keys, times, data_path in zip(track.keys, track.times, data_paths):
+        if len(keys) == 0:
+            continue
+        if only_first_frame:
+            keys = [keys[0]]
+            if len(times) > 0:
+                times = [times[0]]
+        if len(times) == 0:
+            times = [i for i in range(len(keys))]
+        times = [t * interval + start_frame for t in times]
+        load_acl_track(pose_bone, ue_bone, data_path, keys, times, action,
                        rescale_factor=rescale_factor, rotation_format=rotation_format)
 
 
@@ -426,7 +448,7 @@ def load_animation(anim, armature, ue_version, rescale=1.0, ignore_missing_bones
         raise RuntimeError('Skeleton asset not found.')
     bones = unreal.uasset.Uasset(skel_path, version=ue_version).uexp.skeleton.bones
 
-    if ue_version != 'ff7r':
+    if ue_version not in ['ff7r', 'kh3']:
         raise RuntimeError(f'Animations are unsupported for this verison. ({ue_version})')
 
     # Get pose bones
@@ -438,8 +460,8 @@ def load_animation(anim, armature, ue_version, rescale=1.0, ignore_missing_bones
 
     # Get animation data
     bone_ids = anim.bone_ids
-    compressed_clip = anim.compressed_data
-    num_samples = compressed_clip.clip_header.num_samples
+    compressed_data = anim.compressed_data
+    num_samples = anim.num_frames
     print(f'frame count: {num_samples}')
 
     # Check required bones
@@ -453,7 +475,10 @@ def load_animation(anim, armature, ue_version, rescale=1.0, ignore_missing_bones
 
     # Check fps
     scene_fps = bpy_util.get_fps()
-    anim_fps = compressed_clip.clip_header.sample_rate
+    if anim.is_acl:
+        anim_fps = compressed_data.clip_header.sample_rate
+    else:
+        anim_fps = 30
     interval = max(scene_fps // anim_fps, 1)
     if scene_fps % anim_fps != 0:
         new_fps = interval * anim_fps
@@ -489,7 +514,7 @@ def load_animation(anim, armature, ue_version, rescale=1.0, ignore_missing_bones
     # Intert key frames to the action
     print('Inserting key frames...')
     rescale_factor = get_rescale_factor(rescale)
-    for track, bone_id in zip(compressed_clip.bone_tracks, bone_ids):
+    for track, bone_id in zip(compressed_data.bone_tracks, bone_ids):
         bone = bones[bone_id]
         if bone_id == 0 and ignore_root_bone:
             print(f'Tracks for {bone.name} have been ignored.')
@@ -499,7 +524,12 @@ def load_animation(anim, armature, ue_version, rescale=1.0, ignore_missing_bones
                 print(f'Found a missing bone. Tracks for {bone.name} have been ignored.')
                 continue
         pb = pose_bones[bone.name]
-        load_acl_bone_track(pb, bone, track, action, start_frame=start_frame, interval=interval,
+        if anim.is_acl:
+            load_acl_bone_track(pb, bone, track, action, start_frame=start_frame, interval=interval,
+                                rescale_factor=rescale_factor, rotation_format=rotation_format,
+                                only_first_frame=only_first_frame)
+        else:
+            load_bone_track(pb, bone, track, action, start_frame=start_frame, interval=interval,
                             rescale_factor=rescale_factor, rotation_format=rotation_format,
                             only_first_frame=only_first_frame)
 
@@ -601,6 +631,7 @@ class GeneralOptions(PropertyGroup):
     ue_version: EnumProperty(
         name='UE version',
         items=(('ff7r', 'FF7R', ''),
+               ('kh3', 'KH3', ''),
                ('4.18', '4.18 (Experimental!)', 'Not Recommended'),
                ('4.27', '4.26, 4.27 (Experimental!)', 'Not Recommended'),
                ('5.0', '5.0 (Experimental!)', 'Not Recommended')),
