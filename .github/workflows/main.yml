@@ -24,7 +24,17 @@ jobs:
           echo "REPO_VERSION=$VERSION" >> $GITHUB_ENV
         shell: bash
         
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
+        with:
+          submodules: true
+        
+      - name: Setup msbuild
+        uses: microsoft/setup-msbuild@v1.1
+      
+       - name: build exe
+        run: |
+          cd external/Matya-Uasset-Samples/batch_files
+          ./build.bat
 
       - name: Copy files
         run: |
@@ -32,6 +42,7 @@ jobs:
           cp -r addons/${{ env.ZIP_NAME }} ../release
           cp changelog.txt ../release/${{ env.ZIP_NAME }}
           cp LICENSE ../release/${{ env.ZIP_NAME }}
+          cp external/Matya-Uasset-Samples/texconv.dll ../release/addons/blender_uasset_addon/texconv
         shell: bash
 
       - name: Archive Release

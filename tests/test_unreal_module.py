@@ -23,7 +23,7 @@ GREEN = '\033[32m'
 
 def get_test_case():
     """Get test case."""
-    DATABASE_DIR = 'Matya-Uasset-Samples'
+    DATABASE_DIR = 'external/Matya-Uasset-Samples'
     json_file = os.path.join(DATABASE_DIR, 'database.json')
     if not os.path.exists(json_file):
         print(RED + 'Sample .uasset files not found.' + RED)
