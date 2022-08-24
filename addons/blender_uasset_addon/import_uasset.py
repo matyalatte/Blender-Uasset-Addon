@@ -16,6 +16,8 @@ from mathutils import Vector, Quaternion, Matrix
 import numpy as np
 
 from . import bpy_util, unreal, util
+from .texconv.texconv import Texconv
+
 if "bpy" in locals():
     import importlib
     if "bpy_util" in locals():
@@ -113,7 +115,7 @@ def generate_armature(name, bones, normalize_bones=True, rotate_bones=False,
     return amt
 
 
-def load_utexture(file, name, version, asset=None, invert_normals=False, no_err=True):
+def load_utexture(file, name, version, asset=None, invert_normals=False, no_err=True, texconv=None):
     """Import a texture form .uasset file.
 
     Args:
@@ -122,6 +124,7 @@ def load_utexture(file, name, version, asset=None, invert_normals=False, no_err=
         version (string): UE version
         asset (unreal.uasset.Uasset): loaded asset data
         invert_normals (bool): Flip y axis if the texture is normal map.
+        texconv (Texconv): Texture converter for dds.
 
     Returns:
         tex (bpy.types.Image): loaded texture
@@ -132,6 +135,8 @@ def load_utexture(file, name, version, asset=None, invert_normals=False, no_err=
         if it's not None, it will get texture data from asset
     """
     temp = util.io_util.make_temp_file(suffix='.dds')
+    if texconv is None:
+        texconv = Texconv()
     if asset is not None:
         name = asset.name
         file = name
@@ -148,7 +153,12 @@ def load_utexture(file, name, version, asset=None, invert_normals=False, no_err=
             tex_type = 'COLOR'
         dds = unreal.dds.DDS.asset_to_DDS(asset)
         dds.save(temp)
-        tex = bpy_util.load_dds(temp, name=name, tex_type=tex_type, invert_normals=invert_normals)
+        tga_file = texconv.convert_to_tga(temp, utex.format_name, utex.uasset.asset_type,
+                                          out=os.path.dirname(temp), invert_normals=invert_normals)
+        if tga_file is None:  # if texconv doesn't exist
+            tex = bpy_util.load_dds(tga_file, name=name, tex_type=tex_type, invert_normals=invert_normals)
+        else:
+            tex = bpy_util.load_tga(tga_file, name=name)
     except Exception as e:
         if not no_err:
             raise e
@@ -158,6 +168,8 @@ def load_utexture(file, name, version, asset=None, invert_normals=False, no_err=
 
     if os.path.exists(temp):
         os.remove(temp)
+    if os.path.exists(tga_file):
+        os.remove(tga_file)
     return tex, tex_type
 
 
@@ -178,6 +190,7 @@ def generate_materials(asset, version, load_textures=False,
     """
     if load_textures:
         print('Loading textures...')
+        texconv = Texconv()
     # add materials to mesh
     material_names = [m.import_name for m in asset.uexp.mesh.materials]
     color_gen = bpy_util.ColorGenerator()
@@ -219,7 +232,7 @@ def generate_materials(asset, version, load_textures=False,
                     print(f'Texture not found ({tex_path})')
                     continue
                 tex, tex_type = load_utexture(tex_path, os.path.basename(asset_path),
-                                              version, invert_normals=invert_normal_maps)
+                                              version, invert_normals=invert_normal_maps, texconv=texconv)
                 if tex is not None:
                     texs[name] = (tex, tex_type)
                     names.append(name)
@@ -710,7 +723,7 @@ class ImportOptions(PropertyGroup):
         description=(
             'The suffix will be used to determine which 3ch texture is the main color map'
         ),
-        default='_C, _D',
+        default='_C, _D, d00',
     )
 
     suffix_for_normal: StringProperty(
@@ -718,7 +731,7 @@ class ImportOptions(PropertyGroup):
         description=(
             'The suffix will be used to determine which 2ch texture is the main normal map'
         ),
-        default='_N',
+        default='_N, n00',
     )
 
     suffix_for_alpha: StringProperty(

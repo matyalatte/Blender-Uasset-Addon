@@ -5,6 +5,7 @@ import bpy
 from mathutils import Matrix
 import numpy as np
 
+
 UNIT = {
     'METERS': 1,
     'CENTIMETERS': 0.01
@@ -589,6 +590,26 @@ def enable_alpha_for_material(material):
     """Allow a mateiral to use alpha textures."""
     material.blend_method = 'HASHED'
     material.shadow_method = 'HASHED'
+
+
+def load_tga(file, name, color_space='Non-Color'):
+    """Load tga file.
+
+    Args:
+        file (string): file path for dds
+        name (string): object name for the texture
+        color_space (string): color space
+
+    Returns:
+        tex (bpy.types.Image): loaded texture
+    """
+    tex = bpy.data.images.load(file)
+    tex.pack()
+    tex.colorspace_settings.name = color_space
+    tex.filepath = ''
+    tex.filepath_raw = ''
+    tex.name = name
+    return tex
 
 
 def load_dds(file, name, tex_type='COLOR',
