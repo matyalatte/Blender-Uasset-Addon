@@ -2,10 +2,10 @@
 import bpy
 
 
-class VIEW3D_PT_urls(bpy.types.Panel):
+class UASSET_PT_open_urls(bpy.types.Panel):
     """UI panel to open URLs."""
     bl_label = "URLs"
-    bl_idname = "VIEW3D_PT_urls"
+    bl_idname = "UASSET_PT_open_urls"
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
     bl_category = 'Uasset'
@@ -22,13 +22,13 @@ class VIEW3D_PT_urls(bpy.types.Panel):
         """Draw UI panel to open URLs."""
         layout = self.layout
         col = layout.column()
-        for (name, url), icon in zip(VIEW3D_PT_urls.urls.items(), VIEW3D_PT_urls.icons):
+        for (name, url), icon in zip(UASSET_PT_open_urls.urls.items(), UASSET_PT_open_urls.icons):
             ope = col.operator('wm.url_open', text=name, icon=icon)
             ope.url = url
 
 
 classes = (
-    VIEW3D_PT_urls,
+    UASSET_PT_open_urls,
 )
 
 

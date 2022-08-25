@@ -1,7 +1,9 @@
-v0.2.1 (KH3 support)
+v0.2.1
 - Added support for KH3
 - Improved texture loading speed
 - Supported some dds formats Blender doesn't support (e.g. BC7)
+- Fixed a warning for deprecated API
+- Modified some object names to remove possibility of conflicts with other addons
 
 v0.2.0 (ACL support)
 - Added animation options to fbx export

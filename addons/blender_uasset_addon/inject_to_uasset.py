@@ -414,7 +414,7 @@ def inject_uasset(source_file, directory, ue_version='4.18',
     return asset_type
 
 
-class InjectOptions(PropertyGroup):
+class UassetInjectOptions(PropertyGroup):
     """Properties for inject options."""
     only_mesh: BoolProperty(
         name='Only Mesh',
@@ -458,9 +458,9 @@ class InjectOptions(PropertyGroup):
     )
 
 
-class InjectToUasset(Operator):
+class UASSET_OT_inject_to_uasset(Operator):
     """Operator to inject objects to .uasset files."""
-    bl_idname = 'inject.uasset'
+    bl_idname = 'uasset.inject_to_uasset'
     bl_label = 'Export .uasset here'
     bl_description = 'Inject a selected asset to .uasset file'
     bl_options = {'REGISTER'}
@@ -478,13 +478,13 @@ class InjectToUasset(Operator):
         layout.use_property_decorate = False  # No animation.
 
         props = ['ue_version', 'source_file']
-        general_options = context.scene.general_options
+        general_options = context.scene.uasset_general_options
         col = layout.column()
         col.use_property_split = True
         col.use_property_decorate = False
         for prop in props:
             col.prop(general_options, prop)
-        inject_options = context.scene.inject_options
+        inject_options = context.scene.uasset_inject_options
         props = ['only_mesh', 'duplicate_folder_structure', 'content_folder', 'mod_name', 'rescale']
         for prop in props:
             col.prop(inject_options, prop)
@@ -497,13 +497,13 @@ class InjectToUasset(Operator):
     def execute(self, context):
         """Inject selected objects into a selected file."""
         start_time = time.time()
-        general_options = context.scene.general_options
+        general_options = context.scene.uasset_general_options
         if bpy_util.os_is_windows():
             bpy.ops.wm.console_toggle()
             bpy.ops.wm.console_toggle()
         try:
-            general_options = context.scene.general_options
-            inject_options = context.scene.inject_options
+            general_options = context.scene.uasset_general_options
+            inject_options = context.scene.uasset_inject_options
             asset_type = inject_uasset(general_options.source_file,
                                        self.directory,
                                        ue_version=general_options.ue_version,
@@ -524,9 +524,9 @@ class InjectToUasset(Operator):
         return ret
 
 
-class SelectUasset(Operator):
+class UASSET_OT_select_uasset(Operator):
     """File picker for source file."""
-    bl_idname = 'select.uasset'
+    bl_idname = 'uasset.select_uasset'
     bl_label = 'Select Uasset'
     bl_description = 'Select .uasset file you want to mod'
 
@@ -543,14 +543,14 @@ class SelectUasset(Operator):
 
     def execute(self, context):
         """Update file path."""
-        context.scene.general_options.source_file = self.filepath
+        context.scene.uasset_general_options.source_file = self.filepath
         return {'FINISHED'}
 
 
 class UASSET_PT_inject_panel(bpy.types.Panel):
     """UI panel for inject function."""
     bl_label = "Inject to Uasset"
-    bl_idname = 'VIEW3D_PT_inject_uasset'
+    bl_idname = 'UASSET_PT_inject_uasset'
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
     bl_category = "Uasset"
@@ -560,22 +560,22 @@ class UASSET_PT_inject_panel(bpy.types.Panel):
         layout = self.layout
 
         # import_uasset.py->GeneralOptions
-        general_options = context.scene.general_options
+        general_options = context.scene.uasset_general_options
 
-        layout.operator(InjectToUasset.bl_idname, text='Inject to Uasset (Experimantal)',
+        layout.operator(UASSET_OT_inject_to_uasset.bl_idname, text='Inject to Uasset (Experimantal)',
                         icon='MESH_DATA')
         col = layout.column()
         col.use_property_split = True
         col.use_property_decorate = False
         col.prop(general_options, 'ue_version')
         col.prop(general_options, 'source_file')
-        layout.operator(SelectUasset.bl_idname, text='Select Source File', icon='FILE')
+        layout.operator(UASSET_OT_select_uasset.bl_idname, text='Select Source File', icon='FILE')
 
 
 classes = (
-    InjectOptions,
-    InjectToUasset,
-    SelectUasset,
+    UassetInjectOptions,
+    UASSET_OT_inject_to_uasset,
+    UASSET_OT_select_uasset,
     UASSET_PT_inject_panel,
 )
 
@@ -584,11 +584,11 @@ def register():
     """Regist UI panel, operator, and properties."""
     for c in classes:
         bpy.utils.register_class(c)
-    bpy.types.Scene.inject_options = PointerProperty(type=InjectOptions)
+    bpy.types.Scene.uasset_inject_options = PointerProperty(type=UassetInjectOptions)
 
 
 def unregister():
     """Unregist UI panel, operator, and properties."""
     for c in classes:
         bpy.utils.unregister_class(c)
-    del bpy.types.Scene.inject_options
+    del bpy.types.Scene.uasset_inject_options

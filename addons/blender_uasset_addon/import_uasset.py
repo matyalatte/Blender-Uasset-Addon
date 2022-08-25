@@ -629,7 +629,7 @@ def load_uasset(file, rename_armature=True, keep_sections=False,
     return root, asset.asset_type
 
 
-class TABFLAGS_WindowManager(PropertyGroup):
+class UassetImportPanelFlags(PropertyGroup):
     """Properties to manage tabs."""
     ui_general: BoolProperty(name='General', default=True)
     ui_mesh: BoolProperty(name='Mesh', default=True)
@@ -639,7 +639,7 @@ class TABFLAGS_WindowManager(PropertyGroup):
     ui_scale: BoolProperty(name='Scale', default=False)
 
 
-class GeneralOptions(PropertyGroup):
+class UassetGeneralOptions(PropertyGroup):
     """Properties for general options."""
     ue_version: EnumProperty(
         name='UE version',
@@ -670,7 +670,7 @@ class GeneralOptions(PropertyGroup):
     )
 
 
-class ImportOptions(PropertyGroup):
+class UassetImportOptions(PropertyGroup):
     """Properties for import options."""
     rename_armature: BoolProperty(
         name='Rename Armature',
@@ -864,9 +864,9 @@ class ImportOptions(PropertyGroup):
     )
 
 
-class ImportUasset(Operator, ImportHelper):
+class UASSET_OT_import_uasset(Operator, ImportHelper):
     """Operator to import .uasset files."""
-    bl_idname = 'import.uasset'
+    bl_idname = 'uasset.import_uasset'
     bl_label = 'Import Uasset'
     bl_description = 'Import .uasset files'
     bl_options = {'REGISTER', 'UNDO'}
@@ -885,9 +885,9 @@ class ImportUasset(Operator, ImportHelper):
         layout.use_property_split = False
         layout.use_property_decorate = False  # No animation.
 
-        win_m = bpy.context.window_manager.tabflags
-        goption = context.scene.general_options
-        ioption = context.scene.import_options
+        win_m = bpy.context.window_manager.uasset_import_panel_flags
+        goption = context.scene.uasset_general_options
+        ioption = context.scene.uasset_import_options
         options = [goption] + [ioption] * 5
         show_flags = [
             win_m.ui_general, win_m.ui_mesh, win_m.ui_texture,
@@ -932,8 +932,8 @@ class ImportUasset(Operator, ImportHelper):
         file = self.filepath
         try:
             start_time = time.time()
-            general_options = context.scene.general_options
-            import_options = context.scene.import_options
+            general_options = context.scene.uasset_general_options
+            import_options = context.scene.uasset_import_options
 
             bpy_util.set_unit_scale(import_options.unit_scale)
 
@@ -971,7 +971,7 @@ class ImportUasset(Operator, ImportHelper):
                 verbose=general_options.verbose
             )
 
-            context.scene.general_options.source_file = file
+            context.scene.uasset_general_options.source_file = file
 
             elapsed_s = f'{(time.time() - start_time):.2f}s'
             m = f'Success! Imported {asset_type} in {elapsed_s}'
@@ -985,9 +985,9 @@ class ImportUasset(Operator, ImportHelper):
         return ret
 
 
-class ToggleConsole(Operator):
+class UASSET_OT_toggle_console(Operator):
     """Operator to toggle the system console."""
-    bl_idname = 'import.toggle_console'
+    bl_idname = 'uasset.toggle_console'
     bl_label = 'Toggle Console'
     bl_description = ('Toggle the system console.\n'
                       'I recommend enabling the system console to see the progress')
@@ -1002,7 +1002,7 @@ class ToggleConsole(Operator):
 class UASSET_PT_import_panel(bpy.types.Panel):
     """UI panel for improt function."""
     bl_label = "Import Uasset"
-    bl_idname = 'VIEW3D_PT_import_uasset'
+    bl_idname = 'UASSET_PT_import_panel'
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
     bl_category = "Uasset"
@@ -1010,9 +1010,9 @@ class UASSET_PT_import_panel(bpy.types.Panel):
     def draw(self, context):
         """Draw UI panel."""
         layout = self.layout
-        layout.operator(ImportUasset.bl_idname, icon='MESH_DATA')
-        general_options = context.scene.general_options
-        import_options = context.scene.import_options
+        layout.operator(UASSET_OT_import_uasset.bl_idname, icon='MESH_DATA')
+        general_options = context.scene.uasset_general_options
+        import_options = context.scene.uasset_import_options
         col = layout.column()
         col.use_property_split = True
         col.use_property_decorate = False
@@ -1022,20 +1022,20 @@ class UASSET_PT_import_panel(bpy.types.Panel):
 
         layout.separator()
         if bpy_util.os_is_windows():
-            layout.operator(ToggleConsole.bl_idname, icon='CONSOLE')
+            layout.operator(UASSET_OT_toggle_console.bl_idname, icon='CONSOLE')
 
 
 def menu_func_import(self, context):
     """Add import operator to File->Import."""
-    self.layout.operator(ImportUasset.bl_idname, text='Uasset (.uasset)')
+    self.layout.operator(UASSET_OT_import_uasset.bl_idname, text='Uasset (.uasset)')
 
 
 classes = (
-    TABFLAGS_WindowManager,
-    GeneralOptions,
-    ImportOptions,
-    ImportUasset,
-    ToggleConsole,
+    UassetImportPanelFlags,
+    UassetGeneralOptions,
+    UassetImportOptions,
+    UASSET_OT_import_uasset,
+    UASSET_OT_toggle_console,
     UASSET_PT_import_panel,
 )
 
@@ -1045,9 +1045,9 @@ def register():
     for c in classes:
         bpy.utils.register_class(c)
     bpy.types.TOPBAR_MT_file_import.append(menu_func_import)
-    bpy.types.WindowManager.tabflags = PointerProperty(type=TABFLAGS_WindowManager)
-    bpy.types.Scene.general_options = PointerProperty(type=GeneralOptions)
-    bpy.types.Scene.import_options = PointerProperty(type=ImportOptions)
+    bpy.types.WindowManager.uasset_import_panel_flags = PointerProperty(type=UassetImportPanelFlags)
+    bpy.types.Scene.uasset_general_options = PointerProperty(type=UassetGeneralOptions)
+    bpy.types.Scene.uasset_import_options = PointerProperty(type=UassetImportOptions)
 
 
 def unregister():
@@ -1055,6 +1055,6 @@ def unregister():
     for c in classes:
         bpy.utils.unregister_class(c)
     bpy.types.TOPBAR_MT_file_import.remove(menu_func_import)
-    del bpy.types.WindowManager.tabflags
-    del bpy.types.Scene.general_options
-    del bpy.types.Scene.import_options
+    del bpy.types.WindowManager.uasset_import_panel_flags
+    del bpy.types.Scene.uasset_general_options
+    del bpy.types.Scene.uasset_import_options

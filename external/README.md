@@ -1,6 +1,6 @@
 # External dependencies
 The addon uses some external repositories.<br>
-You can get them with `git submodule update --init`.
+You can get them with `git submodule update --init --recursive`.
 
 ## Matya-Uasset-Samples
 [Matya-Uasset-Samples](https://github.com/matyalatte/Matya-Uasset-Samples) (MIT License)

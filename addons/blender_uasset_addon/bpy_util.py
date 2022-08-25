@@ -493,16 +493,24 @@ def join_meshes(meshes):
     Returns:
         mesh: joined mesh
     """
-    # deselect_all() need this?
+    # deselect_all()  # need this?
     if len(meshes) == 0:
         return None
     if len(meshes) == 1:
         return meshes[0]
     mesh_data_list = [mesh.data for mesh in meshes[1:]]
-    ctx = bpy.context.copy()
-    ctx['active_object'] = meshes[0]
-    ctx['selected_editable_objects'] = meshes
-    bpy.ops.object.join(ctx)
+
+    if (3, 2, 0) > bpy.app.version:
+        # Deprecated in the latest version
+        ctx = bpy.context.copy()
+        ctx['active_object'] = meshes[0]
+        ctx['selected_editable_objects'] = meshes
+        bpy.ops.object.join(ctx)
+    else:
+        # New API from 3.2
+        with bpy.context.temp_override(active_object=meshes[0],
+                                       selected_editable_objects=meshes):
+            bpy.ops.object.join()
 
     # remove unnecessary mesh data
     deselect_all()
@@ -659,12 +667,6 @@ def load_dds(file, name, tex_type='COLOR',
     return tex
 
 
-# types
-# COLOR: Color map
-# COLOR_MAIN: Main color map
-# NORMAL: Normal map
-# NORMAL_MAIN: Main normal map
-# ALPHA: Alpha texture
 def assign_texture(texture, material, tex_type='COLOR',
                    location=(-800, 300), invert_normals=True):
     """Make shader nodes for a texture and a material.
@@ -731,10 +733,13 @@ def make_trs(trans, rot, scale):
     Notes:
         Same as Matrix.LocRotScale. but 2.8x doesn't support it.
     """
-    mat_trans = Matrix.Translation(trans)
-    mat_rot = rot.to_matrix().to_4x4()
-    mat_sca = Matrix.Diagonal(scale).to_4x4()
-    return mat_trans @ mat_rot @ mat_sca
+    if (3, 0, 0) > bpy.app.version:
+        mat_trans = Matrix.Translation(trans)
+        mat_rot = rot.to_matrix().to_4x4()
+        mat_sca = Matrix.Diagonal(scale).to_4x4()
+        return mat_trans @ mat_rot @ mat_sca
+    else:
+        return Matrix.LocRotScale(trans, rot, scale)
 
 
 def get_animation_data(amt, start_frame=0, num_samples=1, interval=1):
