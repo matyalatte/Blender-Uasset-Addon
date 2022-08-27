@@ -13,7 +13,9 @@ bl_info = {
 }
 
 try:
-    from . import import_uasset, export_as_fbx, open_urls, inject_to_uasset
+    from . import import_uasset, export_as_fbx, \
+                  open_urls, inject_to_uasset, \
+                  get_new_release
     if "bpy" in locals():
         import importlib
         if "import_uasset" in locals():
@@ -24,9 +26,12 @@ try:
             importlib.reload(export_as_fbx)
         if "open_urls" in locals():
             importlib.reload(open_urls)
+        if "get_new_release" in locals():
+            importlib.reload(get_new_release)
 
     def register():
         """Regist addon."""
+        get_new_release.register(bl_info['version'])
         import_uasset.register()
         inject_to_uasset.register()
         export_as_fbx.register()
@@ -34,6 +39,7 @@ try:
 
     def unregister():
         """Unregist addon."""
+        get_new_release.unregister(bl_info['version'])
         import_uasset.unregister()
         inject_to_uasset.unregister()
         export_as_fbx.unregister()

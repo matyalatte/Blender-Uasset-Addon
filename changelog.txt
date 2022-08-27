@@ -1,7 +1,8 @@
 v0.2.1
-- Added support for KH3
+- Supported skeletal mesh and animations for KH3. (Injection is unavailable yet.)
 - Improved texture loading speed
 - Supported some dds formats Blender doesn't support (e.g. BC7)
+- Added an UI panel that displays when an updated version is available.
 - Fixed a warning for deprecated API
 - Modified some object names to remove possibility of conflicts with other addons
 
