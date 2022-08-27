@@ -13,7 +13,7 @@ jobs:
   build:
     runs-on: windows-2022
     steps:
-    
+
       - name: Check tag
         run: |
           if [[ ${{ github.ref }} == refs/tags/v* ]]; then
@@ -31,7 +31,7 @@ jobs:
       - name: Setup msbuild
         uses: microsoft/setup-msbuild@v1.1
       
-       - name: build exe
+      - name: build exe
         run: |
           cd external/Matya-Uasset-Samples/batch_files
           ./build.bat

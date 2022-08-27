@@ -63,7 +63,7 @@ jobs:
       matrix:
         include:
           # Test with 2.83, 3.0, and 3.2 on Windows
-           - platform: windows-latest
+          - platform: windows-latest
             pytest-version: '7.1.2'
             blender-version: '3.2.2'
             python-version: '3.10'
