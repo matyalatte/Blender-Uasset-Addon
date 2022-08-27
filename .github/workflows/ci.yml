@@ -88,12 +88,12 @@ jobs:
       
       - name: Build DLL
         run: |
-          cd external/Matya-Uasset-Samples/batch_files
+          cd external/Texconv-Custom-DLL/batch_files
           ./build.bat
       
       - name: Copy files
         run: |
-          cp external/Matya-Uasset-Samples/texconv.dll addons/blender_uasset_addon/texconv
+          cp external/Texconv-Custom-DLL/texconv.dll addons/blender_uasset_addon/texconv
         shell: bash
 
       - name: Set up Python v${{ matrix.python-version }}
