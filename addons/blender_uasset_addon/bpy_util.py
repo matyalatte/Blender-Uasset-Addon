@@ -6,6 +6,11 @@ from mathutils import Matrix
 import numpy as np
 
 
+def translate(text):
+    """Translate texts."""
+    return bpy.app.translations.pgettext(text, msgctxt="*")
+
+
 UNIT = {
     'METERS': 1,
     'CENTIMETERS': 0.01

@@ -461,7 +461,7 @@ class UassetInjectOptions(PropertyGroup):
 class UASSET_OT_inject_to_uasset(Operator):
     """Operator to inject objects to .uasset files."""
     bl_idname = 'uasset.inject_to_uasset'
-    bl_label = 'Export .uasset here'
+    bl_label = "Inject to Uasset"
     bl_description = 'Inject a selected asset to .uasset file'
     bl_options = {'REGISTER'}
 
@@ -527,7 +527,7 @@ class UASSET_OT_inject_to_uasset(Operator):
 class UASSET_OT_select_uasset(Operator):
     """File picker for source file."""
     bl_idname = 'uasset.select_uasset'
-    bl_label = 'Select Uasset'
+    bl_label = 'Select Source File'
     bl_description = 'Select .uasset file you want to mod'
 
     filter_glob: StringProperty(default='*.uasset', options={'HIDDEN'})
@@ -561,15 +561,15 @@ class UASSET_PT_inject_panel(bpy.types.Panel):
 
         # import_uasset.py->GeneralOptions
         general_options = context.scene.uasset_general_options
-
-        layout.operator(UASSET_OT_inject_to_uasset.bl_idname, text='Inject to Uasset (Experimantal)',
-                        icon='MESH_DATA')
+        text = bpy_util.translate(UASSET_OT_inject_to_uasset.bl_label)
+        layout.operator(UASSET_OT_inject_to_uasset.bl_idname, text=text, icon='MESH_DATA')
         col = layout.column()
         col.use_property_split = True
         col.use_property_decorate = False
         col.prop(general_options, 'ue_version')
         col.prop(general_options, 'source_file')
-        layout.operator(UASSET_OT_select_uasset.bl_idname, text='Select Source File', icon='FILE')
+        text = bpy_util.translate(UASSET_OT_select_uasset.bl_label)
+        layout.operator(UASSET_OT_select_uasset.bl_idname, text=text, icon='FILE')
 
 
 classes = (

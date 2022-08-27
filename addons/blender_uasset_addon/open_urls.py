@@ -1,5 +1,6 @@
 """UI panel to open URLs."""
 import bpy
+from .import bpy_util
 
 
 class UASSET_PT_open_urls(bpy.types.Panel):
@@ -13,7 +14,7 @@ class UASSET_PT_open_urls(bpy.types.Panel):
 
     urls = {
         'Readme': 'https://github.com/matyalatte/Blender-Uasset-Addon',
-        'Getting Started': 'https://github.com/matyalatte/Blender-Uasset-Addon/wiki/Getting-Started',
+        'Getting Started ': 'https://github.com/matyalatte/Blender-Uasset-Addon/wiki/Getting-Started',
         'FAQ': 'https://github.com/matyalatte/Blender-Uasset-Addon/wiki/FAQ'
     }
     icons = ['TEXT', 'INFO', 'QUESTION']
@@ -23,7 +24,7 @@ class UASSET_PT_open_urls(bpy.types.Panel):
         layout = self.layout
         col = layout.column()
         for (name, url), icon in zip(UASSET_PT_open_urls.urls.items(), UASSET_PT_open_urls.icons):
-            ope = col.operator('wm.url_open', text=name, icon=icon)
+            ope = col.operator('wm.url_open', text=bpy_util.translate(name), icon=icon)
             ope.url = url
 
 

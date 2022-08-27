@@ -90,7 +90,7 @@ class UassetFbxOptions(bpy.types.PropertyGroup):
             default=1.0,
     )
     export_tangent: BoolProperty(
-        name='Export tangent',
+        name='Export Tangent',
         description="Add binormal and tangent vectors, together with normal they form the tangent space "
                     "(will only work correctly with tris/quads only meshes!)",
         default=False
@@ -161,11 +161,11 @@ class UASSET_OT_export_fbx(bpy.types.Operator, ExportHelper):
     """Operator for export function."""
     bl_idname = "uasset.export_fbx"
     bl_label = "Export as fbx"
-    bl_description = (
-        'Export selected armature and meshes as fbx.\n'
-        "It'll use the same export function as the default one,\n"
+    desc = [
+        "Export selected armature and meshes as fbx.",
+        "It'll use the same export function as the default one,",
         "but it's customized to prevent some user errors"
-    )
+    ]
     bl_options = {'REGISTER', 'UNDO'}
 
     filename_ext = '.fbx'
@@ -173,6 +173,11 @@ class UASSET_OT_export_fbx(bpy.types.Operator, ExportHelper):
     filepath: StringProperty(
         name='File Path'
     )
+
+    @classmethod
+    def description(cls, context, event):
+        """Get description."""
+        return '\n'.join(bpy_util.translate(desc) for desc in cls.desc)
 
     def draw(self, context):
         """Draw options for file picker."""
@@ -256,7 +261,8 @@ class UASSET_PT_export_panel(bpy.types.Panel):
         col = layout.column()
         col.use_property_split = True
         col.use_property_decorate = False
-        col.operator(UASSET_OT_export_fbx.bl_idname, icon='MESH_DATA')
+        text = bpy_util.translate(UASSET_OT_export_fbx.bl_label)
+        col.operator(UASSET_OT_export_fbx.bl_idname, text=text, icon='MESH_DATA')
         export_options = context.scene.uasset_export_options
         for prop in ['global_scale', 'smooth_type', 'export_tangent', 'use_custom_props']:
             col.prop(export_options, prop)
@@ -273,7 +279,6 @@ def register():
     """Regist UI panel, operator, and properties."""
     for cls in classes:
         register_class(cls)
-
     bpy.types.Scene.uasset_export_options = PointerProperty(type=UassetFbxOptions)
 
 
@@ -281,5 +286,4 @@ def unregister():
     """Unregist UI panel, operator, and properties."""
     for cls in classes:
         unregister_class(cls)
-
     del bpy.types.Scene.uasset_export_options

@@ -16,6 +16,7 @@ try:
     from . import import_uasset, export_as_fbx, \
                   open_urls, inject_to_uasset, \
                   get_new_release
+    from .translations import translation
     if "bpy" in locals():
         import importlib
         if "import_uasset" in locals():
@@ -28,9 +29,12 @@ try:
             importlib.reload(open_urls)
         if "get_new_release" in locals():
             importlib.reload(get_new_release)
+        if "translation" in locals():
+            importlib.reload(translation)
 
     def register():
-        """Regist addon."""
+        """Add addon."""
+        translation.register()
         get_new_release.register(bl_info['version'])
         import_uasset.register()
         inject_to_uasset.register()
@@ -38,12 +42,14 @@ try:
         open_urls.register()
 
     def unregister():
-        """Unregist addon."""
+        """Remove addon."""
+        translation.unregister()
         get_new_release.unregister(bl_info['version'])
         import_uasset.unregister()
         inject_to_uasset.unregister()
         export_as_fbx.unregister()
         open_urls.unregister()
 
-except ModuleNotFoundError:
+except ModuleNotFoundError as exc:
+    print(exc)
     print('bpy not found.')

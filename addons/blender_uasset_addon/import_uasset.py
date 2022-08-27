@@ -18,6 +18,7 @@ import numpy as np
 from . import bpy_util, unreal, util
 from .texconv.texconv import Texconv
 
+
 if "bpy" in locals():
     import importlib
     if "bpy_util" in locals():
@@ -645,9 +646,9 @@ class UassetGeneralOptions(PropertyGroup):
         name='UE version',
         items=(('ff7r', 'FF7R', ''),
                ('kh3', 'KH3', ''),
-               ('4.18', '4.18 (Experimental!)', 'Not Recommended'),
-               ('4.27', '4.26, 4.27 (Experimental!)', 'Not Recommended'),
-               ('5.0', '5.0 (Experimental!)', 'Not Recommended')),
+               ('4.18', '4.18', 'Not Recommended'),
+               ('4.27', '4.26, 4.27', 'Not Recommended'),
+               ('5.0', '5.0', 'Not Recommended')),
         description='UE version of assets',
         default='ff7r'
     )
@@ -664,7 +665,7 @@ class UassetGeneralOptions(PropertyGroup):
         name='Verbose',
         description=(
             "Show the parsing result in the console.\n"
-            'Note that "print()" is a very slow function.'
+            "Note that 'print()' is a very slow function."
         ),
         default=False,
     )
@@ -683,7 +684,7 @@ class UassetImportOptions(PropertyGroup):
     )
 
     smoothing: BoolProperty(
-        name='Apply Smooth shading',
+        name='Apply Smooth Shading',
         description=(
             'Apply smooth shading'
         ),
@@ -751,7 +752,7 @@ class UassetImportOptions(PropertyGroup):
     normalize_bones: BoolProperty(
         name='Normalize Bones',
         description=(
-            'Force all bones to have the double length of the "Minimal Bone Length"'
+            "Force all bones to have the double length of the 'Minimal Bone Length'"
         ),
         default=True,
     )
@@ -819,7 +820,7 @@ class UassetImportOptions(PropertyGroup):
     start_frame_option: EnumProperty(
         name='Start Frame',
         items=(('DEFAULT', 'Default', 'Use the start frame of the scene'),
-               ('CURRENT', 'Current', 'Use the current frame'),
+               ('CURRENT', 'Current ', 'Use the current frame'),
                ('FIRST', '1', 'Use 1 for the start frame')),
         description='Start frame for the animation clip',
         default='DEFAULT'
@@ -828,7 +829,7 @@ class UassetImportOptions(PropertyGroup):
     rotation_format: EnumProperty(
         name='Rotation Format',
         items=(('QUATERNION', 'Quaternion',
-                'UE Standard.\nNo Gimbal Lock but Blender does NOT support slerp interpolation for key frames'),
+                'UE Standard.\nNo Gimbal Lock but Blender does NOT support Slerp for key frames'),
                ('XYZ', 'Euler (XYZ)', 'Blender Standard.\nGood interpolation but prone to Gimbal Lock')),
         description='Rotation format for pose bones',
         default='QUATERNION'
@@ -859,7 +860,7 @@ class UassetImportOptions(PropertyGroup):
 
     only_first_frame: BoolProperty(
         name='Only the First Frame',
-        description="Import only the first frame.",
+        description="Import only the first frame",
         default=False,
     )
 
@@ -881,7 +882,6 @@ class UASSET_OT_import_uasset(Operator, ImportHelper):
     def draw(self, context):
         """Draw options for file picker."""
         layout = self.layout
-
         layout.use_property_split = False
         layout.use_property_decorate = False  # No animation.
 
@@ -989,14 +989,18 @@ class UASSET_OT_toggle_console(Operator):
     """Operator to toggle the system console."""
     bl_idname = 'uasset.toggle_console'
     bl_label = 'Toggle Console'
-    bl_description = ('Toggle the system console.\n'
-                      'I recommend enabling the system console to see the progress')
+    desc = ["Toggle the system console.", "You can see the progress on the console"]
 
     def execute(self, context):
         """Toggle console."""
         if bpy_util.os_is_windows():
             bpy.ops.wm.console_toggle()
         return {'FINISHED'}
+
+    @classmethod
+    def description(cls, context, event):
+        """Get description."""
+        return '\n'.join(bpy_util.translate(desc) for desc in cls.desc)
 
 
 class UASSET_PT_import_panel(bpy.types.Panel):
@@ -1010,7 +1014,8 @@ class UASSET_PT_import_panel(bpy.types.Panel):
     def draw(self, context):
         """Draw UI panel."""
         layout = self.layout
-        layout.operator(UASSET_OT_import_uasset.bl_idname, icon='MESH_DATA')
+        text = bpy_util.translate(UASSET_OT_import_uasset.bl_label)
+        layout.operator(UASSET_OT_import_uasset.bl_idname, text=text, icon='MESH_DATA')
         general_options = context.scene.uasset_general_options
         import_options = context.scene.uasset_import_options
         col = layout.column()
@@ -1022,7 +1027,8 @@ class UASSET_PT_import_panel(bpy.types.Panel):
 
         layout.separator()
         if bpy_util.os_is_windows():
-            layout.operator(UASSET_OT_toggle_console.bl_idname, icon='CONSOLE')
+            text = bpy_util.translate(UASSET_OT_toggle_console.bl_label)
+            layout.operator(UASSET_OT_toggle_console.bl_idname, text=text, icon='CONSOLE')
 
 
 def menu_func_import(self, context):

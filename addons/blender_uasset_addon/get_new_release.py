@@ -1,22 +1,33 @@
 """UI panel to check and open release page."""
-import bpy
 import requests
 
-response = requests.get("https://api.github.com/repos/matyalatte/Blender-Uasset-Addon/releases/latest")
-if response:
-    tag = response.json()['tag_name']
-    latest_version = tag[1:].split('.')
-    is_valid_tag = (tag[0] == 'v') and (len(latest_version) == 3)
-    if not is_valid_tag:
-        print(f'get_new_release.py: Got the latest release page. But the tag is invalid. ({tag})')
-    title = response.json()['name']
-    body = response.json()['body'].split('\n')
-else:
-    print('get_new_release.py: Failed to get response from the github page.')
-    latest_version = []
-    is_valid_tag = False
-    title = ""
-    body = []
+import bpy
+from . import bpy_util
+
+
+def get_release_info():
+    """Get info from the latest release page."""
+    response = requests.get("https://api.github.com/repos/matyalatte/Blender-Uasset-Addon/releases/latest")
+    err_tag = "BlenderUassetAddon: get_new_release.py"
+    if response:
+        tag = response.json()['tag_name']
+        latest_version = tag[1:].split('.')
+        is_valid_tag = (tag[0] == 'v') and (len(latest_version) == 3)
+        if not is_valid_tag:
+            print(f'{err_tag}: Got the latest release page. But the tag is invalid. ({tag})')
+        title = response.json()['name']
+        body = response.json()['body'].split('\n')
+    else:
+        print(f'{err_tag}: Failed to get response from the github page.')
+        latest_version = []
+        is_valid_tag = False
+        title = ""
+        body = []
+    return latest_version, is_valid_tag, title, body
+
+
+latest_version, is_valid_tag, title, body = get_release_info()
+
 
 class UASSET_PT_get_new_release(bpy.types.Panel):
     """UI panel to open URLs."""
@@ -37,7 +48,7 @@ class UASSET_PT_get_new_release(bpy.types.Panel):
         layout = self.layout
         col = layout.column()
         for (name, url), icon in zip(UASSET_PT_get_new_release.urls.items(), UASSET_PT_get_new_release.icons):
-            ope = col.operator('wm.url_open', text=name, icon=icon)
+            ope = col.operator('wm.url_open', text=bpy_util.translate(name), icon=icon)
             ope.url = url
         col.label(text=title)
         for line in body:
@@ -52,7 +63,7 @@ classes = (
 
 
 def register(version):
-    """Regist UI panel."""
+    """Add UI panel."""
     current_version = [str(v) for v in version]
     if current_version != latest_version and is_valid_tag:
         for cls in classes:
@@ -60,7 +71,7 @@ def register(version):
 
 
 def unregister(version):
-    """Unregist UI panel."""
+    """Remove UI panel."""
     if list(version) != latest_version and is_valid_tag:
         for cls in reversed(classes):
             bpy.utils.unregister_class(cls)

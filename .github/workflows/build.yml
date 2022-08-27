@@ -1,4 +1,4 @@
-name: packaging
+name: build
 
 on:
   push:
@@ -10,7 +10,7 @@ env:
   ZIP_NAME: blender_uasset_addon
 
 jobs:
-  packaging:
+  build:
     runs-on: windows-2022
     steps:
     
