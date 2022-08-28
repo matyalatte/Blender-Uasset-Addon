@@ -11,15 +11,7 @@ from bpy.props import (StringProperty,
 from bpy.types import Operator, PropertyGroup
 from mathutils import Vector, Quaternion, Euler
 
-from . import bpy_util, unreal, util
-if "bpy" in locals():
-    import importlib
-    if "bpy_util" in locals():
-        importlib.reload(bpy_util)
-    if "unreal" in locals():
-        importlib.reload(unreal)
-    if "util" in locals():
-        importlib.reload(util)
+from . import bpy_util, unreal
 
 
 def get_rescale_factor(rescale):

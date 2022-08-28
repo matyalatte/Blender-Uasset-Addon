@@ -13,24 +13,29 @@ bl_info = {
 }
 
 try:
-    from . import import_uasset, export_as_fbx, \
-                  open_urls, inject_to_uasset, \
-                  get_new_release
-    from .translations import translation
-    if "bpy" in locals():
+    def reload_package(module_dict_main):
+        """Reload Scripts."""
         import importlib
-        if "import_uasset" in locals():
-            importlib.reload(import_uasset)
-        if "inject_to_uasset" in locals():
-            importlib.reload(inject_to_uasset)
-        if "export_as_fbx" in locals():
-            importlib.reload(export_as_fbx)
-        if "open_urls" in locals():
-            importlib.reload(open_urls)
-        if "get_new_release" in locals():
-            importlib.reload(get_new_release)
-        if "translation" in locals():
-            importlib.reload(translation)
+        from pathlib import Path
+
+        def reload_package_recursive(current_dir, module_dict):
+            for path in current_dir.iterdir():
+                if "__init__" in str(path) or path.stem not in module_dict:
+                    continue
+                if path.is_file() and path.suffix == ".py":
+                    importlib.reload(module_dict[path.stem])
+                elif path.is_dir():
+                    reload_package_recursive(path, module_dict[path.stem].__dict__)
+
+        reload_package_recursive(Path(__file__).parent, module_dict_main)
+
+    if ".import_uasset" in locals():
+        reload_package(locals())
+
+    from . import \
+        import_uasset, export_as_fbx, open_urls, \
+        inject_to_uasset, get_new_release
+    from .translations import translation
 
     def register():
         """Add addon."""

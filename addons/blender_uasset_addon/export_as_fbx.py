@@ -11,10 +11,6 @@ from bpy.utils import register_class, unregister_class
 from bpy_extras.io_utils import ExportHelper
 
 from . import bpy_util
-if "bpy" in locals():
-    import importlib
-    if "bpy_util" in locals():
-        importlib.reload(bpy_util)
 
 
 def export_as_fbx(file, armature, meshes, global_scale=1.0, smooth_type='FACE',

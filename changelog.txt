@@ -4,6 +4,7 @@ v0.2.1
 - Supported some dds formats Blender doesn't support (e.g. BC7)
 - Added an UI panel that displays when an updated version is available.
 - Added support for Japanese.
+- Fixed reload functions for "Reload Scripts" in Blender
 - Fixed a warning for deprecated API
 - Modified some object names to remove possibility of conflicts with other addons
 

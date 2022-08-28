@@ -39,7 +39,7 @@ class UASSET_PT_get_new_release(bpy.types.Panel):
     bl_options = {'DEFAULT_CLOSED'}
 
     urls = {
-        'Get the latest version!': 'https://github.com/matyalatte/Blender-Uasset-Addon/releases/latest'
+        'Get the latest version!': 'https://github.com/matyalatte/Blender-Uasset-Addon'
     }
     icons = ['URL']
 

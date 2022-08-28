@@ -38,7 +38,7 @@ Blender addon to mod .uasset files.
 [FAQ · matyalatte/Blender-Uasset-Addon Wiki](https://github.com/matyalatte/Blender-Uasset-Addon/wiki/FAQ)
 
 ## Build with Github Actions
-There is a workflow to build a DLL and zip it with python scripts.
+There is a workflow to build a DLL and zip it with python scripts.<br>
 [How to Build With Github Actions · matyalatte/Blender-Uasset-Addon Wiki](https://github.com/matyalatte/Blender-Uasset-Addon/wiki/How-to-Build-With-Github-Actions)
 
 ## Translation

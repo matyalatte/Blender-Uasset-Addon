@@ -19,16 +19,6 @@ from . import bpy_util, unreal, util
 from .texconv.texconv import Texconv
 
 
-if "bpy" in locals():
-    import importlib
-    if "bpy_util" in locals():
-        importlib.reload(bpy_util)
-    if "unreal" in locals():
-        importlib.reload(unreal)
-    if "util" in locals():
-        importlib.reload(util)
-
-
 def get_rescale_factor(rescale):
     """Calculate rescale factor from rescale value and unit scale."""
     return 0.01 * rescale / bpy.context.scene.unit_settings.scale_length
