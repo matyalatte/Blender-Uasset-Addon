@@ -15,15 +15,11 @@ from bpy_extras.io_utils import ImportHelper
 from mathutils import Vector, Quaternion, Matrix
 import numpy as np
 
-from . import bpy_util, unreal, util
-if "bpy" in locals():
-    import importlib
-    if "bpy_util" in locals():
-        importlib.reload(bpy_util)
-    if "unreal" in locals():
-        importlib.reload(unreal)
-    if "util" in locals():
-        importlib.reload(util)
+from . import bpy_util
+from .unreal.uasset import Uasset
+from .unreal.dds import DDS
+from .util.io_util import make_temp_file
+from .texconv.texconv import Texconv
 
 
 def get_rescale_factor(rescale):
@@ -113,15 +109,16 @@ def generate_armature(name, bones, normalize_bones=True, rotate_bones=False,
     return amt
 
 
-def load_utexture(file, name, version, asset=None, invert_normals=False, no_err=True):
+def load_utexture(file, name, version, asset=None, invert_normals=False, no_err=True, texconv=None):
     """Import a texture form .uasset file.
 
     Args:
         file (string): file path to .uasset file
         name (string): texture name
         version (string): UE version
-        asset (unreal.uasset.Uasset): loaded asset data
+        asset (Uasset): loaded asset data
         invert_normals (bool): Flip y axis if the texture is normal map.
+        texconv (Texconv): Texture converter for dds.
 
     Returns:
         tex (bpy.types.Image): loaded texture
@@ -131,13 +128,15 @@ def load_utexture(file, name, version, asset=None, invert_normals=False, no_err=
         if asset is None, it will load .uasset file
         if it's not None, it will get texture data from asset
     """
-    temp = util.io_util.make_temp_file(suffix='.dds')
+    temp = make_temp_file(suffix='.dds')
+    if texconv is None:
+        texconv = Texconv()
     if asset is not None:
         name = asset.name
         file = name
     try:
         if asset is None:
-            asset = unreal.uasset.Uasset(file, version=version, asset_type='Texture')
+            asset = Uasset(file, version=version, asset_type='Texture')
         utex = asset.uexp.texture
         utex.remove_mipmaps()
         if 'BC5' in utex.type:
@@ -146,9 +145,14 @@ def load_utexture(file, name, version, asset=None, invert_normals=False, no_err=
             tex_type = 'GRAY'
         else:
             tex_type = 'COLOR'
-        dds = unreal.dds.DDS.asset_to_DDS(asset)
+        dds = DDS.asset_to_DDS(asset)
         dds.save(temp)
-        tex = bpy_util.load_dds(temp, name=name, tex_type=tex_type, invert_normals=invert_normals)
+        tga_file = texconv.convert_to_tga(temp, utex.format_name, utex.uasset.asset_type,
+                                          out=os.path.dirname(temp), invert_normals=invert_normals)
+        if tga_file is None:  # if texconv doesn't exist
+            tex = bpy_util.load_dds(tga_file, name=name, tex_type=tex_type, invert_normals=invert_normals)
+        else:
+            tex = bpy_util.load_tga(tga_file, name=name)
     except Exception as e:
         if not no_err:
             raise e
@@ -158,6 +162,8 @@ def load_utexture(file, name, version, asset=None, invert_normals=False, no_err=
 
     if os.path.exists(temp):
         os.remove(temp)
+    if os.path.exists(tga_file):
+        os.remove(tga_file)
     return tex, tex_type
 
 
@@ -166,7 +172,7 @@ def generate_materials(asset, version, load_textures=False,
     """Add materials and textures, and make shader nodes.
 
     args:
-        asset (unreal.uasset.Uasset): mesh asset
+        asset (Uasset): mesh asset
         version (string): UE version
         load_textures (bool): if import texture files or not
         invert_normal_maps (bool): if flip y axis for normal maps or not
@@ -178,6 +184,7 @@ def generate_materials(asset, version, load_textures=False,
     """
     if load_textures:
         print('Loading textures...')
+        texconv = Texconv()
     # add materials to mesh
     material_names = [m.import_name for m in asset.uexp.mesh.materials]
     color_gen = bpy_util.ColorGenerator()
@@ -219,7 +226,7 @@ def generate_materials(asset, version, load_textures=False,
                     print(f'Texture not found ({tex_path})')
                     continue
                 tex, tex_type = load_utexture(tex_path, os.path.basename(asset_path),
-                                              version, invert_normals=invert_normal_maps)
+                                              version, invert_normals=invert_normal_maps, texconv=texconv)
                 if tex is not None:
                     texs[name] = (tex, tex_type)
                     names.append(name)
@@ -272,7 +279,7 @@ def generate_mesh(amt, asset, materials, material_names, rescale=1.0,
 
     Args:
         amt (bpy.types.Armature): target armature
-        asset (unreal.uasset.Uasset): source asset
+        asset (Uasset): source asset
         materials (list[bpy.types.Material]): material objects
         material_names (list[string]): material names
         rescale (float): rescale factor for vertex positions
@@ -334,7 +341,7 @@ def generate_mesh(amt, asset, materials, material_names, rescale=1.0,
     return sections[0]
 
 
-def load_acl_track(pose_bone, ue_bone, data_path, values, action, start_frame=0, interval=1,
+def load_acl_track(pose_bone, ue_bone, data_path, values, times, action,
                    rescale_factor=1.0, rotation_format='QUATERNION'):
     """Load acl track for an element."""
     def vec_sub(a, b):
@@ -346,8 +353,7 @@ def load_acl_track(pose_bone, ue_bone, data_path, values, action, start_frame=0,
     path_from_pb = pose_bone.path_from_id(data_path)
     fcurves = bpy_util.get_fcurves(action, path_from_pb, 3 + (rotation_format == 'QUATERNION'))
 
-    frame = start_frame
-    for val in values:
+    for val, t in zip(values, times):
         if 'rotation' in data_path:
             val[1] = - val[1]
             norm = sum(x*x for x in val)
@@ -359,6 +365,7 @@ def load_acl_track(pose_bone, ue_bone, data_path, values, action, start_frame=0,
             quat = ue_bone.rot
             default_quat = Quaternion([-quat[3], quat[0], -quat[1], quat[2]])
             quat_diff = default_quat.rotation_difference(anim_quat)
+
             if rotation_format == 'QUATERNION':
                 new_val = quat_diff
             else:
@@ -369,13 +376,13 @@ def load_acl_track(pose_bone, ue_bone, data_path, values, action, start_frame=0,
             trans_diff *= rescale_factor
             quat = ue_bone.rot
             default_quat = Quaternion([-quat[3], quat[0], -quat[1], quat[2]])
-            rotated_trans_diff = default_quat.conjugated() @ trans_diff
-            new_val = rotated_trans_diff
+            trans_diff = default_quat.conjugated() @ trans_diff
+
+            new_val = trans_diff
         elif data_path == 'scale':
             scale_diff = vec_div(val, ue_bone.scale)
             new_val = scale_diff
-        bpy_util.set_vector_to_fcurves(fcurves, new_val, frame)
-        frame += interval
+        bpy_util.set_vector_to_fcurves(fcurves, new_val, t)
 
 
 def load_acl_bone_track(pose_bone, ue_bone, track, action, start_frame=0, interval=1,
@@ -398,7 +405,29 @@ def load_acl_bone_track(pose_bone, ue_bone, track, action, start_frame=0, interv
             track_data_id += 1
         if only_first_frame:
             frames = [frames[0]]
-        load_acl_track(pose_bone, ue_bone, data_path, frames, action, start_frame=start_frame, interval=interval,
+        times = [t * interval + start_frame for t in range(len(frames))]
+        load_acl_track(pose_bone, ue_bone, data_path, frames, times, action,
+                       rescale_factor=rescale_factor, rotation_format=rotation_format)
+
+
+def load_bone_track(pose_bone, ue_bone, track, action, start_frame=0, interval=1,
+                    rescale_factor=1.0, rotation_format='QUATERNION',
+                    only_first_frame=False):
+    """Load acl track for a bone."""
+    data_paths = ['rotation_quaternion', 'location', 'scale']
+    if rotation_format != 'QUATERNION':
+        data_paths[0] = 'rotation_euler'
+    for keys, times, data_path in zip(track.keys, track.times, data_paths):
+        if len(keys) == 0:
+            continue
+        if only_first_frame:
+            keys = [keys[0]]
+            if len(times) > 0:
+                times = [times[0]]
+        if len(times) == 0:
+            times = [i for i in range(len(keys))]
+        times = [t * interval + start_frame for t in times]
+        load_acl_track(pose_bone, ue_bone, data_path, keys, times, action,
                        rescale_factor=rescale_factor, rotation_format=rotation_format)
 
 
@@ -424,9 +453,9 @@ def load_animation(anim, armature, ue_version, rescale=1.0, ignore_missing_bones
         print(f'Skeleton asset NOT found ({path})')
     if skel_path is None:
         raise RuntimeError('Skeleton asset not found.')
-    bones = unreal.uasset.Uasset(skel_path, version=ue_version).uexp.skeleton.bones
+    bones = Uasset(skel_path, version=ue_version).uexp.skeleton.bones
 
-    if ue_version != 'ff7r':
+    if ue_version not in ['ff7r', 'kh3']:
         raise RuntimeError(f'Animations are unsupported for this verison. ({ue_version})')
 
     # Get pose bones
@@ -438,8 +467,8 @@ def load_animation(anim, armature, ue_version, rescale=1.0, ignore_missing_bones
 
     # Get animation data
     bone_ids = anim.bone_ids
-    compressed_clip = anim.compressed_data
-    num_samples = compressed_clip.clip_header.num_samples
+    compressed_data = anim.compressed_data
+    num_samples = anim.num_frames
     print(f'frame count: {num_samples}')
 
     # Check required bones
@@ -453,7 +482,10 @@ def load_animation(anim, armature, ue_version, rescale=1.0, ignore_missing_bones
 
     # Check fps
     scene_fps = bpy_util.get_fps()
-    anim_fps = compressed_clip.clip_header.sample_rate
+    if anim.is_acl:
+        anim_fps = compressed_data.clip_header.sample_rate
+    else:
+        anim_fps = 30
     interval = max(scene_fps // anim_fps, 1)
     if scene_fps % anim_fps != 0:
         new_fps = interval * anim_fps
@@ -489,7 +521,7 @@ def load_animation(anim, armature, ue_version, rescale=1.0, ignore_missing_bones
     # Intert key frames to the action
     print('Inserting key frames...')
     rescale_factor = get_rescale_factor(rescale)
-    for track, bone_id in zip(compressed_clip.bone_tracks, bone_ids):
+    for track, bone_id in zip(compressed_data.bone_tracks, bone_ids):
         bone = bones[bone_id]
         if bone_id == 0 and ignore_root_bone:
             print(f'Tracks for {bone.name} have been ignored.')
@@ -499,7 +531,12 @@ def load_animation(anim, armature, ue_version, rescale=1.0, ignore_missing_bones
                 print(f'Found a missing bone. Tracks for {bone.name} have been ignored.')
                 continue
         pb = pose_bones[bone.name]
-        load_acl_bone_track(pb, bone, track, action, start_frame=start_frame, interval=interval,
+        if anim.is_acl:
+            load_acl_bone_track(pb, bone, track, action, start_frame=start_frame, interval=interval,
+                                rescale_factor=rescale_factor, rotation_format=rotation_format,
+                                only_first_frame=only_first_frame)
+        else:
+            load_bone_track(pb, bone, track, action, start_frame=start_frame, interval=interval,
                             rescale_factor=rescale_factor, rotation_format=rotation_format,
                             only_first_frame=only_first_frame)
 
@@ -521,7 +558,7 @@ def load_uasset(file, rename_armature=True, keep_sections=False,
         See property groups for the description of arguments
     """
     # load .uasset
-    asset = unreal.uasset.Uasset(file, version=ue_version, verbose=verbose)
+    asset = Uasset(file, version=ue_version, verbose=verbose)
     asset_type = asset.asset_type
     print(f'Asset type: {asset_type}')
 
@@ -586,7 +623,7 @@ def load_uasset(file, rename_armature=True, keep_sections=False,
     return root, asset.asset_type
 
 
-class TABFLAGS_WindowManager(PropertyGroup):
+class UassetImportPanelFlags(PropertyGroup):
     """Properties to manage tabs."""
     ui_general: BoolProperty(name='General', default=True)
     ui_mesh: BoolProperty(name='Mesh', default=True)
@@ -596,14 +633,15 @@ class TABFLAGS_WindowManager(PropertyGroup):
     ui_scale: BoolProperty(name='Scale', default=False)
 
 
-class GeneralOptions(PropertyGroup):
+class UassetGeneralOptions(PropertyGroup):
     """Properties for general options."""
     ue_version: EnumProperty(
         name='UE version',
         items=(('ff7r', 'FF7R', ''),
-               ('4.18', '4.18 (Experimental!)', 'Not Recommended'),
-               ('4.27', '4.26, 4.27 (Experimental!)', 'Not Recommended'),
-               ('5.0', '5.0 (Experimental!)', 'Not Recommended')),
+               ('kh3', 'KH3', ''),
+               ('4.18', '4.18', 'Not Recommended'),
+               ('4.27', '4.26, 4.27', 'Not Recommended'),
+               ('5.0', '5.0', 'Not Recommended')),
         description='UE version of assets',
         default='ff7r'
     )
@@ -620,13 +658,13 @@ class GeneralOptions(PropertyGroup):
         name='Verbose',
         description=(
             "Show the parsing result in the console.\n"
-            'Note that "print()" is a very slow function.'
+            "Note that 'print()' is a very slow function."
         ),
         default=False,
     )
 
 
-class ImportOptions(PropertyGroup):
+class UassetImportOptions(PropertyGroup):
     """Properties for import options."""
     rename_armature: BoolProperty(
         name='Rename Armature',
@@ -639,7 +677,7 @@ class ImportOptions(PropertyGroup):
     )
 
     smoothing: BoolProperty(
-        name='Apply Smooth shading',
+        name='Apply Smooth Shading',
         description=(
             'Apply smooth shading'
         ),
@@ -679,7 +717,7 @@ class ImportOptions(PropertyGroup):
         description=(
             'The suffix will be used to determine which 3ch texture is the main color map'
         ),
-        default='_C, _D',
+        default='_C, _D, d00',
     )
 
     suffix_for_normal: StringProperty(
@@ -687,7 +725,7 @@ class ImportOptions(PropertyGroup):
         description=(
             'The suffix will be used to determine which 2ch texture is the main normal map'
         ),
-        default='_N',
+        default='_N, n00',
     )
 
     suffix_for_alpha: StringProperty(
@@ -707,7 +745,7 @@ class ImportOptions(PropertyGroup):
     normalize_bones: BoolProperty(
         name='Normalize Bones',
         description=(
-            'Force all bones to have the double length of the "Minimal Bone Length"'
+            "Force all bones to have the double length of the 'Minimal Bone Length'"
         ),
         default=True,
     )
@@ -775,7 +813,7 @@ class ImportOptions(PropertyGroup):
     start_frame_option: EnumProperty(
         name='Start Frame',
         items=(('DEFAULT', 'Default', 'Use the start frame of the scene'),
-               ('CURRENT', 'Current', 'Use the current frame'),
+               ('CURRENT', 'Current ', 'Use the current frame'),
                ('FIRST', '1', 'Use 1 for the start frame')),
         description='Start frame for the animation clip',
         default='DEFAULT'
@@ -784,7 +822,7 @@ class ImportOptions(PropertyGroup):
     rotation_format: EnumProperty(
         name='Rotation Format',
         items=(('QUATERNION', 'Quaternion',
-                'UE Standard.\nNo Gimbal Lock but Blender does NOT support slerp interpolation for key frames'),
+                'UE Standard.\nNo Gimbal Lock but Blender does NOT support Slerp for key frames'),
                ('XYZ', 'Euler (XYZ)', 'Blender Standard.\nGood interpolation but prone to Gimbal Lock')),
         description='Rotation format for pose bones',
         default='QUATERNION'
@@ -815,14 +853,14 @@ class ImportOptions(PropertyGroup):
 
     only_first_frame: BoolProperty(
         name='Only the First Frame',
-        description="Import only the first frame.",
+        description="Import only the first frame",
         default=False,
     )
 
 
-class ImportUasset(Operator, ImportHelper):
+class UASSET_OT_import_uasset(Operator, ImportHelper):
     """Operator to import .uasset files."""
-    bl_idname = 'import.uasset'
+    bl_idname = 'uasset.import_uasset'
     bl_label = 'Import Uasset'
     bl_description = 'Import .uasset files'
     bl_options = {'REGISTER', 'UNDO'}
@@ -837,13 +875,12 @@ class ImportUasset(Operator, ImportHelper):
     def draw(self, context):
         """Draw options for file picker."""
         layout = self.layout
-
         layout.use_property_split = False
         layout.use_property_decorate = False  # No animation.
 
-        win_m = bpy.context.window_manager.tabflags
-        goption = context.scene.general_options
-        ioption = context.scene.import_options
+        win_m = bpy.context.window_manager.uasset_import_panel_flags
+        goption = context.scene.uasset_general_options
+        ioption = context.scene.uasset_import_options
         options = [goption] + [ioption] * 5
         show_flags = [
             win_m.ui_general, win_m.ui_mesh, win_m.ui_texture,
@@ -888,8 +925,8 @@ class ImportUasset(Operator, ImportHelper):
         file = self.filepath
         try:
             start_time = time.time()
-            general_options = context.scene.general_options
-            import_options = context.scene.import_options
+            general_options = context.scene.uasset_general_options
+            import_options = context.scene.uasset_import_options
 
             bpy_util.set_unit_scale(import_options.unit_scale)
 
@@ -927,7 +964,7 @@ class ImportUasset(Operator, ImportHelper):
                 verbose=general_options.verbose
             )
 
-            context.scene.general_options.source_file = file
+            context.scene.uasset_general_options.source_file = file
 
             elapsed_s = f'{(time.time() - start_time):.2f}s'
             m = f'Success! Imported {asset_type} in {elapsed_s}'
@@ -941,12 +978,11 @@ class ImportUasset(Operator, ImportHelper):
         return ret
 
 
-class ToggleConsole(Operator):
+class UASSET_OT_toggle_console(Operator):
     """Operator to toggle the system console."""
-    bl_idname = 'import.toggle_console'
+    bl_idname = 'uasset.toggle_console'
     bl_label = 'Toggle Console'
-    bl_description = ('Toggle the system console.\n'
-                      'I recommend enabling the system console to see the progress')
+    desc = ["Toggle the system console.", "You can see the progress on the console"]
 
     def execute(self, context):
         """Toggle console."""
@@ -954,11 +990,16 @@ class ToggleConsole(Operator):
             bpy.ops.wm.console_toggle()
         return {'FINISHED'}
 
+    @classmethod
+    def description(cls, context, event):
+        """Get description."""
+        return '\n'.join(bpy_util.translate(desc) for desc in cls.desc)
+
 
 class UASSET_PT_import_panel(bpy.types.Panel):
     """UI panel for improt function."""
     bl_label = "Import Uasset"
-    bl_idname = 'VIEW3D_PT_import_uasset'
+    bl_idname = 'UASSET_PT_import_panel'
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
     bl_category = "Uasset"
@@ -966,9 +1007,10 @@ class UASSET_PT_import_panel(bpy.types.Panel):
     def draw(self, context):
         """Draw UI panel."""
         layout = self.layout
-        layout.operator(ImportUasset.bl_idname, icon='MESH_DATA')
-        general_options = context.scene.general_options
-        import_options = context.scene.import_options
+        text = bpy_util.translate(UASSET_OT_import_uasset.bl_label)
+        layout.operator(UASSET_OT_import_uasset.bl_idname, text=text, icon='MESH_DATA')
+        general_options = context.scene.uasset_general_options
+        import_options = context.scene.uasset_import_options
         col = layout.column()
         col.use_property_split = True
         col.use_property_decorate = False
@@ -978,20 +1020,21 @@ class UASSET_PT_import_panel(bpy.types.Panel):
 
         layout.separator()
         if bpy_util.os_is_windows():
-            layout.operator(ToggleConsole.bl_idname, icon='CONSOLE')
+            text = bpy_util.translate(UASSET_OT_toggle_console.bl_label)
+            layout.operator(UASSET_OT_toggle_console.bl_idname, text=text, icon='CONSOLE')
 
 
 def menu_func_import(self, context):
     """Add import operator to File->Import."""
-    self.layout.operator(ImportUasset.bl_idname, text='Uasset (.uasset)')
+    self.layout.operator(UASSET_OT_import_uasset.bl_idname, text='Uasset (.uasset)')
 
 
 classes = (
-    TABFLAGS_WindowManager,
-    GeneralOptions,
-    ImportOptions,
-    ImportUasset,
-    ToggleConsole,
+    UassetImportPanelFlags,
+    UassetGeneralOptions,
+    UassetImportOptions,
+    UASSET_OT_import_uasset,
+    UASSET_OT_toggle_console,
     UASSET_PT_import_panel,
 )
 
@@ -1001,9 +1044,9 @@ def register():
     for c in classes:
         bpy.utils.register_class(c)
     bpy.types.TOPBAR_MT_file_import.append(menu_func_import)
-    bpy.types.WindowManager.tabflags = PointerProperty(type=TABFLAGS_WindowManager)
-    bpy.types.Scene.general_options = PointerProperty(type=GeneralOptions)
-    bpy.types.Scene.import_options = PointerProperty(type=ImportOptions)
+    bpy.types.WindowManager.uasset_import_panel_flags = PointerProperty(type=UassetImportPanelFlags)
+    bpy.types.Scene.uasset_general_options = PointerProperty(type=UassetGeneralOptions)
+    bpy.types.Scene.uasset_import_options = PointerProperty(type=UassetImportOptions)
 
 
 def unregister():
@@ -1011,6 +1054,6 @@ def unregister():
     for c in classes:
         bpy.utils.unregister_class(c)
     bpy.types.TOPBAR_MT_file_import.remove(menu_func_import)
-    del bpy.types.WindowManager.tabflags
-    del bpy.types.Scene.general_options
-    del bpy.types.Scene.import_options
+    del bpy.types.WindowManager.uasset_import_panel_flags
+    del bpy.types.Scene.uasset_general_options
+    del bpy.types.Scene.uasset_import_options

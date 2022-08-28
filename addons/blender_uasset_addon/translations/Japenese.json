@@ -1,0 +1,112 @@
+{
+    "language": "ja_JP",
+    "import_uasset.py":{
+        "UE version": "UEバージョン",
+        "UE version of assets": "アセットのUEバージョン",
+        "Not Recommended": "非推奨",
+        "Source file": "ソースファイル",
+        "Path to .uasset file you want to mod": "編集したい.uassetファイル",
+        "Verbose": "詳細出力",
+        "Show the parsing result in the console.\nNote that 'print()' is a very slow function.":
+            "ファイルの解析結果をコンソールに出力します.\n大量のprint()関数を使用するため、実行速度は遅くなります",
+        "Rename Armature": "アーマチュアをリネーム",
+        "Rename armature to 'Armature'.\nIf the asset is skeleton or you check 'Keep Sections',\nthis flag will be ignored":
+            "アーマチュアの名前を'Armature'に変更します.\n'セクションを保持'がONの場合、この項目は無視されます",
+        "Keep Sections": "セクションを保持",
+        "Import sections as mutiple meshes.\nWhen off, join them into a mesh": "セクション毎にメッシュを作成します.\nOFFの場合、全てのセクションを一つのメッシュに結合します",
+        "Apply Smooth Shading": "スムージングを適用",
+        "Apply smooth shading": "スムーズシェーディングを適用します",
+        "Load Textures": "テクスチャを読み込む",
+        "Load texture files if exists.\nIt will take a long time":
+            "テクスチャファイルがあれば読み込みます.\nテクスチャの読み込みには時間がかかります",
+        "Invert Normal Maps": "法線マップの反転",
+        "Flip Y axis for normal maps.\nNo need shader nodes to invert G channel,\nBut the textures won't work in the games":
+            "法線マップのY軸を反転します.\nシェーダノードでGチャンネルを反転する必要はありませんが、\n反転した法線マップはゲーム内では正しく動作しません",
+        "Suffix for color map": "カラーマップの接尾語",
+        "The suffix will be used to determine which 3ch texture is the main color map": "アセット名からメインのカラーマップを決定するために使用します",
+        "Suffix for normal map": "法線マップの接尾語",
+        "The suffix will be used to determine which 2ch texture is the main normal map": "アセット名からメインの法線マップを決定するために使用します",
+        "Suffix for alpha texture": "アルファテクスチャの接尾語",
+        "The suffix will be used to detect alpha texture": "テクスチャが透明度用であるかどうかを決定するために使用します",
+        "Minimal Bone Length": "ボーンの長さの最小値",
+        "Force all bones to be longer than this value": "全てのボーンはこの値より長くなります",
+        "Normalize Bones": "ボーンの長さの統一",
+        "Force all bones to have the double length of the 'Minimal Bone Length'":
+            "全てのボーンを同じ長さ（最小値の２倍）にします",
+        "Rotate Bones": "ボーンの回転",
+        "Rotate all bones by 90 degrees.\nWhen on, it looks better in Blender, but will not work with UE4":
+            "全てのボーンを90度回転します.\nBlender上での見た目がよくなりますが、UE4では正しく動作しなくなります",
+        "Only Skeleton": "スケルトンのみ",
+        "Won't import mesh": "メッシュをインポートしません",
+        "Show Bone Axes": "ボーンの軸を表示",
+        "Display bones in front of other objects": "ボーンを他のオブジェクトより前に表示します",
+        "Bone Display Type": "ボーンの表示タイプ",
+        "Appearance of bones": "ボーンの見た目を変更します",
+        "Change unit scale to": "ユニットスケールを変更します",
+        "UE standard": "UEの標準設定",
+        "Blender standard": "Blenderの標準設定",
+        "Use the current uint scale": "現在の設定をそのまま使用します",
+        "Rescale": "拡大縮小",
+        "Rescale mesh and skeleton": "メッシュとスケルトンを拡大縮小します",
+        "Use the start frame of the scene": "シーンの開始フレームを使用します",
+        "Current ": "現在のフレーム",
+        "Use the current frame": "現在のフレームを開始フレームとします",
+        "Use 1 for the start frame": "1を開始フレームとします",
+        "Start frame for the animation clip": "アニメーションの開始フレーム",
+        "Rotation Format": "回転姿勢のフォーマット",
+        "UE Standard.\nNo Gimbal Lock but Blender does NOT support Slerp for key frames":
+            "UEの標準フォーマット.\nジンバルロックは発生しませんが、Blenderは球面線形補間に対応していません",
+        "Blender Standard.\nGood interpolation but prone to Gimbal Lock": "Blenderの標準フォーマット.\n線形補間で正しく補間できますが、ジンバルロックが発生する可能性があります",
+        "Rotation format for pose bones": "ポーズボーンの回転姿勢の表現方法",
+        "Ignore Missing Bones": "存在しないボーンを無視",
+        "When off, it will raise an error if the selected armature does NOT have all animated bones":
+            "アニメーションに含まれるボーンが存在しない場合は無視します.\nOFFの場合、存在しないボーンがあるとエラーを発生させます",
+        "Ignore Root Bone": "ルートボーンを無視",
+        "Ignore root bone tracks.\nIt might be able to make the animation cyclic":
+            "ルートボーンのアニメーションデータを無視します",
+        "Import as NLA": "NLAとしてインポート",
+        "Import the animation as an NLA track": "アニメーションをNLAのトラックとしてインポートします",
+        "Only the First Frame": "最初のフレームのみ",
+        "Import only the first frame": "最初のフレームだけをインポートします",
+        "Import Uasset": "Uassetのインポート",
+        "Import .uasset files": ".uassetファイルを読み込みます",
+        "Toggle Console": "コンソール画面表示の切り替え",
+        "Toggle the system console.": "コンソール画面の表示を切り替えます",
+        "You can see the progress on the console": "コンソール画面でアドオンの実行状況が確認できます"
+    },
+    "export_as_fbx.py":{
+        "Export as fbx": "FBXとしてエクスポート",
+        "Export selected armature and meshes as fbx.": "選択されたアーマチュアとメッシュをFBXとしてエクスポートします.",
+        "It'll use the same export function as the default one,": "Blenderの標準機能を使用しますが、",
+        "but it's customized to prevent some user errors": "操作ミスを防ぐために多くのオプションが省略されています",
+        "Export Tangent": "タンジェントをエクスポート",
+        "Export smoothing information": "スムージング情報をエクスポートします"
+    },
+    "inject_to_uasset.py":{
+        "Only Mesh": "メッシュのみ",
+        "Won't update skeleton data.\nIt'll prevent user errors if you didn't edit the skeleton":
+            "スケルトンデータを更新しません.\nスケルトンデータを更新するつもりがないのであれば、ONにすることをおすすめします",
+        "Duplicate Folder Structure": "フォルダ構成の複製",
+        "Duplicate the folder structure .uasset have": "アセットに記録されているフォルダ構成を複製します",
+        "Content Folder":"Contentフォルダ",
+        "Replace the root directory of asset paths with this value\nwhen duplicating the folder structure":
+            "フォルダ構成を複製する際に、アセットに記録されているルートフォルダをこの文字列で置き換えます",
+        "Mod Name": "MODの名前",
+        "Add this value to asset paths as a root folder\nwhen duplicating the folder structure":
+            "フォルダ構成を複製する際に、ルートフォルダとしてこの文字列が追加されます",
+        "Inject to Uasset": "Uassetに挿入",
+        "Inject a selected asset to .uasset file": "選択されたアーマチュアとメッシュを.uassetファイルにインポートします",
+        "Select Source File": ".uassetファイルを選択",
+        "Select .uasset file you want to mod": "挿入先の.uassetファイルを選択します"
+    },
+    "open_urls.py": {
+        "URLs": "URL",
+        "Readme": "概要",
+        "Getting Started ": "マニュアル",
+        "FAQ": "FAQ"
+    },
+    "get_new_release.py": {
+        "There is a new release!": "アップデートがあります！",
+        "Get the latest version!": "最新版を入手しましょう！"
+    }
+}

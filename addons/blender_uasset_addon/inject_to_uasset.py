@@ -11,15 +11,8 @@ from bpy.props import (StringProperty,
 from bpy.types import Operator, PropertyGroup
 from mathutils import Vector, Quaternion, Euler
 
-from . import bpy_util, unreal, util
-if "bpy" in locals():
-    import importlib
-    if "bpy_util" in locals():
-        importlib.reload(bpy_util)
-    if "unreal" in locals():
-        importlib.reload(unreal)
-    if "util" in locals():
-        importlib.reload(util)
+from . import bpy_util
+from .unreal.uasset import Uasset
 
 
 def get_rescale_factor(rescale):
@@ -85,7 +78,7 @@ def get_primitives(asset, armature, meshes, rescale=1.0, only_mesh=False):
     """Get mesh data as a dictionary.
 
     Args:
-        asset (unreal.uasset.Uasset): traget asset
+        asset (Uasset): traget asset
         armature (bpy.types.Armature): source armature
         meshes (list[bpy.types.Mesh]): source meshes
         rescale (float): rescale factor for objects
@@ -274,19 +267,22 @@ def inject_animation(asset, armature, ue_version, rescale=1.0):
         print(f'Skeleton asset NOT found ({path})')
     if skel_path is None:
         raise RuntimeError('Skeleton asset not found.')
-    bones = unreal.uasset.Uasset(skel_path, version=ue_version).uexp.skeleton.bones
+    bones = Uasset(skel_path, version=ue_version).uexp.skeleton.bones
 
     if ue_version != 'ff7r':
         raise RuntimeError(f'Animations are unsupported for this verison. ({ue_version})')
 
     # Get animation data
     bone_ids = anim.bone_ids
-    compressed_clip = anim.compressed_data
-    num_samples = compressed_clip.clip_header.num_samples
+    compressed_data = anim.compressed_data
+    num_samples = anim.num_frames
     print(f'frame count: {num_samples}')
 
     scene_fps = bpy_util.get_fps()
-    asset_fps = compressed_clip.clip_header.sample_rate
+    if anim.is_acl:
+        asset_fps = compressed_data.clip_header.sample_rate
+    else:
+        asset_fps = 30
     interval = scene_fps / asset_fps
     start_frame = 1
     print(f'injected frames: {start_frame} ~ {start_frame + num_samples * interval}')
@@ -360,7 +356,7 @@ def inject_uasset(source_file, directory, ue_version='4.18',
     version = ue_version
     if version not in ['ff7r', '4.18']:
         raise RuntimeError(f'Injection is unsupported for {version}')
-    asset = unreal.uasset.Uasset(source_file, version=version)
+    asset = Uasset(source_file, version=version)
     asset_type = asset.asset_type
 
     # get selected objects
@@ -411,7 +407,7 @@ def inject_uasset(source_file, directory, ue_version='4.18',
     return asset_type
 
 
-class InjectOptions(PropertyGroup):
+class UassetInjectOptions(PropertyGroup):
     """Properties for inject options."""
     only_mesh: BoolProperty(
         name='Only Mesh',
@@ -455,10 +451,10 @@ class InjectOptions(PropertyGroup):
     )
 
 
-class InjectToUasset(Operator):
+class UASSET_OT_inject_to_uasset(Operator):
     """Operator to inject objects to .uasset files."""
-    bl_idname = 'inject.uasset'
-    bl_label = 'Export .uasset here'
+    bl_idname = 'uasset.inject_to_uasset'
+    bl_label = "Inject to Uasset"
     bl_description = 'Inject a selected asset to .uasset file'
     bl_options = {'REGISTER'}
 
@@ -475,13 +471,13 @@ class InjectToUasset(Operator):
         layout.use_property_decorate = False  # No animation.
 
         props = ['ue_version', 'source_file']
-        general_options = context.scene.general_options
+        general_options = context.scene.uasset_general_options
         col = layout.column()
         col.use_property_split = True
         col.use_property_decorate = False
         for prop in props:
             col.prop(general_options, prop)
-        inject_options = context.scene.inject_options
+        inject_options = context.scene.uasset_inject_options
         props = ['only_mesh', 'duplicate_folder_structure', 'content_folder', 'mod_name', 'rescale']
         for prop in props:
             col.prop(inject_options, prop)
@@ -494,13 +490,13 @@ class InjectToUasset(Operator):
     def execute(self, context):
         """Inject selected objects into a selected file."""
         start_time = time.time()
-        general_options = context.scene.general_options
+        general_options = context.scene.uasset_general_options
         if bpy_util.os_is_windows():
             bpy.ops.wm.console_toggle()
             bpy.ops.wm.console_toggle()
         try:
-            general_options = context.scene.general_options
-            inject_options = context.scene.inject_options
+            general_options = context.scene.uasset_general_options
+            inject_options = context.scene.uasset_inject_options
             asset_type = inject_uasset(general_options.source_file,
                                        self.directory,
                                        ue_version=general_options.ue_version,
@@ -521,10 +517,10 @@ class InjectToUasset(Operator):
         return ret
 
 
-class SelectUasset(Operator):
+class UASSET_OT_select_uasset(Operator):
     """File picker for source file."""
-    bl_idname = 'select.uasset'
-    bl_label = 'Select Uasset'
+    bl_idname = 'uasset.select_uasset'
+    bl_label = 'Select Source File'
     bl_description = 'Select .uasset file you want to mod'
 
     filter_glob: StringProperty(default='*.uasset', options={'HIDDEN'})
@@ -540,14 +536,14 @@ class SelectUasset(Operator):
 
     def execute(self, context):
         """Update file path."""
-        context.scene.general_options.source_file = self.filepath
+        context.scene.uasset_general_options.source_file = self.filepath
         return {'FINISHED'}
 
 
 class UASSET_PT_inject_panel(bpy.types.Panel):
     """UI panel for inject function."""
     bl_label = "Inject to Uasset"
-    bl_idname = 'VIEW3D_PT_inject_uasset'
+    bl_idname = 'UASSET_PT_inject_uasset'
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
     bl_category = "Uasset"
@@ -557,22 +553,22 @@ class UASSET_PT_inject_panel(bpy.types.Panel):
         layout = self.layout
 
         # import_uasset.py->GeneralOptions
-        general_options = context.scene.general_options
-
-        layout.operator(InjectToUasset.bl_idname, text='Inject to Uasset (Experimantal)',
-                        icon='MESH_DATA')
+        general_options = context.scene.uasset_general_options
+        text = bpy_util.translate(UASSET_OT_inject_to_uasset.bl_label)
+        layout.operator(UASSET_OT_inject_to_uasset.bl_idname, text=text, icon='MESH_DATA')
         col = layout.column()
         col.use_property_split = True
         col.use_property_decorate = False
         col.prop(general_options, 'ue_version')
         col.prop(general_options, 'source_file')
-        layout.operator(SelectUasset.bl_idname, text='Select Source File', icon='FILE')
+        text = bpy_util.translate(UASSET_OT_select_uasset.bl_label)
+        layout.operator(UASSET_OT_select_uasset.bl_idname, text=text, icon='FILE')
 
 
 classes = (
-    InjectOptions,
-    InjectToUasset,
-    SelectUasset,
+    UassetInjectOptions,
+    UASSET_OT_inject_to_uasset,
+    UASSET_OT_select_uasset,
     UASSET_PT_inject_panel,
 )
 
@@ -581,11 +577,11 @@ def register():
     """Regist UI panel, operator, and properties."""
     for c in classes:
         bpy.utils.register_class(c)
-    bpy.types.Scene.inject_options = PointerProperty(type=InjectOptions)
+    bpy.types.Scene.uasset_inject_options = PointerProperty(type=UassetInjectOptions)
 
 
 def unregister():
     """Unregist UI panel, operator, and properties."""
     for c in classes:
         bpy.utils.unregister_class(c)
-    del bpy.types.Scene.inject_options
+    del bpy.types.Scene.uasset_inject_options

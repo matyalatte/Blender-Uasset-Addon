@@ -3,7 +3,6 @@ name: CI
 on:
   push:
     paths: ['**.py']
-    tags-ignore: ['v*']
 
   workflow_dispatch:
 
@@ -63,18 +62,40 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Test in Windows
+          # Test with 2.83, 3.0, and 3.2 on Windows
+          - platform: windows-latest
+            pytest-version: '7.1.2'
+            blender-version: '3.2.2'
+            python-version: '3.10'
+          
           - platform: windows-latest
             pytest-version: '7.1.2'
             blender-version: '3.0.1'
-            # Using 3.10 in Windows due to PIP encoding errors:
-            # https://github.com/pypa/pip/issues/11066
+            python-version: '3.10'
+          
+          - platform: windows-latest
+            pytest-version: '7.1.2'
+            blender-version: '2.83.20'
             python-version: '3.10'
 
     steps:
       - uses: actions/checkout@v3
         with:
-          submodules: true
+          submodules: recursive
+        
+      - name: Setup msbuild
+        uses: microsoft/setup-msbuild@v1.1
+      
+      - name: Build DLL
+        run: |
+          cd external/Texconv-Custom-DLL/batch_files
+          ./build.bat
+      
+      - name: Copy files
+        run: |
+          cp external/Texconv-Custom-DLL/texconv.dll addons/blender_uasset_addon/texconv
+        shell: bash
+
       - name: Set up Python v${{ matrix.python-version }}
         uses: actions/setup-python@v3
         with:
@@ -114,13 +135,10 @@ jobs:
           Invoke-Expression "$PYTHON_BLENDER_EXECUTABLE -m pip install pytest==${{ matrix.pytest-version }} pytest-cov"
           echo "::set-output name=blender-executable::$BLENDER_EXECUTABLE"
 
-      - name: Unit tests
-        # - Can't get coverage with blender-addons-dirs?
-        #   Seems to need to add current dir to script path in preferences.
-        # - Idk why, but need "cmd.exe /c" for blender.exe.
+      - name: Tests
         run: |
           $BLENDER_EXECUTABLE = get-content _blender-executable-path.txt
-          pytest tests\ -svv --blender-executable "$BLENDER_EXECUTABLE" --junitxml=pytest.xml --cov-report=term-missing:skip-covered > pytest-coverage.txt
+          pytest tests -svv --blender-executable "$BLENDER_EXECUTABLE" --junitxml=pytest.xml --cov-report=term-missing:skip-covered > pytest-coverage.txt
           echo pytest-coverage.txt
       
       - name: Create Coverage Comment

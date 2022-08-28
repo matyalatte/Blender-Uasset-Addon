@@ -584,7 +584,7 @@ class CompressedClip:
         self.segments = [new_segment]
         self.disable_range_reduction()
 
-    def print(self, bone_names):
+    def print(self):
         """Print meta data."""
         print(f'CompressedClip (offset: {self.offset})')
         print('  ACL version: 1.1.0')

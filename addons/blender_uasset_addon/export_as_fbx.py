@@ -11,10 +11,6 @@ from bpy.utils import register_class, unregister_class
 from bpy_extras.io_utils import ExportHelper
 
 from . import bpy_util
-if "bpy" in locals():
-    import importlib
-    if "bpy_util" in locals():
-        importlib.reload(bpy_util)
 
 
 def export_as_fbx(file, armature, meshes, global_scale=1.0, smooth_type='FACE',
@@ -80,7 +76,7 @@ def export_as_fbx(file, armature, meshes, global_scale=1.0, smooth_type='FACE',
     bpy.ops.object.mode_set(mode=mode)
 
 
-class ExportFbxOptions(bpy.types.PropertyGroup):
+class UassetFbxOptions(bpy.types.PropertyGroup):
     """Properties for export function."""
     global_scale: FloatProperty(
             name="Scale",
@@ -90,7 +86,7 @@ class ExportFbxOptions(bpy.types.PropertyGroup):
             default=1.0,
     )
     export_tangent: BoolProperty(
-        name='Export tangent',
+        name='Export Tangent',
         description="Add binormal and tangent vectors, together with normal they form the tangent space "
                     "(will only work correctly with tris/quads only meshes!)",
         default=False
@@ -157,15 +153,15 @@ class ExportFbxOptions(bpy.types.PropertyGroup):
             )
 
 
-class EXPORT_OT_run_button(bpy.types.Operator, ExportHelper):
+class UASSET_OT_export_fbx(bpy.types.Operator, ExportHelper):
     """Operator for export function."""
-    bl_idname = "export_as_fbx.run_button"
+    bl_idname = "uasset.export_fbx"
     bl_label = "Export as fbx"
-    bl_description = (
-        'Export selected armature and meshes as fbx.\n'
-        "It'll use the same export function as the default one,\n"
+    desc = [
+        "Export selected armature and meshes as fbx.",
+        "It'll use the same export function as the default one,",
         "but it's customized to prevent some user errors"
-    )
+    ]
     bl_options = {'REGISTER', 'UNDO'}
 
     filename_ext = '.fbx'
@@ -174,13 +170,18 @@ class EXPORT_OT_run_button(bpy.types.Operator, ExportHelper):
         name='File Path'
     )
 
+    @classmethod
+    def description(cls, context, event):
+        """Get description."""
+        return '\n'.join(bpy_util.translate(desc) for desc in cls.desc)
+
     def draw(self, context):
         """Draw options for file picker."""
         layout = self.layout
         col = layout.column()
         col.use_property_split = True
         col.use_property_decorate = False
-        export_options = context.scene.uasset_addon_fbx_export_options
+        export_options = context.scene.uasset_export_options
         for key in ['global_scale', 'smooth_type', 'export_tangent', 'use_custom_props']:
             col.prop(export_options, key)
         box = layout.box()
@@ -218,7 +219,7 @@ class EXPORT_OT_run_button(bpy.types.Operator, ExportHelper):
                 raise RuntimeError('Select objects')
 
             file = self.filepath
-            export_options = context.scene.uasset_addon_fbx_export_options
+            export_options = context.scene.uasset_export_options
 
             # main
             export_as_fbx(file, armature, meshes,
@@ -241,10 +242,10 @@ class EXPORT_OT_run_button(bpy.types.Operator, ExportHelper):
         return {'FINISHED'}
 
 
-class EXPORT_PT_panel(bpy.types.Panel):
+class UASSET_PT_export_panel(bpy.types.Panel):
     """UI panel for export function."""
     bl_space_type = 'VIEW_3D'
-    bl_idname = 'VIEW3D_PT_export_as_fbx'
+    bl_idname = 'UASSET_PT_export_panel'
     bl_region_type = 'UI'
     bl_category = "Uasset"
     bl_label = "Export as fbx"
@@ -256,16 +257,17 @@ class EXPORT_PT_panel(bpy.types.Panel):
         col = layout.column()
         col.use_property_split = True
         col.use_property_decorate = False
-        col.operator(EXPORT_OT_run_button.bl_idname, icon='MESH_DATA')
-        export_options = context.scene.uasset_addon_fbx_export_options
+        text = bpy_util.translate(UASSET_OT_export_fbx.bl_label)
+        col.operator(UASSET_OT_export_fbx.bl_idname, text=text, icon='MESH_DATA')
+        export_options = context.scene.uasset_export_options
         for prop in ['global_scale', 'smooth_type', 'export_tangent', 'use_custom_props']:
             col.prop(export_options, prop)
 
 
 classes = (
-    ExportFbxOptions,
-    EXPORT_PT_panel,
-    EXPORT_OT_run_button
+    UassetFbxOptions,
+    UASSET_OT_export_fbx,
+    UASSET_PT_export_panel
 )
 
 
@@ -273,13 +275,11 @@ def register():
     """Regist UI panel, operator, and properties."""
     for cls in classes:
         register_class(cls)
-
-    bpy.types.Scene.uasset_addon_fbx_export_options = PointerProperty(type=ExportFbxOptions)
+    bpy.types.Scene.uasset_export_options = PointerProperty(type=UassetFbxOptions)
 
 
 def unregister():
     """Unregist UI panel, operator, and properties."""
     for cls in classes:
         unregister_class(cls)
-
-    del bpy.types.Scene.uasset_addon_fbx_export_options
+    del bpy.types.Scene.uasset_export_options

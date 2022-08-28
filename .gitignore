@@ -6,6 +6,7 @@
 *.ubulk
 *.bat
 *.sh
+*.dll
 .coverage
 htmlcov
 todo.txt
