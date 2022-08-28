@@ -15,7 +15,10 @@ from bpy_extras.io_utils import ImportHelper
 from mathutils import Vector, Quaternion, Matrix
 import numpy as np
 
-from . import bpy_util, unreal, util
+from . import bpy_util
+from .unreal.uasset import Uasset
+from .unreal.dds import DDS
+from .util.io_util import make_temp_file
 from .texconv.texconv import Texconv
 
 
@@ -113,7 +116,7 @@ def load_utexture(file, name, version, asset=None, invert_normals=False, no_err=
         file (string): file path to .uasset file
         name (string): texture name
         version (string): UE version
-        asset (unreal.uasset.Uasset): loaded asset data
+        asset (Uasset): loaded asset data
         invert_normals (bool): Flip y axis if the texture is normal map.
         texconv (Texconv): Texture converter for dds.
 
@@ -125,7 +128,7 @@ def load_utexture(file, name, version, asset=None, invert_normals=False, no_err=
         if asset is None, it will load .uasset file
         if it's not None, it will get texture data from asset
     """
-    temp = util.io_util.make_temp_file(suffix='.dds')
+    temp = make_temp_file(suffix='.dds')
     if texconv is None:
         texconv = Texconv()
     if asset is not None:
@@ -133,7 +136,7 @@ def load_utexture(file, name, version, asset=None, invert_normals=False, no_err=
         file = name
     try:
         if asset is None:
-            asset = unreal.uasset.Uasset(file, version=version, asset_type='Texture')
+            asset = Uasset(file, version=version, asset_type='Texture')
         utex = asset.uexp.texture
         utex.remove_mipmaps()
         if 'BC5' in utex.type:
@@ -142,7 +145,7 @@ def load_utexture(file, name, version, asset=None, invert_normals=False, no_err=
             tex_type = 'GRAY'
         else:
             tex_type = 'COLOR'
-        dds = unreal.dds.DDS.asset_to_DDS(asset)
+        dds = DDS.asset_to_DDS(asset)
         dds.save(temp)
         tga_file = texconv.convert_to_tga(temp, utex.format_name, utex.uasset.asset_type,
                                           out=os.path.dirname(temp), invert_normals=invert_normals)
@@ -169,7 +172,7 @@ def generate_materials(asset, version, load_textures=False,
     """Add materials and textures, and make shader nodes.
 
     args:
-        asset (unreal.uasset.Uasset): mesh asset
+        asset (Uasset): mesh asset
         version (string): UE version
         load_textures (bool): if import texture files or not
         invert_normal_maps (bool): if flip y axis for normal maps or not
@@ -276,7 +279,7 @@ def generate_mesh(amt, asset, materials, material_names, rescale=1.0,
 
     Args:
         amt (bpy.types.Armature): target armature
-        asset (unreal.uasset.Uasset): source asset
+        asset (Uasset): source asset
         materials (list[bpy.types.Material]): material objects
         material_names (list[string]): material names
         rescale (float): rescale factor for vertex positions
@@ -450,7 +453,7 @@ def load_animation(anim, armature, ue_version, rescale=1.0, ignore_missing_bones
         print(f'Skeleton asset NOT found ({path})')
     if skel_path is None:
         raise RuntimeError('Skeleton asset not found.')
-    bones = unreal.uasset.Uasset(skel_path, version=ue_version).uexp.skeleton.bones
+    bones = Uasset(skel_path, version=ue_version).uexp.skeleton.bones
 
     if ue_version not in ['ff7r', 'kh3']:
         raise RuntimeError(f'Animations are unsupported for this verison. ({ue_version})')
@@ -555,7 +558,7 @@ def load_uasset(file, rename_armature=True, keep_sections=False,
         See property groups for the description of arguments
     """
     # load .uasset
-    asset = unreal.uasset.Uasset(file, version=ue_version, verbose=verbose)
+    asset = Uasset(file, version=ue_version, verbose=verbose)
     asset_type = asset.asset_type
     print(f'Asset type: {asset_type}')
 

@@ -11,7 +11,8 @@ from bpy.props import (StringProperty,
 from bpy.types import Operator, PropertyGroup
 from mathutils import Vector, Quaternion, Euler
 
-from . import bpy_util, unreal
+from . import bpy_util
+from .unreal.uasset import Uasset
 
 
 def get_rescale_factor(rescale):
@@ -77,7 +78,7 @@ def get_primitives(asset, armature, meshes, rescale=1.0, only_mesh=False):
     """Get mesh data as a dictionary.
 
     Args:
-        asset (unreal.uasset.Uasset): traget asset
+        asset (Uasset): traget asset
         armature (bpy.types.Armature): source armature
         meshes (list[bpy.types.Mesh]): source meshes
         rescale (float): rescale factor for objects
@@ -266,7 +267,7 @@ def inject_animation(asset, armature, ue_version, rescale=1.0):
         print(f'Skeleton asset NOT found ({path})')
     if skel_path is None:
         raise RuntimeError('Skeleton asset not found.')
-    bones = unreal.uasset.Uasset(skel_path, version=ue_version).uexp.skeleton.bones
+    bones = Uasset(skel_path, version=ue_version).uexp.skeleton.bones
 
     if ue_version != 'ff7r':
         raise RuntimeError(f'Animations are unsupported for this verison. ({ue_version})')
@@ -355,7 +356,7 @@ def inject_uasset(source_file, directory, ue_version='4.18',
     version = ue_version
     if version not in ['ff7r', '4.18']:
         raise RuntimeError(f'Injection is unsupported for {version}')
-    asset = unreal.uasset.Uasset(source_file, version=version)
+    asset = Uasset(source_file, version=version)
     asset_type = asset.asset_type
 
     # get selected objects
