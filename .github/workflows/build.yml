@@ -42,7 +42,7 @@ jobs:
           cp -r addons/${{ env.ZIP_NAME }} ../release
           cp changelog.txt ../release/${{ env.ZIP_NAME }}
           cp LICENSE ../release/${{ env.ZIP_NAME }}
-          cp external/Texconv-Custom-DLL/texconv.dll ../release/addons/blender_uasset_addon/texconv
+          cp external/Texconv-Custom-DLL/texconv.dll ../release/${{ env.ZIP_NAME }}/texconv
         shell: bash
 
       - name: Archive Release

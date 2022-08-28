@@ -3,6 +3,7 @@ name: CI
 on:
   push:
     paths: ['**.py']
+    tags-ignore: ['v*']
 
   workflow_dispatch:
 
@@ -141,13 +142,6 @@ jobs:
           pytest tests -svv --blender-executable "$BLENDER_EXECUTABLE" --junitxml=pytest.xml --cov-report=term-missing:skip-covered > pytest-coverage.txt
           echo pytest-coverage.txt
       
-      - name: Create Coverage Comment
-        id: coverageComment
-        uses: MishaKav/pytest-coverage-comment@main
-        with:
-            pytest-coverage-path: pytest-coverage.txt
-            junitxml-path: ./pytest.xml
-
       - name: Create Coverage Badge
         if: ${{ github.repository_owner == github.actor && github.ref == 'refs/heads/main' }}
         uses: schneegans/dynamic-badges-action@v1.3.0
