@@ -65,7 +65,7 @@ class Texconv:
         self.run(args)
         return out
 
-    def convert_to_tga(self, file, dds_fmt, texture_type, out=None, invert_normals=False):
+    def convert_to_tga(self, file, dds_fmt, texture_type='2D', out=None, invert_normals=False):
         """Convert dds to tga."""
         if self.dll is None:
             return None
@@ -85,7 +85,7 @@ class Texconv:
         name = '.'.join(name.split('.')[:-1] + [fmt])
         return name
 
-    def convert_to_dds(self, file, dds_fmt, texture_type, out=None, nomip=False):
+    def convert_to_dds(self, file, dds_fmt, texture_type='2D', out=None, invert_normals=False, no_mips=False):
         """Convert texture to dds."""
         dds_fmt = FORMAT_FOR_TEXCONV[dds_fmt]
         if texture_type == 'Cube':
@@ -93,9 +93,12 @@ class Texconv:
         if dds_fmt in HDR_FORMAT and file[-3:].lower() != 'hdr':
             raise RuntimeError(f'Use .dds or .hdr to inject HDR textures. ({file})')
         args = ['-f', dds_fmt]
-        if nomip:
-            args += ['-m', 1]
+        if 'BC5' in dds_fmt and invert_normals:
+            args += ['-inverty']
+        if no_mips:
+            args += ['-m', '1']
         self.convert(file, args, out=out)
+        return file[:-3] + 'dds'
 
 
 FORMAT_FOR_TEXCONV = {

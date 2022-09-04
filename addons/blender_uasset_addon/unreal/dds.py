@@ -18,7 +18,7 @@ DDS_FORMAT = {
     'BC6H(signed)': [96],              # DXGI_FORMAT_BC6H_SF16
     'BC7': [98, 99, 97],               # DXGI_FORMAT_BC7_UNORM
     'FloatRGBA': [10],                 # DXGI_FORMAT_R16G16B16A16_FLOAT
-    'B8G8R8A8': [87, 88, 91, 93]       # DXGI_FORMAT_B8G8R8A8_UNORM
+    'B8G8R8A8': [87, 88, 91, 93, '']   # DXGI_FORMAT_B8G8R8A8_UNORM
 }
 
 

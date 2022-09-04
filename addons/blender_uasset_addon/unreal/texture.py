@@ -410,7 +410,9 @@ class Texture:
     def change_format(self, pixel_format):
         """Change pixel format."""
         if pixel_format not in PF_FORMAT:
-            raise RuntimeError(f'Unsupported pixel format. ({pixel_format})')
+            if pixel_format not in list(PF_FORMAT.values()):
+                raise RuntimeError(f'Unsupported pixel format. ({pixel_format})')
+            pixel_format = list(PF_FORMAT.keys())[list(PF_FORMAT.values()).index(pixel_format)]
         self.uasset.name_list[self.type_name_id] = pixel_format
         self.type = pixel_format
         self.format_name = PF_FORMAT[self.type]

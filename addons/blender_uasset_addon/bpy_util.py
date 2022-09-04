@@ -6,6 +6,20 @@ from mathutils import Matrix
 import numpy as np
 
 
+def get_texture(context):
+    """Get texture from Image Editor."""
+    area = context.area
+    if area.type == 'IMAGE_EDITOR':
+        space = area.spaces.active
+    else:
+        raise RuntimeError('Failed to get Image Editor. This is unexpected.')
+
+    tex = space.image
+    if tex is None:
+        raise RuntimeError('Select an image on Image Editor.')
+    return tex
+
+
 def translate(text):
     """Translate texts."""
     return bpy.app.translations.pgettext(text, msgctxt="*")

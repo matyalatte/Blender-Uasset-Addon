@@ -34,7 +34,7 @@ try:
 
     from . import \
         import_uasset, export_as_fbx, open_urls, \
-        inject_to_uasset, get_new_release
+        inject_to_uasset, get_new_release, inject_texture
     from .translations import translation
 
     def register():
@@ -44,6 +44,7 @@ try:
         import_uasset.register()
         inject_to_uasset.register()
         export_as_fbx.register()
+        inject_texture.register()
         open_urls.register()
 
     def unregister():
@@ -53,6 +54,7 @@ try:
         import_uasset.unregister()
         inject_to_uasset.unregister()
         export_as_fbx.unregister()
+        inject_texture.unregister()
         open_urls.unregister()
 
 except ModuleNotFoundError as exc:

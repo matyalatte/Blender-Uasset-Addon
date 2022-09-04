@@ -450,6 +450,24 @@ class UassetInjectOptions(PropertyGroup):
         default=1, min=0.01, max=100, step=0.01, precision=2,
     )
 
+    force_uncompressed: BoolProperty(
+        name='Force Uncompressed Format',
+        description=(
+            "Use uncompressed format if the texture is BC1, BC6, or BC7.\n"
+            "It can avoid compression artifacts"
+        ),
+        default=False,
+    )
+
+    no_mips: BoolProperty(
+        name='No Mipmaps',
+        description=(
+            "Disable mip generation even if the assets have mipmaps"
+        ),
+        default=False,
+    )
+
+
 
 class UASSET_OT_inject_to_uasset(Operator):
     """Operator to inject objects to .uasset files."""

@@ -147,7 +147,7 @@ def load_utexture(file, name, version, asset=None, invert_normals=False, no_err=
             tex_type = 'COLOR'
         dds = DDS.asset_to_DDS(asset)
         dds.save(temp)
-        tga_file = texconv.convert_to_tga(temp, utex.format_name, utex.uasset.asset_type,
+        tga_file = texconv.convert_to_tga(temp, utex.format_name, texture_type=utex.uasset.asset_type,
                                           out=os.path.dirname(temp), invert_normals=invert_normals)
         if tga_file is None:  # if texconv doesn't exist
             tex = bpy_util.load_dds(tga_file, name=name, tex_type=tex_type, invert_normals=invert_normals)

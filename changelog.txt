@@ -1,3 +1,9 @@
+v0.2.2
+- Added support for texture injection.
+- Fixed an error when loading some KH3 animations.
+- Fixed an error when using unregister functions.
+- Applied a proper DXGI format for B8G8R8A8.
+
 v0.2.1
 - Supported skeletal mesh and animations for KH3. (Injection is NOT supported yet.)
 - Improved texture loading speed
