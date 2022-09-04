@@ -11,14 +11,14 @@ DDS_FORMAT = {
     'DXT1/BC1': ['DXT1', 71],          # DXGI_FORMAT_BC1_UNORM
     'DXT5/BC3': ['DXT5', 77],          # DXGI_FORMAT_BC3_UNORM
     'BC4/ATI1': [80, 'ATI1', 'BC4U'],  # DXGI_FORMAT_BC4_UNORM
-    'BC4(signed)': [81],               # DXGI_FORMAT_BC4_SNORM
+    'BC4(signed)': [81, 'BC4S'],       # DXGI_FORMAT_BC4_SNORM
     'BC5/ATI2': [83, 'ATI2', 'BC5U'],  # DXGI_FORMAT_BC5_UNORM
-    'BC5(signed)': [84],               # DXGI_FORMAT_BC5_SNORM
+    'BC5(signed)': [84, 'BC5S'],       # DXGI_FORMAT_BC5_SNORM
     'BC6H(unsigned)': [95],            # DXGI_FORMAT_BC6H_UF16
     'BC6H(signed)': [96],              # DXGI_FORMAT_BC6H_SF16
-    'BC7': [98, 99],                   # DXGI_FORMAT_BC7_TYPELESS
+    'BC7': [98, 99, 97],               # DXGI_FORMAT_BC7_UNORM
     'FloatRGBA': [10],                 # DXGI_FORMAT_R16G16B16A16_FLOAT
-    'B8G8R8A8(sRGB)': [91]             # DXGI_FORMAT_B8G8R8A8_UNORM_SRGB
+    'B8G8R8A8': [87, 88, 91, 93]       # DXGI_FORMAT_B8G8R8A8_UNORM
 }
 
 

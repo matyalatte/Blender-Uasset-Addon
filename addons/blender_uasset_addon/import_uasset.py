@@ -424,8 +424,6 @@ def load_bone_track(pose_bone, ue_bone, track, action, start_frame=0, interval=1
             keys = [keys[0]]
             if len(times) > 0:
                 times = [times[0]]
-        if len(times) == 0:
-            times = [i for i in range(len(keys))]
         times = [t * interval + start_frame for t in times]
         load_acl_track(pose_bone, ue_bone, data_path, keys, times, action,
                        rescale_factor=rescale_factor, rotation_format=rotation_format)
@@ -468,8 +466,8 @@ def load_animation(anim, armature, ue_version, rescale=1.0, ignore_missing_bones
     # Get animation data
     bone_ids = anim.bone_ids
     compressed_data = anim.compressed_data
-    num_samples = anim.num_frames
-    print(f'frame count: {num_samples}')
+    num_frames = anim.num_frames
+    print(f'frame count: {num_frames}')
 
     # Check required bones
     if not ignore_missing_bones:
@@ -506,7 +504,7 @@ def load_animation(anim, armature, ue_version, rescale=1.0, ignore_missing_bones
     if import_as_nla:
         action = bpy.data.actions.new(name=anim_name)
         nla_track = bpy_util.add_nla_track(armature, name=anim_name)
-        end_frame = max((num_samples - 1) * interval, 1)
+        end_frame = max((num_frames - 1) * interval, 1)
         _ = bpy_util.add_nla_strip(nla_track, anim_name, start_frame, action, end=end_frame)
         start_frame = 0
     else:

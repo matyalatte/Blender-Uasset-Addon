@@ -16,7 +16,7 @@ BYTE_PER_PIXEL = {
     'BC6H(signed)': 1,
     'BC7': 1,
     'FloatRGBA': 8,
-    'B8G8R8A8(sRGB)': 4
+    'B8G8R8A8': 4
 }
 
 PF_FORMAT = {
@@ -27,7 +27,7 @@ PF_FORMAT = {
     'PF_BC6H': 'BC6H(unsigned)',
     'PF_BC7': 'BC7',
     'PF_FloatRGBA': 'FloatRGBA',
-    'PF_B8G8R8A8': 'B8G8R8A8(sRGB)'
+    'PF_B8G8R8A8': 'B8G8R8A8'
 }
 
 
@@ -406,3 +406,11 @@ class Texture:
         for mip, i in zip(self.mipmaps, range(len(self.mipmaps))):
             print(f'Mipmap{i}')
             mip.print()
+
+    def change_format(self, pixel_format):
+        """Change pixel format."""
+        if pixel_format not in PF_FORMAT:
+            raise RuntimeError(f'Unsupported pixel format. ({pixel_format})')
+        self.uasset.name_list[self.type_name_id] = pixel_format
+        self.type = pixel_format
+        self.format_name = PF_FORMAT[self.type]

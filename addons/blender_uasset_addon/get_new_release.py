@@ -72,6 +72,7 @@ def register(version):
 
 def unregister(version):
     """Remove UI panel."""
-    if list(version) != latest_version and is_valid_tag:
+    current_version = [str(v) for v in version]
+    if current_version != latest_version and is_valid_tag:
         for cls in reversed(classes):
             bpy.utils.unregister_class(cls)

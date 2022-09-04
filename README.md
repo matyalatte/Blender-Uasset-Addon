@@ -26,7 +26,7 @@ Blender addon to mod .uasset files.
 | UE version | Skeletal Mesh | Static Mesh | Skeleton | Texture | Animation | Injection |
 | :---: |:---:|:---:|:---:|:---:|:---:|:---:|
 | FF7R | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :warning: | :heavy_check_mark: |
-| KH3 | :heavy_check_mark: | :x: | :heavy_check_mark: | :heavy_check_mark: | :warning: | :x: |
+| KH3 | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :warning: | :x: |
 | 4.18 | :warning: | :warning: | :heavy_check_mark:  | :heavy_check_mark: | :x: | :warning: |
 | 4.26, 4.27| :warning: | :warning: | :heavy_check_mark: | :heavy_check_mark: | :x: | :x: |
 | 5.0 | :warning: | :warning: | :heavy_check_mark: | :heavy_check_mark: | :x: | :x: |

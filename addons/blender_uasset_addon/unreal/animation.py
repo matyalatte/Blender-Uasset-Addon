@@ -463,7 +463,7 @@ class BoneTrack:
         io.check(f.read(num_padding), b'\x55' * num_padding)
 
         times = []
-        if has_time_tracks and num_keys > 1:
+        if has_time_tracks:
             if num_frames < 256:
                 times = io.read_uint8_array(f, length=num_keys)
             else:
@@ -471,6 +471,7 @@ class BoneTrack:
             num_padding = (4 - f.tell() + offset) % 4
             io.check(f.read(num_padding), b'\x55' * num_padding)
             io.check(len(keys), len(times))
-        elif num_keys > 1:
-            io.check(len(keys), num_frames)
+        else:
+            interval = num_frames / (len(keys) - 1)
+            times = [interval * i for i in range(len(keys))]
         return keys, times
