@@ -120,14 +120,15 @@ class AnimSequence:
         "ACF_Identity"
     ]
 
-    def __init__(self, offset, uasset, num_frames, unk, guid, format_bytes,
+    def __init__(self, offset, uasset, num_frames, unk, unk2, guid, format_bytes,
                  track_offsets, scale_offsets, scale_offsets_stripsize, bone_ids,
-                 unk2, raw_size, compressed_size, compressed_data, verbose):
+                 unk3, raw_size, compressed_size, compressed_data, verbose):
         """Constructor."""
         self.offset = offset
         self.uasset = uasset
         self.num_frames = num_frames
         self.unk = unk
+        self.unk2 = unk2
         self.guid = guid
         self.format_bytes = format_bytes
         self.is_acl = format_bytes[0] >= 3
@@ -135,7 +136,7 @@ class AnimSequence:
         self.scale_offsets = scale_offsets
         self.scale_offsets_stripsize = scale_offsets_stripsize
         self.bone_ids = bone_ids
-        self.unk2 = unk2
+        self.unk3 = unk3
         self.raw_size = raw_size
         self.compressed_size = compressed_size
         self.compressed_data = compressed_data
@@ -159,6 +160,9 @@ class AnimSequence:
                     raise RuntimeError('Parse Failed.')
         else:
             f.seek(25)
+        unk_size = f.tell() - offset
+        f.seek(offset)
+        unk = f.read(unk_size)
         num_frames = io.read_uint32(f)
 
         def get_skeleton_import(imports):
@@ -167,7 +171,7 @@ class AnimSequence:
                     return imp, i
         # Skip Notifies
         skeleton_imp, import_id = get_skeleton_import(uasset.imports)
-        unk = seek_skeleton(f, import_id)
+        unk2 = seek_skeleton(f, import_id)
         none_id = uasset.name_list.index('None')
         if uasset.version != 'ff7r':
             io.check(io.read_uint64(f), none_id)
@@ -196,7 +200,7 @@ class AnimSequence:
             seek_none(f, none_id)
         size = f.tell() - offset
         f.seek(offset)
-        unk2 = f.read(size)
+        unk3 = f.read(size)
 
         raw_size = io.read_uint32(f)  # CompressedRawDataSize
         compressed_size = io.read_uint32(f)
@@ -207,13 +211,15 @@ class AnimSequence:
         else:
             compressed_data = CompressedData.read(f, compressed_size, num_frames, len(bone_ids),
                                                   track_offsets, scale_offsets)
-        return AnimSequence(offset, uasset, num_frames, unk, guid, format_bytes,
+        return AnimSequence(offset, uasset, num_frames, unk, unk2, guid, format_bytes,
                             track_offsets, scale_offsets, scale_offsets_stripsize, bone_ids,
-                            unk2, raw_size, compressed_size, compressed_data, verbose)
+                            unk3, raw_size, compressed_size, compressed_data, verbose)
 
     def write(self, f):
         """Write function."""
         f.write(self.unk)
+        io.write_uint32(f, self.num_frames)
+        f.write(self.unk2)
         if self.uasset.version != 'ff7r':
             io.write_uint64(f, self.uasset.name_list.index('None'))
         io.write_null(f)
@@ -227,7 +233,7 @@ class AnimSequence:
         io.write_uint32(f, self.scale_offsets_stripsize)
 
         io.write_uint32_array(f, self.bone_ids, with_length=True)
-        f.write(self.unk2)
+        f.write(self.unk3)
 
         io.write_uint32(f, self.raw_size)
         offset = f.tell()

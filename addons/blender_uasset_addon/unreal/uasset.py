@@ -3,6 +3,7 @@ import ctypes as c
 import os
 
 from ..util import io_util as io
+from ..util.crc import generate_hash
 from ..util.version import VersionInfo
 from .uexp import Uexp
 
@@ -373,8 +374,7 @@ class Uasset:
             self.header.name_count = len(self.name_list)
             self.header.name_count2 = len(self.name_list)
             # write name table
-            if len(self.name_list) > len(self.hash_list):
-                self.hash_list += [b'\x00' * 4] * (len(self.name_list) - len(self.hash_list))
+            self.hash_list = [generate_hash(name) for name in self.name_list]
             for name, hash_ in zip(self.name_list, self.hash_list):
                 io.write_str(f, name)
                 f.write(hash_)

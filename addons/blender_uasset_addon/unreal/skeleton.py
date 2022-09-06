@@ -31,7 +31,7 @@ class Bone:
     def read(f):
         """Read function."""
         name_id = io.read_uint32(f)
-        instance = io.read_int32(f)  # null?
+        instance = io.read_int32(f)
         parent = io.read_int32(f)
         return Bone(name_id, instance, parent)
 
