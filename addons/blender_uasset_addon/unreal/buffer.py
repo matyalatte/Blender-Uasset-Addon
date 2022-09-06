@@ -24,12 +24,11 @@ class Buffer:
         buf = f.read(stride * size)
         return Buffer(stride, size, buf, offset, name)
 
-    @staticmethod
-    def write(f, buffer):
+    def write(self, f):
         """Write function."""
-        io.write_uint32(f, buffer.stride)
-        io.write_uint32(f, buffer.size)
-        f.write(buffer.buf)
+        io.write_uint32(f, self.stride)
+        io.write_uint32(f, self.size)
+        f.write(self.buf)
 
     def print(self, padding=2):
         """Print meta data."""
@@ -77,12 +76,11 @@ class PositionVertexBuffer(VertexBuffer):
 
         return PositionVertexBuffer(buf.stride, buf.size, buf.buf, buf.offset, name)
 
-    @staticmethod
-    def write(f, vb):
+    def write(self, f):
         """Write function."""
-        io.write_uint32(f, vb.stride)
-        io.write_uint32(f, vb.vertex_num)
-        Buffer.write(f, vb)
+        io.write_uint32(f, self.stride)
+        io.write_uint32(f, self.vertex_num)
+        super().write(f)
 
     def parse(self):
         """Parse buffer."""
@@ -108,10 +106,9 @@ class NormalVertexBuffer(VertexBuffer):
         io.check(buf.stride, 8)
         return NormalVertexBuffer(buf.stride, buf.size, buf.buf, buf.offset, name)
 
-    @staticmethod
-    def write(f, vb):
+    def write(self, f):
         """Write function."""
-        Buffer.write(f, vb)
+        super().write(f)
 
     def parse(self):
         """Parse buffer."""
@@ -151,10 +148,9 @@ class UVVertexBuffer(VertexBuffer):
         io.check(buf.stride, 4 * (1 + use_float32UV))
         return UVVertexBuffer(uv_num, use_float32UV, buf.stride, buf.size, buf.buf, buf.offset, name)
 
-    @staticmethod
-    def write(f, vb):
+    def write(self, f):
         """Write function."""
-        Buffer.write(f, vb)
+        super().write(f)
 
     def parse(self):
         """Parse buffer."""
@@ -207,16 +203,15 @@ class StaticMeshVertexBuffer(VertexBuffer):
         io.check(stride, 8 + uv_num * 4 * (1 + use_float32), f)
         return StaticMeshVertexBuffer(uv_num, use_float32, buf.stride, buf.size, buf.buf, buf.offset, name)
 
-    @staticmethod
-    def write(f, vb):
+    def write(self, f):
         """Write function."""
         io.write_uint16(f, 1)
-        io.write_uint32(f, vb.uv_num)
-        io.write_uint32(f, vb.stride)
-        io.write_uint32(f, vb.vertex_num)
-        io.write_uint32(f, vb.use_float32)
+        io.write_uint32(f, self.uv_num)
+        io.write_uint32(f, self.stride)
+        io.write_uint32(f, self.vertex_num)
+        io.write_uint32(f, self.use_float32)
         io.write_null(f)
-        Buffer.write(f, vb)
+        super().write(f)
 
     def parse(self):
         """Parse buffer."""
@@ -268,14 +263,13 @@ class ColorVertexBuffer(VertexBuffer):
         else:
             return ColorVertexBuffer(stride, vertex_num, None, f.tell(), name)
 
-    @staticmethod
-    def write(f, vb):
+    def write(self, f):
         """Write function."""
         io.write_uint16(f, 1)
-        io.write_uint32(f, vb.stride)
-        io.write_uint32(f, vb.vertex_num)
-        if vb.buf is not None:
-            Buffer.write(f, vb)
+        io.write_uint32(f, self.stride)
+        io.write_uint32(f, self.vertex_num)
+        if self.buf is not None:
+            super().write(f)
 
     def update(self, vertex_count):
         """Update buffer."""
@@ -312,15 +306,14 @@ class SkeletalMeshVertexBuffer(VertexBuffer):
         buf = Buffer.read(f, name=name)
         return SkeletalMeshVertexBuffer(uv_num, use_float32UV, scale, buf.stride, buf.size, buf.buf, buf.offset, name)
 
-    @staticmethod
-    def write(f, vb):
+    def write(self, f):
         """Write function."""
         io.write_uint16(f, 1)
-        io.write_uint32(f, vb.uv_num)
-        io.write_uint32(f, vb.use_float32)
-        io.write_vec3_f32(f, vb.scale)
+        io.write_uint32(f, self.uv_num)
+        io.write_uint32(f, self.use_float32)
+        io.write_vec3_f32(f, self.scale)
         io.write_null_array(f, 3)
-        Buffer.write(f, vb)
+        super().write(f)
 
     def parse(self):
         """Parse buffer."""
@@ -392,13 +385,12 @@ class SkinWeightVertexBuffer4(VertexBuffer):
         io.check(extra_bone_flag, buf.stride == 16, f)
         return SkinWeightVertexBuffer4(extra_bone_flag, buf.stride, buf.size, buf.buf, buf.offset, name)
 
-    @staticmethod
-    def write(f, vb):
+    def write(self, f):
         """Write function."""
         io.write_uint16(f, 1)
-        io.write_uint32(f, vb.extra_bone_flag)
-        io.write_uint32(f, vb.vertex_num)
-        Buffer.write(f, vb)
+        io.write_uint32(f, self.extra_bone_flag)
+        io.write_uint32(f, self.vertex_num)
+        super().write(f)
 
     def parse(self):
         """Parse buffer."""
@@ -439,16 +431,15 @@ class SkinWeightVertexBuffer5(VertexBuffer):
         buf = Buffer.read(f, name=name)
         return SkinWeightVertexBuffer5(influence_count, buf.stride, buf.size, buf.buf, buf.offset, name)
 
-    @staticmethod
-    def write(f, vb):
+    def write(self, f):
         """Write function."""
         io.write_uint16(f, 1)
         io.write_null(f)
-        io.write_uint32(f, vb.influence_count)
-        io.write_uint32(f, vb.size // 2)
-        io.write_uint32(f, vb.size // 2 // vb.influence_count)
+        io.write_uint32(f, self.influence_count)
+        io.write_uint32(f, self.size // 2)
+        io.write_uint32(f, self.size // 2 // self.influence_count)
         io.write_null(f)
-        Buffer.write(f, vb)
+        super().write(f)
 
     def parse(self):
         """Parse buffer."""
@@ -487,12 +478,11 @@ class StaticIndexBuffer(Buffer):
         # buf.size==index_count*(2+2*uint32_flag)
         return StaticIndexBuffer(uint32_flag, buf.stride, buf.size, buf.buf, buf.offset, name, version)
 
-    @staticmethod
-    def write(f, ib):
+    def write(self, f):
         """Write function."""
-        io.write_uint32(f, ib.uint32_flag)
-        Buffer.write(f, ib)
-        if ib.version >= '4.27':
+        io.write_uint32(f, self.uint32_flag)
+        super().write(f)
+        if self.version >= '4.27':
             io.write_null(f)
 
     def get_meta(self):
@@ -534,11 +524,10 @@ class SkeletalIndexBuffer(Buffer):
         io.check(stride, buf.stride)
         return SkeletalIndexBuffer(buf.stride, buf.size, buf.buf, buf.offset, name)
 
-    @staticmethod
-    def write(f, ib):
+    def write(self, f):
         """Write function."""
-        io.write_uint8(f, ib.stride)
-        Buffer.write(f, ib)
+        io.write_uint8(f, self.stride)
+        super().write(f)
 
     def parse(self):
         """Parse buffer."""
@@ -568,8 +557,7 @@ class KDIBuffer(Buffer):
         buf = Buffer.read(f, name=name)
         return KDIBuffer(buf.stride, buf.size, buf.buf, buf.offset, name)
 
-    @staticmethod
-    def write(f, vb):
+    def write(self, f):
         """Write function."""
         io.write_uint16(f, 1)
-        Buffer.write(f, vb)
+        super().write(f)

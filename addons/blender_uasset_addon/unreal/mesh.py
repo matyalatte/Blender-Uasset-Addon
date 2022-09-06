@@ -197,13 +197,12 @@ class StaticMesh(Mesh):
 
         return StaticMesh(unk, materials, LODs, unk2)
 
-    @staticmethod
-    def write(f, staticmesh):
+    def write(self, f):
         """Write function."""
-        f.write(staticmesh.unk)
-        io.write_array(f, staticmesh.LODs, StaticLOD.write, with_length=True)
-        f.write(staticmesh.unk2)
-        io.write_array(f, staticmesh.materials, Material.write, with_length=True)
+        f.write(self.unk)
+        io.write_array(f, self.LODs, with_length=True)
+        f.write(self.unk2)
+        io.write_array(f, self.materials, with_length=True)
 
 
 class SkeletalMesh(Mesh):
@@ -259,21 +258,20 @@ class SkeletalMesh(Mesh):
             extra_mesh = None
         return SkeletalMesh(version, unk, materials, skeleton, LODs, extra_mesh)
 
-    @staticmethod
-    def write(f, skeletalmesh):
+    def write(self, f):
         """Write function."""
-        f.write(skeletalmesh.unk)
-        io.write_array(f, skeletalmesh.materials, Material.write, with_length=True)
-        Skeleton.write(f, skeletalmesh.skeleton)
-        if skeletalmesh.version >= '4.27':
+        f.write(self.unk)
+        io.write_array(f, self.materials, with_length=True)
+        self.skeleton.write(f)
+        if self.version >= '4.27':
             io.write_uint32(f, 1)
-        if skeletalmesh.version < '4.27':
-            io.write_array(f, skeletalmesh.LODs, SkeletalLOD4.write, with_length=True)
+        if self.version < '4.27':
+            io.write_array(f, self.LODs, with_length=True)
         else:
-            io.write_array(f, skeletalmesh.LODs, SkeletalLOD5.write, with_length=True)
-        if skeletalmesh.version == 'ff7r':
+            io.write_array(f, self.LODs, with_length=True)
+        if self.version == 'ff7r':
             io.write_uint32(f, 1)
-            ExtraMesh.write(f, skeletalmesh.extra_mesh)
+            self.extra_mesh.write(f)
 
     def remove_KDI(self):
         """Disable KDI."""
@@ -330,19 +328,18 @@ class ExtraMesh:
         """Read function."""
         return ExtraMesh(f, bones)
 
-    @staticmethod
-    def write(f, mesh):
+    def write(self, f):
         """Write function."""
-        vertex_num = len(mesh.vb) // 12
+        vertex_num = len(self.vb) // 12
         io.write_uint32(f, vertex_num)
-        f.write(mesh.vb)
+        f.write(self.vb)
         io.write_uint32(f, vertex_num)
-        f.write(struct.pack('<' + 'HHHHBBBB' * vertex_num, *mesh.weight_buffer))
+        f.write(struct.pack('<' + 'HHHHBBBB' * vertex_num, *self.weight_buffer))
 
-        # f.write(mesh.weight_buffer)
-        io.write_uint32(f, len(mesh.ib) // 6)
-        f.write(mesh.ib)
-        f.write(mesh.unk)
+        # f.write(self.weight_buffer)
+        io.write_uint32(f, len(self.ib) // 6)
+        f.write(self.ib)
+        f.write(self.unk)
 
     def print(self, padding=0):
         """Print meta data."""

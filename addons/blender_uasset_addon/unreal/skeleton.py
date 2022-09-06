@@ -1,6 +1,5 @@
 """Classes for skeleton data."""
 from ..util import io_util as io
-# import struct
 
 
 class Bone:
@@ -46,20 +45,19 @@ class Bone:
         self.trans = ary[4:7]
         self.scale = ary[7:]
 
-    @staticmethod
-    def write(f, bone):
+    def write(self, f):
         """Write function."""
-        io.write_uint32(f, bone.name_id)
-        io.write_int32(f, bone.instance)
-        io.write_int32(f, bone.parent)
+        io.write_uint32(f, self.name_id)
+        io.write_int32(f, self.instance)
+        io.write_int32(f, self.parent)
 
-    @staticmethod
-    def write_pos(f, bone, version):
+    def write_pos(self, f, version):
         """Write TRS."""
+        ary = self.rot + self.trans + self.scale
         if version >= '5.0':
-            io.write_float64_array(f, bone.rot + bone.trans + bone.scale)
+            io.write_float64_array(f, ary)
         else:
-            io.write_float32_array(f, bone.rot + bone.trans + bone.scale)
+            io.write_float32_array(f, ary)
 
     def update(self, bone):
         """Import bone data."""
@@ -171,15 +169,13 @@ class Skeleton:
         """Read function."""
         return Skeleton(f, version)
 
-    @staticmethod
-    def write(f, skeleton):
+    def write(self, f):
         """Write function."""
-        io.write_array(f, skeleton.bones, Bone.write, with_length=True)
-        io.write_uint32(f, len(skeleton.bones))
-        for bone in skeleton.bones:
-            Bone.write_pos(f, bone, skeleton.version)
-        io.write_uint32(f, len(skeleton.bones))
-        for bone, i in zip(skeleton.bones, range(len(skeleton.bones))):
+        io.write_array(f, self.bones, with_length=True)
+        io.write_uint32(f, len(self.bones))
+        list(map(lambda x: x.write_pos(f, self.version), self.bones))
+        io.write_uint32(f, len(self.bones))
+        for bone, i in zip(self.bones, range(len(self.bones))):
             io.write_uint32(f, bone.name_id)
             io.write_uint32(f, bone.instance)
             io.write_uint32(f, i)
@@ -248,7 +244,7 @@ class SkeletonAsset:
         io.read_const_uint32(f, len(self.bones))
         for b, i in zip(self.bones, range(len(self.bones))):
             io.read_const_uint32(f, b.name_id)
-            io.read_null(f)
+            io.read_const_uint32(f, b.instance)
             io.read_const_uint32(f, i)
 
         # self.name_to_index_map=read_array(f, Bone.read)
@@ -263,18 +259,16 @@ class SkeletonAsset:
         """Read function."""
         return SkeletonAsset(f, version, name_list, verbose=verbose)
 
-    @staticmethod
-    def write(f, skeleton):
+    def write(self, f):
         """Write function."""
-        f.write(skeleton.unk)
-        io.write_array(f, skeleton.bones, Bone.write, with_length=True)
-        io.write_uint32(f, len(skeleton.bones))
-        for bone in skeleton.bones:
-            Bone.write_pos(f, bone, skeleton.version)
-        io.write_uint32(f, len(skeleton.bones))
-        for bone, i in zip(skeleton.bones, range(len(skeleton.bones))):
+        f.write(self.unk)
+        io.write_array(f, self.bones, with_length=True)
+        io.write_uint32(f, len(self.bones))
+        list(map(lambda x: x.write_pos(f, self.version), self.bones))
+        io.write_uint32(f, len(self.bones))
+        for bone, i in zip(self.bones, range(len(self.bones))):
             io.write_uint32(f, bone.name_id)
-            io.write_null(f)
+            io.write_uint32(f, bone.instance)
             io.write_uint32(f, i)
 
     def name_bones(self, name_list):

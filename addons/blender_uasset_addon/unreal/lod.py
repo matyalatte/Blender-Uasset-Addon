@@ -112,33 +112,32 @@ class StaticLOD(LOD):
         return StaticLOD(offset, version, sections, flags, vb, vb2, normal_vb, color_vb, ib, ib2,
                          reversed_ib, reversed_ib2, adjacency_ib, unk, unk2)
 
-    @staticmethod
-    def write(f, lod):
+    def write(self, f):
         """Write function."""
         io.write_uint8(f, 1)
-        io.write_uint8(f, lod.unk)
-        io.write_array(f, lod.sections, StaticLODSection.write, with_length=True)
-        f.write(lod.flags)
-        PositionVertexBuffer.write(f, lod.vb)
-        if lod.version >= '4.27':
+        io.write_uint8(f, self.unk)
+        io.write_array(f, self.sections, with_length=True)
+        f.write(self.flags)
+        self.vb.write(f)
+        if self.version >= '4.27':
             io.write_uint16(f, 1)
-            io.write_uint32(f, lod.vb2.uv_num)
-            io.write_uint32(f, lod.vb.vertex_num)
-            io.write_uint32(f, lod.vb2.use_float32UV)
+            io.write_uint32(f, self.vb2.uv_num)
+            io.write_uint32(f, self.vb.vertex_num)
+            io.write_uint32(f, self.vb2.use_float32UV)
             io.write_null(f)
-            NormalVertexBuffer.write(f, lod.normal_vb)
-            UVVertexBuffer.write(f, lod.vb2)
+            self.normal_vb.write(f)
+            self.vb2.write(f)
         else:
-            StaticMeshVertexBuffer.write(f, lod.vb2)
+            self.vb2.write(f)
 
-        ColorVertexBuffer.write(f, lod.color_vb)
+        self.color_vb.write(f)
 
-        StaticIndexBuffer.write(f, lod.ib)
-        StaticIndexBuffer.write(f, lod.reversed_ib)
-        StaticIndexBuffer.write(f, lod.ib2)
-        StaticIndexBuffer.write(f, lod.reversed_ib2)
-        StaticIndexBuffer.write(f, lod.adjacency_ib)
-        f.write(lod.unk2)
+        self.ib.write(f)
+        self.reversed_ib.write(f)
+        self.ib2.write(f)
+        self.reversed_ib2.write(f)
+        self.adjacency_ib.write(f)
+        f.write(self.unk2)
 
     def print(self, i, padding=0):
         """Print meta data."""
@@ -319,36 +318,35 @@ class SkeletalLOD4(SkeletalLOD):
             io.check(self.KDI_buffer.size, self.KDI_buffer_size, f)
             self.KDI_VB = KDIBuffer.read(f, name='KDI_VB')
 
-    @staticmethod
-    def write(f, lod):
+    def write(self, f):
         """Write function."""
         io.write_uint8(f, 1)
-        io.write_uint8(f, lod.ib2 is None)
-        io.write_array(f, lod.sections, SkeletalLODSection4.write, with_length=True)
-        SkeletalIndexBuffer.write(f, lod.ib)
-        io.write_uint32(f, len(lod.active_bone_ids) // 2)
-        f.write(lod.active_bone_ids)
+        io.write_uint8(f, self.ib2 is None)
+        io.write_array(f, self.sections, with_length=True)
+        self.ib.write(f)
+        io.write_uint32(f, len(self.active_bone_ids) // 2)
+        f.write(self.active_bone_ids)
         io.write_null(f)
-        io.write_uint32(f, lod.vb.vertex_num)
-        io.write_uint32(f, len(lod.required_bone_ids) // 2)
-        f.write(lod.required_bone_ids)
+        io.write_uint32(f, self.vb.vertex_num)
+        io.write_uint32(f, len(self.required_bone_ids) // 2)
+        f.write(self.required_bone_ids)
 
-        io.write_uint32_array(f, lod.vertex_map, with_length=True)
-        io.write_uint32(f, lod.max_vertex_map_id)
+        io.write_uint32_array(f, self.vertex_map, with_length=True)
+        io.write_uint32(f, self.max_vertex_map_id)
 
-        io.write_uint32(f, lod.uv_num)
-        SkeletalMeshVertexBuffer.write(f, lod.vb)
-        SkinWeightVertexBuffer4.write(f, lod.vb2)
+        io.write_uint32(f, self.uv_num)
+        self.vb.write(f)
+        self.vb2.write(f)
 
-        if lod.color_vb is not None:
-            ColorVertexBuffer.write(f, lod.color_vb)
+        if self.color_vb is not None:
+            self.color_vb.write(f)
 
-        if lod.ib2 is not None:
-            SkeletalIndexBuffer.write(f, lod.ib2)
+        if self.ib2 is not None:
+            self.ib2.write(f)
 
-        if lod.KDI_buffer_size > 0:
-            KDIBuffer.write(f, lod.KDI_buffer)
-            KDIBuffer.write(f, lod.KDI_VB)
+        if self.KDI_buffer_size > 0:
+            self.KDI_buffer.write(f)
+            self.KDI_VB.write(f)
 
     def remove_KDI(self):
         """Disable KDI."""
@@ -487,37 +485,36 @@ class SkeletalLOD5(SkeletalLOD):
             io.read_null(f)
         io.check(f.tell() - buffer_block_start_offset, buffer_block_size)
 
-    @staticmethod
-    def write(f, lod):
+    def write(self, f):
         """Write function."""
         io.write_uint16(f, 1)
         io.write_uint32(f, 0)
         io.write_uint32(f, 1)
-        io.write_uint16_array(f, lod.active_bone_ids, with_length=True)
-        io.write_array(f, lod.sections, SkeletalLODSection5.write, with_length=True)
-        io.write_uint16_array(f, lod.required_bone_ids, with_length=True)
+        io.write_uint16_array(f, self.active_bone_ids, with_length=True)
+        io.write_array(f, self.sections, with_length=True)
+        io.write_uint16_array(f, self.required_bone_ids, with_length=True)
         f.seek(4, 1)
         buffer_block_start_offset = f.tell()
         io.write_uint16(f, 1)
-        SkeletalIndexBuffer.write(f, lod.ib)
-        PositionVertexBuffer.write(f, lod.vb)
+        self.ib.write(f)
+        self.vb.write(f)
 
         io.write_uint16(f, 1)
-        io.write_uint32(f, lod.uv_vb.uv_num)
-        io.write_uint32(f, lod.vb.vertex_num)
-        io.write_uint32(f, lod.uv_vb.use_float32UV)
+        io.write_uint32(f, self.uv_vb.uv_num)
+        io.write_uint32(f, self.vb.vertex_num)
+        io.write_uint32(f, self.uv_vb.use_float32UV)
         io.write_null(f)
-        NormalVertexBuffer.write(f, lod.normal_vb)
-        UVVertexBuffer.write(f, lod.uv_vb)
-        SkinWeightVertexBuffer5.write(f, lod.weight_vb)
+        self.normal_vb.write(f)
+        self.uv_vb.write(f)
+        self.weight_vb.write(f)
         io.write_uint16(f, 1)
         io.write_null(f)
         io.write_uint32(f, 4)
-        if lod.version >= '5.0':
+        if self.version >= '5.0':
             io.write_null_array(f, 4)
         else:
             io.write_null(f)
-            SkeletalIndexBuffer.write(f, lod.adjacency_vb)
+            self.adjacency_vb.write(f)
             io.write_null(f)
             io.write_null(f)
 

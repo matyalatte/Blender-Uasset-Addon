@@ -34,19 +34,18 @@ class StaticLODSection(LODSection):
         """Read function."""
         return StaticLODSection(f, version)
 
-    @staticmethod
-    def write(f, section):
+    def write(self, f):
         """Write function."""
-        io.write_uint32(f, section.material_id)
-        io.write_uint32(f, section.first_ib_id)
-        io.write_uint32(f, section.face_num)
-        io.write_uint32(f, section.first_vertex_id)
-        io.write_uint32(f, section.last_vertex_id)
-        io.write_uint32(f, section.enable_collision)
-        io.write_uint32(f, section.cast_shadow)
-        if section.version >= '4.27':
-            io.write_uint32(f, section.unk)
-            io.write_uint32(f, section.unk2)
+        io.write_uint32(f, self.material_id)
+        io.write_uint32(f, self.first_ib_id)
+        io.write_uint32(f, self.face_num)
+        io.write_uint32(f, self.first_vertex_id)
+        io.write_uint32(f, self.last_vertex_id)
+        io.write_uint32(f, self.enable_collision)
+        io.write_uint32(f, self.cast_shadow)
+        if self.version >= '4.27':
+            io.write_uint32(f, self.unk)
+            io.write_uint32(f, self.unk2)
 
     def print(self, i, padding=2):
         """Print meta data."""
@@ -166,30 +165,29 @@ class SkeletalLODSection4(SkeletalLODSection):
                                    self.vertex_num, self.max_bone_influences,
                                    0, [])
 
-    @staticmethod
-    def write(f, section):
+    def write(self, f):
         """Write function."""
         io.write_uint16(f, 1)
-        io.write_uint16(f, section.material_id)
-        io.write_uint32(f, section.first_ib_id)
-        io.write_uint32(f, section.face_num)
+        io.write_uint16(f, self.material_id)
+        io.write_uint32(f, self.first_ib_id)
+        io.write_uint32(f, self.face_num)
         io.write_null(f)
         f.write(b'\x00\xff\xff')
-        f.write(section.unk)
-        io.write_uint32(f, section.recompute_tangent)
-        io.write_uint32(f, section.cast_shadow)
-        io.write_uint32(f, section.first_vertex_id)
-        io.write_uint16_array(f, section.vertex_group, with_length=True)
-        io.write_uint32(f, section.vertex_num)
-        io.write_uint32(f, section.max_bone_influences)
+        f.write(self.unk)
+        io.write_uint32(f, self.recompute_tangent)
+        io.write_uint32(f, self.cast_shadow)
+        io.write_uint32(f, self.first_vertex_id)
+        io.write_uint16_array(f, self.vertex_group, with_length=True)
+        io.write_uint32(f, self.vertex_num)
+        io.write_uint32(f, self.max_bone_influences)
         io.write_null_array(f, 3)
         f.write(SkeletalLODSection4.CorrespondClothAssetIndex)
         io.write_null_array(f, 4)
         io.write_int32(f, -1)
-        if section.version in ['ff7r', 'kh3']:
-            io.write_uint32(f, section.unk1)
-            io.write_uint32(f, len(section.unk2) // 16)
-            io.write_uint8_array(f, section.unk2)
+        if self.version in ['ff7r', 'kh3']:
+            io.write_uint32(f, self.unk1)
+            io.write_uint32(f, len(self.unk2) // 16)
+            io.write_uint8_array(f, self.unk2)
 
     def print(self, name, bones, padding=2):
         """Print meta data."""
@@ -218,7 +216,6 @@ class SkeletalLODSection4(SkeletalLODSection):
         self.first_vertex_id = first_vertex_id
         self.vertex_num = vertex_num
         self.max_bone_influences = max_bone_influences
-        # self.unk=section.unk
 
 
 class SkeletalLODSection5(LODSection):
@@ -279,28 +276,27 @@ class SkeletalLODSection5(LODSection):
                                    self.max_bone_influences,
                                    self.unk_ids, self.unk_ids2, self.cast_shadow, self.ray_tracing)
 
-    @staticmethod
-    def write(f, section):
+    def write(self, f):
         """Write function."""
         io.write_uint16(f, 1)
-        io.write_uint16(f, section.material_id)
-        io.write_uint32(f, section.first_ib_id)
-        io.write_uint64(f, section.face_num)
-        io.write_uint8(f, section.unk)
-        io.write_uint32(f, section.cast_shadow)
-        if section.version >= '5.0':
-            io.write_uint32(f, section.ray_tracing)
-        io.write_uint64(f, section.first_vertex_id)
-        io.write_uint16_array(f, section.vertex_group, with_length=True)
-        io.write_uint32(f, section.vertex_num)
-        io.write_uint32(f, section.max_bone_influences)
+        io.write_uint16(f, self.material_id)
+        io.write_uint32(f, self.first_ib_id)
+        io.write_uint64(f, self.face_num)
+        io.write_uint8(f, self.unk)
+        io.write_uint32(f, self.cast_shadow)
+        if self.version >= '5.0':
+            io.write_uint32(f, self.ray_tracing)
+        io.write_uint64(f, self.first_vertex_id)
+        io.write_uint16_array(f, self.vertex_group, with_length=True)
+        io.write_uint32(f, self.vertex_num)
+        io.write_uint32(f, self.max_bone_influences)
 
         f.write(b'\xff\xff')
         io.write_null_array(f, 4)
         io.write_int32(f, -1)
-        io.write_uint32_array(f, section.unk_ids, with_length=True)
-        io.write_uint32(f, section.vertex_num)
-        f.write(section.unk_ids2)
+        io.write_uint32_array(f, self.unk_ids, with_length=True)
+        io.write_uint32(f, self.vertex_num)
+        f.write(self.unk_ids2)
         io.write_null(f)
 
     def print(self, name, bones, padding=2):
@@ -330,4 +326,3 @@ class SkeletalLODSection5(LODSection):
         self.first_vertex_id = first_vertex_id
         self.vertex_num = vertex_num
         self.max_bone_influences = max_bone_influences
-        # self.unk=section.unk

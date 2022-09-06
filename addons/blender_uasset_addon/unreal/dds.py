@@ -116,16 +116,15 @@ class DDSHeader(c.LittleEndianStructure):
         head.texture_type = ['2D', 'Cube'][cube_flag]
         return head
 
-    @staticmethod
-    def write(f, header):
+    def write(self, f):
         """Write dds header."""
-        header.update()
-        f.write(header)
+        self.update()
+        f.write(self)
 
         # write dxt10 header
-        if header.fourCC == b'DX10':
-            io.write_uint32(f, header.dxgi_format)
-            io.write_uint32_array(f, [3, 4 * (header.texture_type == 'Cube'), 1])
+        if self.fourCC == b'DX10':
+            io.write_uint32(f, self.dxgi_format)
+            io.write_uint32_array(f, [3, 4 * (self.texture_type == 'Cube'), 1])
             io.write_uint32(f, 0)
 
     def print(self):
@@ -230,7 +229,7 @@ class DDS:
 
         with open(file, 'wb') as f:
             # write header
-            DDSHeader.write(f, self.header)
+            self.header.write(f)
 
             # write mipmap data
             for i in range(1 + (self.header.texture_type == 'Cube') * 5):

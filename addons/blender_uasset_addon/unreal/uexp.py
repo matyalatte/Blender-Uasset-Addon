@@ -97,12 +97,10 @@ class Uexp:
                     export.write_uexp(f)
                     size = export.size
                 else:
-                    if self.asset_type == 'SkeletalMesh':
-                        SkeletalMesh.write(f, self.mesh)
-                    elif self.asset_type == 'StaticMesh':
-                        StaticMesh.write(f, self.mesh)
+                    if self.asset_type in ['SkeletalMesh', 'StaticMesh']:
+                        self.mesh.write(f)
                     elif self.asset_type == 'Skeleton':
-                        SkeletonAsset.write(f, self.skeleton)
+                        self.skeleton.write(f)
                     elif 'Texture' in self.asset_type:
                         self.texture.write(f)
                     elif self.asset_type == 'AnimSequence':

@@ -255,47 +255,57 @@ def write_float16(file, x):
     file.write(binary)
 
 
-def write_array(file, ary, write_func, with_length=False):
+def write_array(file, ary, with_length=False):
     """Write an array."""
     if with_length:
         write_uint32(file, len(ary))
-    for a in ary:
-        write_func(file, a)
+    list(map(lambda x: x.write(file), ary))
+
+
+def write_num_array(file, ary, structure, with_length=False):
+    """Write an array of numbers."""
+    if structure not in st_list:
+        raise RuntimeError(f'Structure not found. {structure}')
+    length = len(ary)
+    if with_length:
+        write_uint32(file, length)
+    binary = struct.pack('<' + structure * length, *ary)
+    file.write(binary)
 
 
 def write_uint32_array(file, ary, with_length=False):
     """Write an array of uint32."""
-    write_array(file, ary, write_uint32, with_length=with_length)
+    write_num_array(file, ary, 'I', with_length=with_length)
 
 
 def write_uint16_array(file, ary, with_length=False):
     """Write an array of uint16."""
-    write_array(file, ary, write_uint16, with_length=with_length)
+    write_num_array(file, ary, 'H', with_length=with_length)
 
 
 def write_uint8_array(file, ary, with_length=False):
     """Write an array of uint8."""
-    write_array(file, ary, write_uint8, with_length=with_length)
+    write_num_array(file, ary, 'B', with_length=with_length)
 
 
 def write_int32_array(file, ary, with_length=False):
     """Write an array of int32."""
-    write_array(file, ary, write_int32, with_length=with_length)
+    write_num_array(file, ary, 'i', with_length=with_length)
 
 
 def write_float64_array(file, ary, with_length=False):
     """Write an array of float64."""
-    write_array(file, ary, write_float64, with_length=with_length)
+    write_num_array(file, ary, 'd', with_length=with_length)
 
 
 def write_float32_array(file, ary, with_length=False):
     """Write an array of float32."""
-    write_array(file, ary, write_float32, with_length=with_length)
+    write_num_array(file, ary, 'f', with_length=with_length)
 
 
 def write_float16_array(file, ary, with_length=False):
     """Write an array of float32."""
-    write_array(file, ary, write_float16, with_length=with_length)
+    write_num_array(file, ary, 'e', with_length=with_length)
 
 
 def write_vec3_f32(file, vec3):
@@ -305,7 +315,9 @@ def write_vec3_f32(file, vec3):
 
 def write_vec3_f32_array(file, vec_ary, with_length=False):
     """Write an array of vec3."""
-    return write_array(file, vec_ary, write_vec3_f32, with_length=with_length)
+    if with_length:
+        write_uint32(file, len(vec_ary))
+    write_num_array(file, sum(vec_ary, []), 'f')
 
 
 def write_vec3_i8(file, vec):
@@ -337,14 +349,6 @@ def write_null(f):
 def write_null_array(f, length):
     """Write an array of 0s."""
     write_uint32_array(f, [0] * length)
-
-
-def write_struct_array(file, ary, with_length=False):
-    """Write an array."""
-    if with_length:
-        write_uint32(file, len(ary))
-    for a in ary:
-        file.write(a)
 
 
 def rewrite_struct(f, obj):

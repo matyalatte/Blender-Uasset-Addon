@@ -26,12 +26,11 @@ class Material:
         unk = f.read(28 + 4 * (skeletal and (version >= '4.27')))  # cast shadow, uv density?
         return Material(import_id, slot_name_id, unk)
 
-    @staticmethod
-    def write(f, material):
+    def write(self, f):
         """Write function."""
-        io.write_int32(f, material.import_id)
-        io.write_uint32(f, material.slot_name_id)
-        f.write(material.unk)
+        io.write_int32(f, self.import_id)
+        io.write_uint32(f, self.slot_name_id)
+        f.write(self.unk)
 
     @staticmethod
     def get_size(version, skeletal):
