@@ -7,18 +7,27 @@ from . import bpy_util
 
 def get_release_info():
     """Get info from the latest release page."""
-    response = requests.get("https://api.github.com/repos/matyalatte/Blender-Uasset-Addon/releases/latest")
     err_tag = "BlenderUassetAddon: get_new_release.py"
-    if response:
-        tag = response.json()['tag_name']
-        latest_version = tag[1:].split('.')
-        is_valid_tag = (tag[0] == 'v') and (len(latest_version) == 3)
-        if not is_valid_tag:
-            print(f'{err_tag}: Got the latest release page. But the tag is invalid. ({tag})')
-        title = response.json()['name']
-        body = response.json()['body'].split('\n')
-    else:
-        print(f'{err_tag}: Failed to get response from the github page.')
+    try:
+        response = requests.get("https://api.github.com/repos/matyalatte/Blender-Uasset-Addon/releases/latest")
+        response.raise_for_status()
+        if response:
+            response_json = response.json()
+            for key in ['tag_name', 'name', 'body']:
+                if key not in response_json:
+                    raise RuntimeError(f'Got the latest release page. But a key is missing. ({key})')
+            tag = response_json['tag_name']
+            latest_version = tag[1:].split('.')
+            is_valid_tag = (tag[0] == 'v') and (len(latest_version) == 3)
+            if not is_valid_tag:
+                raise RuntimeError(f'Got the latest release page. But the tag is invalid. ({tag})')
+            title = response_json['name']
+            body = response_json['body'].split('\n')
+        else:
+            raise RuntimeError('Failed to get response from the github page.')
+
+    except Exception as ex:
+        print(f'{err_tag}: {ex}')
         latest_version = []
         is_valid_tag = False
         title = ""

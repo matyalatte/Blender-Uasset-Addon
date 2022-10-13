@@ -3,6 +3,7 @@ v0.2.2
 - Added hash generation for name table.
 - Fixed an error when loading some KH3 animations.
 - Fixed an error when using unregister functions.
+- Fixed an error when failing to get info from the relese page.
 - Applied a proper DXGI format for B8G8R8A8.
 - Unified usages of write functions
 
